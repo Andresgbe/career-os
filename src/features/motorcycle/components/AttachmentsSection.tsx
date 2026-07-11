@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Upload, FileText, Trash2, ExternalLink } from "lucide-react";
+import { Upload, FileText, Trash2, Eye, Download } from "lucide-react";
 import {
   getAttachments,
   uploadAttachment,
@@ -51,6 +51,25 @@ export default function AttachmentsSection() {
       window.open(url, "_blank");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not open file");
+    }
+  };
+
+  const downloadFile = async (path: string, name: string) => {
+    try {
+      const url = await getFileUrl(path);
+      // Fetch the file and force a download
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not download file");
     }
   };
 
@@ -109,10 +128,17 @@ export default function AttachmentsSection() {
                 </div>
                 <button
                   onClick={() => openFile(f.file_path)}
-                  className="p-1.5 rounded text-muted hover:bg-surface-hover shrink-0"
-                  title="Open"
+                  className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-primary shrink-0"
+                  title="Preview"
                 >
-                  <ExternalLink className="w-4 h-4" />
+                  <Eye className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => downloadFile(f.file_path, f.file_name)}
+                  className="p-1.5 rounded text-muted hover:bg-surface-hover shrink-0"
+                  title="Download"
+                >
+                  <Download className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleDelete(f.id, f.file_path)}

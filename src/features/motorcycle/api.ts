@@ -142,3 +142,93 @@ export async function deleteAttachment(id: string, filePath: string) {
     .eq("id", id);
   if (error) throw error;
 }
+
+// ============================================
+// OIL CHANGES
+// ============================================
+
+export interface OilChangeRow {
+  id: string;
+  km: number;
+  done: boolean;
+  date: string | null;
+  receipt_url: string | null;  // stores the file PATH, not the full URL
+}
+
+export async function getOilChanges(): Promise<OilChangeRow[]> {
+  const { data, error } = await supabase
+    .from("oil_changes")
+    .select("*")
+    .order("km", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+// Seed the default 9 milestones for a first-time user
+export async function seedOilChanges() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const defaults = [500, 2000, 3500, 5000, 6500, 8000, 9500, 11000, 12000];
+  const rows = defaults.map((km) => ({ user_id: user.id, km }));
+
+  const { error } = await supabase.from("oil_changes").insert(rows);
+  if (error) throw error;
+}
+
+export async function toggleOilChange(
+  id: string,
+  done: boolean,
+  date: string | null
+) {
+  const { error } = await supabase
+    .from("oil_changes")
+    .update({ done, date })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function addOilChange(km: number) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase
+    .from("oil_changes")
+    .insert({ user_id: user.id, km })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as OilChangeRow;
+}
+
+export async function deleteOilChange(id: string) {
+  const { error } = await supabase.from("oil_changes").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// Upload a receipt photo for a specific oil change milestone
+export async function uploadOilReceipt(id: string, file: File) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const filePath = `${user.id}/oil-receipts/${id}-${Date.now()}-${file.name}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("motorcycle-files")
+    .upload(filePath, file);
+  if (uploadError) throw uploadError;
+
+  const { error: dbError } = await supabase
+    .from("oil_changes")
+    .update({ receipt_url: filePath })
+    .eq("id", id);
+  if (dbError) throw dbError;
+
+  return filePath;
+}
