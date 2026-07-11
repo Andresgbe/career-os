@@ -3,6 +3,7 @@
 @theme {
   --color-background: #0d0d0f;
   --color-surface: #17171b;
+  --color-surface-hover: #1f1f25;
   --color-border: #26262c;
   --color-primary: #8b5cf6;
   --color-primary-hover: #a78bfa;
