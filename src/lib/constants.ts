@@ -1,1 +1,1 @@
-export const APP_NAME = "CareerOS";
+export const APP_NAME = "NEXUS";
