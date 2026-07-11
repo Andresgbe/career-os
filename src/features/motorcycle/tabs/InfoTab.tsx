@@ -1,27 +1,150 @@
-import { useState } from "react";
-import { Upload, FileText } from "lucide-react";
-import { mockInfo } from "../mockData";
+import { useEffect, useState } from "react";
+import { Upload, Save, Check, Pencil } from "lucide-react";
+import { getMotorcycleInfo, saveMotorcycleInfo } from "../api";
 import type { MotorcycleInfo } from "../types";
 
-export default function InfoTab() {
-  const [info, setInfo] = useState<MotorcycleInfo>(mockInfo);
+const emptyInfo: MotorcycleInfo = {
+  id: "",
+  make: "",
+  model: "",
+  year: null,
+  plate: "",
+  vin: "",
+  color: "",
+  purchaseDate: null,
+  notes: "",
+  attachments: [],
+};
 
-  const field = (label: string, key: keyof MotorcycleInfo, type = "text") => (
+export default function InfoTab() {
+  const [info, setInfo] = useState<MotorcycleInfo>(emptyInfo);
+  const [recordId, setRecordId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Load existing data on mount
+  useEffect(() => {
+    getMotorcycleInfo()
+      .then((row) => {
+        if (row) {
+          setRecordId(row.id);
+          setInfo({
+            id: row.id,
+            make: row.make,
+            model: row.model,
+            year: row.year,
+            plate: row.plate,
+            vin: row.vin,
+            color: row.color,
+            purchaseDate: row.purchase_date,
+            notes: row.notes,
+            attachments: [],
+          });
+        } else {
+          // No record yet → start in edit mode so the user can fill it in
+          setIsEditing(true);
+        }
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError("");
+    setSaved(false);
+    try {
+      const id = await saveMotorcycleInfo(
+        {
+          make: info.make,
+          model: info.model,
+          year: info.year,
+          plate: info.plate,
+          vin: info.vin,
+          color: info.color,
+          purchaseDate: info.purchaseDate,
+          notes: info.notes,
+        },
+        recordId
+      );
+      setRecordId(id);
+      setSaved(true);
+      setIsEditing(false); // lock fields again
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error saving");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const field = (
+    label: string,
+    key: keyof MotorcycleInfo,
+    type = "text"
+  ) => (
     <div className="flex flex-col gap-1">
       <label className="text-xs text-muted">{label}</label>
       <input
         type={type}
+        disabled={!isEditing}
         value={(info[key] as string) ?? ""}
-        onChange={(e) => setInfo({ ...info, [key]: e.target.value })}
-        className="bg-surface border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
+        onChange={(e) =>
+          setInfo({
+            ...info,
+            [key]:
+              type === "number" ? Number(e.target.value) || null : e.target.value,
+          })
+        }
+        className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none disabled:opacity-60 disabled:cursor-not-allowed"
       />
     </div>
   );
 
+  if (loading) {
+    return <p className="text-muted">Loading...</p>;
+  }
+
   return (
     <div className="space-y-6">
       <section className="bg-surface border border-border rounded-xl p-5">
-        <h2 className="font-semibold mb-4">Specifications</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold">Specifications</h2>
+
+          {isEditing ? (
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 rounded bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {saved ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  Saved
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  {saving ? "Saving..." : "Save"}
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded bg-surface-hover hover:bg-border text-foreground text-sm font-medium transition-colors"
+            >
+              <Pencil className="w-4 h-4" />
+              Edit
+            </button>
+          )}
+        </div>
+
+        {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {field("Make", "make")}
           {field("Model", "model")}
@@ -34,39 +157,26 @@ export default function InfoTab() {
         <div className="flex flex-col gap-1 mt-4">
           <label className="text-xs text-muted">Notes</label>
           <textarea
+            disabled={!isEditing}
             value={info.notes}
             onChange={(e) => setInfo({ ...info, notes: e.target.value })}
             rows={3}
-            className="bg-surface border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none resize-none"
+            className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none resize-none disabled:opacity-60 disabled:cursor-not-allowed"
           />
         </div>
       </section>
 
-      {/* Attachments (manual, legal docs) */}
+      {/* Attachments — file upload comes in the Storage step */}
       <section className="bg-surface border border-border rounded-xl p-5">
         <h2 className="font-semibold mb-4">Documents & Manual</h2>
-        {info.attachments.length === 0 ? (
-          <p className="text-sm text-muted mb-4">No files uploaded yet.</p>
-        ) : (
-          <ul className="space-y-2 mb-4">
-            {info.attachments.map((a) => (
-              <li
-                key={a.id}
-                className="flex items-center gap-2 text-sm text-muted"
-              >
-                <FileText className="w-4 h-4" />
-                {a.label} — {a.fileName}
-              </li>
-            ))}
-          </ul>
-        )}
+        <p className="text-sm text-muted mb-4">No files uploaded yet.</p>
         <button
           disabled
           className="flex items-center gap-2 px-4 py-2 rounded bg-surface-hover text-muted text-sm cursor-not-allowed"
-          title="File upload will be enabled once Supabase Storage is connected"
+          title="File upload will be enabled in the Storage step"
         >
           <Upload className="w-4 h-4" />
-          Upload file (available after Supabase setup)
+          Upload file (coming next)
         </button>
       </section>
     </div>
