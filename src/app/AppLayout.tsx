@@ -3,6 +3,8 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { APP_NAME } from "../../lib/constants";
 import { MODULES } from "../../lib/modules";
+import { supabase } from "../../lib/supabase";
+import { LogOut } from "lucide-react";
 
 export default function AppLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -51,6 +53,14 @@ export default function AppLayout() {
               </Link>
             ))}
           </nav>
+            <button
+              onClick={() => supabase.auth.signOut()}
+              className="ml-auto p-2 rounded hover:bg-surface-hover transition-colors text-muted"
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
         </div>
       </header>
 
