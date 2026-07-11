@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Upload, Save, Check, Pencil } from "lucide-react";
 import { getMotorcycleInfo, saveMotorcycleInfo } from "../api";
 import type { MotorcycleInfo } from "../types";
+import AttachmentsSection from "../components/AttachmentsSection";
 
 const emptyInfo: MotorcycleInfo = {
   id: "",
@@ -165,20 +166,7 @@ export default function InfoTab() {
           />
         </div>
       </section>
-
-      {/* Attachments — file upload comes in the Storage step */}
-      <section className="bg-surface border border-border rounded-xl p-5">
-        <h2 className="font-semibold mb-4">Documents & Manual</h2>
-        <p className="text-sm text-muted mb-4">No files uploaded yet.</p>
-        <button
-          disabled
-          className="flex items-center gap-2 px-4 py-2 rounded bg-surface-hover text-muted text-sm cursor-not-allowed"
-          title="File upload will be enabled in the Storage step"
-        >
-          <Upload className="w-4 h-4" />
-          Upload file (coming next)
-        </button>
-      </section>
+      <AttachmentsSection />
     </div>
   );
 }

@@ -69,3 +69,72 @@ export async function saveMotorcycleInfo(
     return data.id as string;
   }
 }
+
+// ============================================
+// ATTACHMENTS (Supabase Storage)
+// ============================================
+
+const BUCKET = "motorcycle-files";
+
+export interface AttachmentRow {
+  id: string;
+  label: string;
+  file_name: string;
+  file_path: string;
+}
+
+// List all attachments for the current user
+export async function getAttachments(): Promise<AttachmentRow[]> {
+  const { data, error } = await supabase
+    .from("motorcycle_attachments")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+// Upload a file and register it in the attachments table
+export async function uploadAttachment(file: File, label: string) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  // Store under a folder named after the user's ID (required by our policies)
+  const filePath = `${user.id}/${Date.now()}-${file.name}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(BUCKET)
+    .upload(filePath, file);
+  if (uploadError) throw uploadError;
+
+  const { error: dbError } = await supabase
+    .from("motorcycle_attachments")
+    .insert({
+      user_id: user.id,
+      label: label || file.name,
+      file_name: file.name,
+      file_path: filePath,
+    });
+  if (dbError) throw dbError;
+}
+
+// Get a temporary signed URL to view/open a private file
+export async function getFileUrl(filePath: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(filePath, 60 * 60); // valid for 1 hour
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+// Delete a file (from storage and the table)
+export async function deleteAttachment(id: string, filePath: string) {
+  await supabase.storage.from(BUCKET).remove([filePath]);
+  const { error } = await supabase
+    .from("motorcycle_attachments")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
