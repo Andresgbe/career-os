@@ -1,16 +1,15 @@
-// Motorcycle general info (single record — "the bike's profile")
 export interface MotorcycleInfo {
   id: string;
-  make: string;          // e.g. Yamaha
-  model: string;         // e.g. MT-03
+  make: string;
+  model: string;
   year: number | null;
-  plate: string;         // license plate
-  vin: string;           // chassis / VIN
+  plate: string;
+  vin: string;
+  engineSerial: string;      // ← nuevo
+  invoiceNumber: string;     // ← nuevo
   color: string;
-  purchaseDate: string | null;   // ISO date
+  purchaseDate: string | null;
   notes: string;
-  // Attached files (manual, legal docs) live in Supabase Storage later.
-  // For now we just keep their metadata.
   attachments: Attachment[];
 }
 

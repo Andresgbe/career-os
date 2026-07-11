@@ -11,6 +11,8 @@ interface MotorcycleInfoRow {
   year: number | null;
   plate: string;
   vin: string;
+  engine_serial: string;      // ← nuevo
+  invoice_number: string;     // ← nuevo
   color: string;
   purchase_date: string | null;
   notes: string;
@@ -37,13 +39,15 @@ export async function saveMotorcycleInfo(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  const row = {
+const row = {
     user_id: user.id,
     make: info.make,
     model: info.model,
     year: info.year,
     plate: info.plate,
     vin: info.vin,
+    engine_serial: info.engineSerial,      // ← nuevo
+    invoice_number: info.invoiceNumber,    // ← nuevo
     color: info.color,
     purchase_date: info.purchaseDate || null,
     notes: info.notes,

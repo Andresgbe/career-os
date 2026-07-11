@@ -11,6 +11,8 @@ const emptyInfo: MotorcycleInfo = {
   year: null,
   plate: "",
   vin: "",
+  engineSerial: "",       // ← nuevo
+  invoiceNumber: "",      // ← nuevo
   color: "",
   purchaseDate: null,
   notes: "",
@@ -32,17 +34,19 @@ export default function InfoTab() {
       .then((row) => {
         if (row) {
           setRecordId(row.id);
-          setInfo({
-            id: row.id,
-            make: row.make,
-            model: row.model,
-            year: row.year,
-            plate: row.plate,
-            vin: row.vin,
-            color: row.color,
-            purchaseDate: row.purchase_date,
-            notes: row.notes,
-            attachments: [],
+            setInfo({
+                id: row.id,
+                make: row.make,
+                model: row.model,
+                year: row.year,
+                plate: row.plate,
+                vin: row.vin,
+                engineSerial: row.engine_serial,     // ← nuevo
+                invoiceNumber: row.invoice_number,   // ← nuevo
+                color: row.color,
+                purchaseDate: row.purchase_date,
+                notes: row.notes,
+                attachments: [],
           });
         } else {
           // No record yet → start in edit mode so the user can fill it in
@@ -65,6 +69,8 @@ export default function InfoTab() {
           year: info.year,
           plate: info.plate,
           vin: info.vin,
+          engineSerial: info.engineSerial,       // ← nuevo
+          invoiceNumber: info.invoiceNumber,     // ← nuevo
           color: info.color,
           purchaseDate: info.purchaseDate,
           notes: info.notes,
@@ -152,6 +158,8 @@ export default function InfoTab() {
           {field("Year", "year", "number")}
           {field("License plate", "plate")}
           {field("VIN / Chassis", "vin")}
+          {field("Engine serial", "engineSerial")}      {/* ← nuevo */}
+          {field("Invoice number", "invoiceNumber")}    {/* ← nuevo */}
           {field("Color", "color")}
           {field("Purchase date", "purchaseDate", "date")}
         </div>
