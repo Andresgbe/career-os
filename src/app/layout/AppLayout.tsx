@@ -1,12 +1,23 @@
 import { useState } from "react";
-import { Link, Outlet, useLocation } from "react-router-dom";
-import { Menu, X } from "lucide-react";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Menu, X, LogOut } from "lucide-react";
 import { APP_NAME } from "../../lib/constants";
 import { MODULES } from "../../lib/modules";
+import { useAuth } from "../../hooks/useAuth";
+import { supabase } from "../../lib/supabase";
 
 export default function AppLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate("/login");
+  };
+
+  const userInitial = user?.email?.charAt(0).toUpperCase() ?? "?";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -50,6 +61,30 @@ export default function AppLayout() {
             </Link>
           ))}
         </nav>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* User & Logout */}
+          <div className="flex items-center gap-2">
+            <div
+              className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-semibold select-none"
+              title={user?.email ?? ""}
+            >
+              {userInitial}
+            </div>
+            <span className="hidden md:block text-sm text-muted max-w-[140px] truncate" title={user?.email ?? ""}>
+              {user?.email}
+            </span>
+            <button
+              onClick={handleSignOut}
+              className="p-2 rounded text-muted hover:text-red-400 hover:bg-surface-hover transition-colors"
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
       </header>
 
       {/* Drawer (hamburger menu) */}
@@ -61,7 +96,7 @@ export default function AppLayout() {
             onClick={() => setDrawerOpen(false)}
           />
           {/* Panel */}
-          <aside className="relative w-64 bg-surface border-r border-border p-4">
+          <aside className="relative w-64 h-full bg-surface border-r border-border p-4 flex flex-col">
             <div className="flex items-center justify-between mb-6">
               <span className="font-bold">{APP_NAME}</span>
               <button
@@ -95,6 +130,28 @@ export default function AppLayout() {
                 );
               })}
             </nav>
+
+              {/* Drawer footer: user + logout */}
+              <div className="mt-auto pt-4 border-t border-border">
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <div className="w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                    {userInitial}
+                  </div>
+                  <span className="text-xs text-muted truncate" title={user?.email ?? ""}>
+                    {user?.email}
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    setDrawerOpen(false);
+                    handleSignOut();
+                  }}
+                  className="flex items-center gap-2 w-full px-3 py-2 rounded text-sm text-red-400 hover:bg-surface-hover transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Sign out
+                </button>
+              </div>
           </aside>
         </div>
       )}

@@ -4,6 +4,8 @@ import { useAuth } from "../hooks/useAuth";
 import AppLayout from "./layout/AppLayout";
 import DashboardPage from "../features/dashboard/DashboardPage";
 import MotorcyclePage from "../features/motorcycle/MotorcyclePage";
+import MedicalPage from "../features/medical/MedicalPage";
+import ContentPage from "../features/content/ContentPage";
 import LoginPage from "../features/auth/LoginPage";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -37,6 +39,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <DashboardPage /> },
       { path: "motorcycle", element: <MotorcyclePage /> },
+      { path: "medical", element: <MedicalPage /> },
+      { path: "content", element: <ContentPage /> },
     ],
   },
 ]);

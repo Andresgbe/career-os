@@ -1,13 +1,20 @@
 import { useState } from "react";
+import { Navigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
+import { useAuth } from "../../hooks/useAuth";
 import { APP_NAME } from "../../lib/constants";
 
 export default function LoginPage() {
+  const { session, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // If already authenticated, redirect to home
+  if (authLoading) return null;
+  if (session) return <Navigate to="/" replace />;
 
   const handleSubmit = async () => {
     setError("");
