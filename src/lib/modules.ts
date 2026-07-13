@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Bike, Stethoscope, Video } from "lucide-react";
+import { Bike, Stethoscope, Video, GraduationCap } from "lucide-react";
 
 export interface ModuleDef {
   id: string;
@@ -30,6 +30,13 @@ export const MODULES: ModuleDef[] = [
     path: "/content",
     description: "Organize content ideas, scripts, and publishing pipeline",
     icon: Video,
+  },
+  {
+    id: "grades",
+    name: "Grades",
+    path: "/grades",
+    description: "Manage subjects, evaluations, and track your points",
+    icon: GraduationCap,
   },
   // Future modules go here
 ];

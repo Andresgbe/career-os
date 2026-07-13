@@ -624,7 +624,7 @@ export default function HistoryTab() {
                 </li>
               );
             })}
-          </ul>
+          </ul> 
         )}
       </section>
 

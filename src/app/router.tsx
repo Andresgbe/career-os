@@ -6,6 +6,7 @@ import DashboardPage from "../features/dashboard/DashboardPage";
 import MotorcyclePage from "../features/motorcycle/MotorcyclePage";
 import MedicalPage from "../features/medical/MedicalPage";
 import ContentPage from "../features/content/ContentPage";
+import GradesPage from "../features/grades/GradesPage";
 import LoginPage from "../features/auth/LoginPage";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -41,6 +42,7 @@ export const router = createBrowserRouter([
       { path: "motorcycle", element: <MotorcyclePage /> },
       { path: "medical", element: <MedicalPage /> },
       { path: "content", element: <ContentPage /> },
+      { path: "grades", element: <GradesPage /> },
     ],
   },
 ]);
