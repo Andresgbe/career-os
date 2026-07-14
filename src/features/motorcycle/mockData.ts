@@ -12,6 +12,8 @@ export const mockInfo: MotorcycleInfo = {
   year: null,
   plate: "",
   vin: "",
+  engineSerial: "",
+  invoiceNumber: "",
   color: "",
   purchaseDate: null,
   notes: "",
