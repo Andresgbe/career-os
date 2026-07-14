@@ -8,7 +8,7 @@ const emptyInfo: MotorcycleInfo = {
   id: "",
   make: "",
   model: "",
-  year: null,
+  year: null, 
   plate: "",
   vin: "",
   engineSerial: "",       // ← nuevo
