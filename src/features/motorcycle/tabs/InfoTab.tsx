@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Upload, Save, Check, Pencil } from "lucide-react";
+import { Save, Check, Pencil } from "lucide-react";
 import { getMotorcycleInfo, saveMotorcycleInfo } from "../api";
 import type { MotorcycleInfo } from "../types";
 import AttachmentsSection from "../components/AttachmentsSection";

@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
-import { APP_NAME } from "../../lib/constants";
-import { MODULES } from "../../lib/modules";
-import { supabase } from "../../lib/supabase";
+import { APP_NAME } from "../lib/constants";
+import { MODULES } from "../lib/modules";
+import { supabase } from "../lib/supabase";
 import { LogOut } from "lucide-react";
 
 export default function AppLayout() {
