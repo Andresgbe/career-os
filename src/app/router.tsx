@@ -9,6 +9,10 @@ import ContentPage from "../features/content/ContentPage";
 import GradesPage from "../features/grades/GradesPage";
 import ProjectsPage from "../features/projects/ProjectsPage";
 import ProgrammingPage from "../features/programming/ProgrammingPage";
+import TasksPage from "../features/tasks/TasksPage";
+import InsurancePage from "../features/insurance/InsurancePage";
+import FinancePage from "../features/finance/FinancePage";
+import WorkPage from "../features/work/WorkPage";
 import LoginPage from "../features/auth/LoginPage";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -47,6 +51,10 @@ export const router = createBrowserRouter([
       { path: "grades", element: <GradesPage /> },
       { path: "projects", element: <ProjectsPage /> },
       { path: "programming", element: <ProgrammingPage /> },
+      { path: "tasks", element: <TasksPage /> },
+      { path: "insurance", element: <InsurancePage /> },
+      { path: "finance", element: <FinancePage /> },
+      { path: "work", element: <WorkPage /> },
     ],
   },
 ]);

@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Bike, Stethoscope, Video, GraduationCap, Laptop, Terminal } from "lucide-react";
+import { Bike, Stethoscope, Video, GraduationCap, Laptop, Terminal, ListTodo, Shield, Landmark, Briefcase } from "lucide-react";
 
 export interface ModuleDef {
   id: string;
@@ -40,7 +40,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "projects",
-    name: "Projects Management",
+    name: "Project Management",
     path: "/projects",
     description: "Manage IT projects and track their progress",
     icon: Laptop,
@@ -51,6 +51,34 @@ export const MODULES: ModuleDef[] = [
     path: "/programming",
     description: "Manage programming resources, snippets, and tools",
     icon: Terminal,
+  },
+  {
+    id: "tasks",
+    name: "Tasks",
+    path: "/tasks",
+    description: "Manage your to-do list, priorities, and completed tasks",
+    icon: ListTodo,
+  },
+  {
+    id: "insurance",
+    name: "Insurance",
+    path: "/insurance",
+    description: "Track your insurance policies, coverage, and contacts",
+    icon: Shield,
+  },
+  {
+    id: "finance",
+    name: "Finance",
+    path: "/finance",
+    description: "Track your bills, debts, and income",
+    icon: Landmark,
+  },
+  {
+    id: "work",
+    name: "Work Tracker",
+    path: "/work",
+    description: "Track your tasks, teammates, projects, and reference info",
+    icon: Briefcase,
   },
   // Future modules go here
 ];

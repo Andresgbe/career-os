@@ -232,3 +232,131 @@ export async function uploadOilReceipt(id: string, file: File) {
 
   return filePath;
 }
+
+// ============================================
+// TO BUY
+// ============================================
+
+export interface ToBuyRow {
+  id: string;
+  name: string;
+  reference_url: string;
+  status: "pending" | "purchased";
+}
+
+export async function getToBuyItems(): Promise<ToBuyRow[]> {
+  const { data, error } = await supabase
+    .from("motorcycle_to_buy")
+    .select("*")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addToBuyItem(
+  name: string,
+  referenceUrl: string
+): Promise<ToBuyRow> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase
+    .from("motorcycle_to_buy")
+    .insert({ user_id: user.id, name, reference_url: referenceUrl })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as ToBuyRow;
+}
+
+export async function updateToBuyStatus(
+  id: string,
+  status: "pending" | "purchased"
+) {
+  const { error } = await supabase
+    .from("motorcycle_to_buy")
+    .update({ status })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteToBuyItem(id: string) {
+  const { error } = await supabase
+    .from("motorcycle_to_buy")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// ============================================
+// AUDIT LOG
+// ============================================
+
+export interface AuditLogRow {
+  id: string;
+  entry_date: string;
+  category: "maintenance" | "workshop" | "upgrade" | "other";
+  description: string;
+  location: string;
+  km: number | null;
+}
+
+export async function getAuditLog(): Promise<AuditLogRow[]> {
+  const { data, error } = await supabase
+    .from("motorcycle_audit_log")
+    .select("*")
+    .order("entry_date", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addAuditEntry(fields: {
+  entry_date: string;
+  category: "maintenance" | "workshop" | "upgrade" | "other";
+  description: string;
+  location: string;
+  km: number | null;
+}): Promise<AuditLogRow> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase
+    .from("motorcycle_audit_log")
+    .insert({ user_id: user.id, ...fields })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as AuditLogRow;
+}
+
+export async function updateAuditEntry(
+  id: string,
+  fields: Partial<{
+    entry_date: string;
+    category: "maintenance" | "workshop" | "upgrade" | "other";
+    description: string;
+    location: string;
+    km: number | null;
+  }>
+): Promise<AuditLogRow> {
+  const { data, error } = await supabase
+    .from("motorcycle_audit_log")
+    .update(fields)
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as AuditLogRow;
+}
+
+export async function deleteAuditEntry(id: string) {
+  const { error } = await supabase
+    .from("motorcycle_audit_log")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}

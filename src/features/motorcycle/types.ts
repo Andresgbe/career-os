@@ -28,24 +28,3 @@ export interface OilChange {
   date: string | null;   // when it was done
   receiptUrl: string | null;  // photo proof (Storage later)
 }
-
-// To Buy list
-export type ToBuyStatus = "pending" | "purchased";
-
-export interface ToBuyItem {
-  id: string;
-  name: string;
-  referenceUrl: string;  // link to product / reference
-  status: ToBuyStatus;
-}
-
-// Audit log — history of actions
-export type AuditCategory = "maintenance" | "workshop" | "upgrade" | "other";
-
-export interface AuditEntry {
-  id: string;
-  date: string;          // ISO date
-  category: AuditCategory;
-  description: string;
-  location: string;      // optional place
-}

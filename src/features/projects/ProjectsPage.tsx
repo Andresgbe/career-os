@@ -1,82 +1,151 @@
-import { useState } from "react";
-import { FolderKanban, Code, Server, Smartphone, ExternalLink } from "lucide-react";
-
-// Mock data for initial presentation
-const MOCK_PROJECTS = [
-  {
-    id: "1",
-    title: "E-Commerce Replatforming",
-    description: "Migrating the legacy monolithic shop to a modern headless architecture using Next.js and Shopify.",
-    status: "In Progress",
-    icon: Code,
-    color: "text-blue-400",
-    bg: "bg-blue-400/10",
-  },
-  {
-    id: "2",
-    title: "Cloud Infrastructure Setup",
-    description: "Setting up automated CI/CD pipelines and provisioning AWS resources via Terraform.",
-    status: "Planning",
-    icon: Server,
-    color: "text-purple-400",
-    bg: "bg-purple-400/10",
-  },
-  {
-    id: "3",
-    title: "Mobile App V2",
-    description: "Rewriting the main application in React Native for better cross-platform consistency.",
-    status: "On Hold",
-    icon: Smartphone,
-    color: "text-green-400",
-    bg: "bg-green-400/10",
-  },
-];
+import { useEffect, useState } from "react";
+import { Plus } from "lucide-react";
+import ProjectCard from "./components/ProjectCard";
+import ProjectModal from "./components/ProjectModal";
+import ProjectDetail from "./components/ProjectDetail";
+import { getProjects } from "./api";
+import type { ProjectRow, ProjectStatus } from "./types";
+import { PROJECT_STATUSES } from "./types";
 
 export default function ProjectsPage() {
+  const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [viewing, setViewing] = useState<ProjectRow | null>(null);
+  const [editing, setEditing] = useState<ProjectRow | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<ProjectStatus | "all">("all");
+
+  useEffect(() => {
+    getProjects()
+      .then(setProjects)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const startAdd = () => {
+    setEditing(null);
+    setShowModal(true);
+  };
+
+  const startView = (project: ProjectRow) => setViewing(project);
+
+  const startEdit = (project: ProjectRow) => {
+    setViewing(null);
+    setEditing(project);
+    setShowModal(true);
+  };
+
+  const handleSaved = (saved: ProjectRow) => {
+    setProjects((prev) => {
+      const exists = prev.some((p) => p.id === saved.id);
+      return exists
+        ? prev.map((p) => (p.id === saved.id ? saved : p))
+        : [...prev, saved];
+    });
+    setShowModal(false);
+  };
+
+  const handleDeleted = (id: string) => {
+    setProjects((prev) => prev.filter((p) => p.id !== id));
+    setShowModal(false);
+    setViewing(null);
+  };
+
+  const visibleProjects =
+    statusFilter === "all"
+      ? projects
+      : projects.filter((p) => p.status === statusFilter);
+
+  if (loading) return <p className="text-sm text-muted">Loading...</p>;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold mb-1">Project Management</h1>
-        <p className="text-sm text-muted">
-          Manage your IT projects and track their progress.
-        </p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold mb-1">Project Management</h1>
+          <p className="text-sm text-muted">
+            Track your personal and freelance software projects.
+          </p>
+        </div>
+        <button
+          onClick={startAdd}
+          className="flex items-center gap-2 px-4 py-2 rounded bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Add project
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {MOCK_PROJECTS.map((project) => {
-          const Icon = project.icon;
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-xl">
+          {error}
+        </div>
+      )}
+
+      {/* Status filter */}
+      <div className="flex gap-1 flex-wrap">
+        <button
+          onClick={() => setStatusFilter("all")}
+          className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
+            statusFilter === "all"
+              ? "bg-primary text-white"
+              : "bg-surface-hover text-muted hover:text-foreground"
+          }`}
+        >
+          All ({projects.length})
+        </button>
+        {PROJECT_STATUSES.map((status) => {
+          const count = projects.filter((p) => p.status === status.value).length;
           return (
-            <div
-              key={project.id}
-              className="group bg-surface border border-border rounded-xl p-5 hover:border-primary transition-all cursor-pointer hover:-translate-y-1 hover:shadow-lg"
-              onClick={() => {
-                // In the future this will navigate to a project detail view
-                console.log(`Navigate to project ${project.id}`);
-              }}
+            <button
+              key={status.value}
+              onClick={() => setStatusFilter(status.value)}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
+                statusFilter === status.value
+                  ? "bg-primary text-white"
+                  : `${status.bg} ${status.color} hover:opacity-80`
+              }`}
             >
-              <div className="flex items-start justify-between mb-4">
-                <div className={`p-3 rounded-lg ${project.bg}`}>
-                  <Icon className={`w-6 h-6 ${project.color}`} />
-                </div>
-                <span className="text-xs font-medium px-2.5 py-1 bg-surface-hover rounded-full text-muted">
-                  {project.status}
-                </span>
-              </div>
-              
-              <h3 className="font-semibold text-lg mb-2 group-hover:text-primary transition-colors">
-                {project.title}
-              </h3>
-              <p className="text-sm text-muted line-clamp-2 mb-4">
-                {project.description}
-              </p>
-              
-              <div className="flex items-center text-sm font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                View Details <ExternalLink className="w-4 h-4 ml-1" />
-              </div>
-            </div>
+              {status.label} ({count})
+            </button>
           );
         })}
       </div>
+
+      {visibleProjects.length === 0 ? (
+        <p className="text-sm text-muted">No projects yet.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {visibleProjects.map((project) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              onClick={() => startView(project)}
+            />
+          ))}
+        </div>
+      )}
+
+      {viewing && (
+        <ProjectDetail
+          project={viewing}
+          onClose={() => setViewing(null)}
+          onEdit={() => startEdit(viewing)}
+          onDeleted={handleDeleted}
+        />
+      )}
+
+      {showModal && (
+        <ProjectModal
+          project={editing}
+          defaultStatus="planning"
+          nextSortOrder={projects.length}
+          onClose={() => setShowModal(false)}
+          onSaved={handleSaved}
+          onDeleted={handleDeleted}
+        />
+      )}
     </div>
   );
 }
