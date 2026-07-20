@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   X,
   Pencil,
@@ -15,16 +15,9 @@ import {
   DollarSign,
 } from "lucide-react";
 import { deleteProject, getProjectFileUrl } from "../api";
-import type { ProjectRow, ResourceType } from "../types";
-import { PAYMENT_STATUSES, PROJECT_STATUSES, RESOURCE_TYPES } from "../types";
+import type { ProjectRow } from "../types";
+import { PAYMENT_STATUSES, PROJECT_STATUSES, RESOURCE_STYLE } from "../types";
 import ConfirmDialog from "./ConfirmDialog";
-
-const RESOURCE_ICON: Record<ResourceType, typeof Link2> = {
-  link: Link2,
-  credential: KeyRound,
-  image: ImageIcon,
-  note: StickyNote,
-};
 
 const PAYMENT_STYLE: Record<ProjectRow["payment_status"], string> = {
   unpaid: "text-red-400 bg-red-400/10",
@@ -48,11 +41,40 @@ export default function ProjectDetail({
   const [error, setError] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
 
   const status = PROJECT_STATUSES.find((s) => s.value === project.status)!;
   const paymentLabel = PAYMENT_STATUSES.find(
     (p) => p.value === project.payment_status
   )?.label;
+
+  const images = project.resources.filter((r) => r.type === "image" && r.file_path);
+  const links = project.resources.filter((r) => r.type === "link");
+  const credentials = project.resources.filter((r) => r.type === "credential");
+  const notes = project.resources.filter((r) => r.type === "note");
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      images.map(async (img) => {
+        try {
+          const url = await getProjectFileUrl(img.file_path);
+          return [img.id, url] as const;
+        } catch {
+          return null;
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      for (const r of results) if (r) next[r[0]] = r[1];
+      setImageUrls(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id]);
 
   const togglePassword = (id: string) => {
     setVisiblePasswords((prev) => {
@@ -61,15 +83,6 @@ export default function ProjectDetail({
       else next.add(id);
       return next;
     });
-  };
-
-  const viewImage = async (path: string) => {
-    try {
-      const url = await getProjectFileUrl(path);
-      window.open(url, "_blank");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open image");
-    }
   };
 
   const handleDelete = async () => {
@@ -88,7 +101,7 @@ export default function ProjectDetail({
       onClick={onClose}
     >
       <div
-        className="bg-surface border border-border rounded-xl p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto"
+        className="bg-surface border border-border rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-4 gap-3">
@@ -116,15 +129,15 @@ export default function ProjectDetail({
 
         {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
 
-        <div className="space-y-5">
+        <div className="space-y-6">
           {project.description && (
             <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
               {project.description}
             </p>
           )}
 
-          {(project.budget !== null || project.payment_status !== "unpaid") && (
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {(project.budget !== null || project.payment_status !== "unpaid") && (
               <span
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium ${PAYMENT_STYLE[project.payment_status]}`}
               >
@@ -136,38 +149,25 @@ export default function ProjectDetail({
                   ({paymentLabel})
                 </span>
               </span>
-            </div>
-          )}
-
-          {project.tech_stack.length > 0 && (
-            <div>
-              <h3 className="text-xs uppercase tracking-wider text-muted font-medium mb-2">
-                Tech stack
-              </h3>
-              <div className="flex flex-wrap gap-1.5">
-                {project.tech_stack.map((tech) => (
-                  <span
-                    key={tech}
-                    className="text-xs px-2 py-1 bg-surface-hover rounded-full text-foreground"
-                  >
-                    {tech}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+            )}
+            {project.tech_stack.map((tech) => (
+              <span
+                key={tech}
+                className="text-xs px-2 py-1 bg-surface-hover rounded-full text-foreground"
+              >
+                {tech}
+              </span>
+            ))}
+          </div>
 
           {project.milestones.length > 0 && (
-            <div>
-              <h3 className="text-xs uppercase tracking-wider text-muted font-medium mb-2">
+            <section>
+              <h3 className="text-xs uppercase tracking-wider text-muted font-semibold mb-2">
                 Milestones
               </h3>
               <ul className="space-y-1.5">
                 {project.milestones.map((m) => (
-                  <li
-                    key={m.id}
-                    className="flex items-center gap-2 text-sm"
-                  >
+                  <li key={m.id} className="flex items-center gap-2 text-sm">
                     {m.done ? (
                       <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />
                     ) : (
@@ -181,99 +181,159 @@ export default function ProjectDetail({
                   </li>
                 ))}
               </ul>
-            </div>
+            </section>
           )}
 
-          {project.resources.length > 0 && (
-            <div>
-              <h3 className="text-xs uppercase tracking-wider text-muted font-medium mb-2">
-                Resources
+          {/* Images gallery */}
+          {images.length > 0 && (
+            <section>
+              <h3 className="text-xs uppercase tracking-wider text-muted font-semibold mb-2 flex items-center gap-1.5">
+                <ImageIcon className="w-3.5 h-3.5" />
+                Images
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {images.map((img) => (
+                  <a
+                    key={img.id}
+                    href={imageUrls[img.id] ?? "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="group relative aspect-video rounded-lg overflow-hidden border border-border bg-background block"
+                  >
+                    {imageUrls[img.id] ? (
+                      <img
+                        src={imageUrls[img.id]}
+                        alt={img.label || "Project image"}
+                        className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-muted">
+                        <ImageIcon className="w-6 h-6 animate-pulse" />
+                      </div>
+                    )}
+                    {img.label && (
+                      <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[11px] px-2 py-1 truncate">
+                        {img.label}
+                      </span>
+                    )}
+                  </a>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Links */}
+          {links.length > 0 && (
+            <section>
+              <h3 className="text-xs uppercase tracking-wider text-muted font-semibold mb-2 flex items-center gap-1.5">
+                <Link2 className="w-3.5 h-3.5" />
+                Links
               </h3>
               <div className="space-y-2">
-                {project.resources.map((resource) => {
-                  const Icon = RESOURCE_ICON[resource.type];
-                  const typeLabel = RESOURCE_TYPES.find(
-                    (t) => t.value === resource.type
-                  )?.label;
-
-                  return (
-                    <div
-                      key={resource.id}
-                      className="bg-background border border-border rounded-lg p-3"
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <Icon className="w-4 h-4 text-primary shrink-0" />
-                        <span className="text-sm font-medium truncate">
-                          {resource.label || typeLabel}
-                        </span>
-                        <span className="text-[10px] uppercase tracking-wider text-muted ml-auto shrink-0">
-                          {typeLabel}
-                        </span>
-                      </div>
-
-                      {resource.type === "link" && resource.value && (
-                        <a
-                          href={resource.value}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-1.5 text-sm text-primary hover:underline break-all"
-                        >
-                          {resource.value}
-                          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                        </a>
+                {links.map((resource) => (
+                  <a
+                    key={resource.id}
+                    href={resource.value}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 bg-background border border-border rounded-lg p-3 hover:border-primary transition-colors"
+                  >
+                    <span className={`p-1.5 rounded shrink-0 ${RESOURCE_STYLE.link.bg}`}>
+                      <Link2 className={`w-4 h-4 ${RESOURCE_STYLE.link.color}`} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      {resource.label && (
+                        <p className="text-sm font-medium truncate">{resource.label}</p>
                       )}
+                      <p className="text-xs text-primary truncate">{resource.value}</p>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-muted shrink-0" />
+                  </a>
+                ))}
+              </div>
+            </section>
+          )}
 
-                      {resource.type === "note" && resource.value && (
-                        <p className="text-sm text-muted whitespace-pre-wrap font-mono">
-                          {resource.value}
-                        </p>
-                      )}
-
-                      {resource.type === "credential" && (
-                        <div className="text-sm space-y-1">
-                          {resource.username && (
-                            <p>
-                              <span className="text-muted">User: </span>
-                              {resource.username}
-                            </p>
-                          )}
-                          {resource.password && (
-                            <p className="flex items-center gap-2">
-                              <span className="text-muted">Password: </span>
-                              <span className="font-mono">
-                                {visiblePasswords.has(resource.id)
-                                  ? resource.password
-                                  : "•".repeat(resource.password.length)}
-                              </span>
-                              <button
-                                onClick={() => togglePassword(resource.id)}
-                                className="text-muted hover:text-primary"
-                              >
-                                {visiblePasswords.has(resource.id) ? (
-                                  <EyeOff className="w-3.5 h-3.5" />
-                                ) : (
-                                  <Eye className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {resource.type === "image" && resource.file_path && (
-                        <button
-                          onClick={() => viewImage(resource.file_path)}
-                          className="flex items-center gap-1.5 text-sm text-primary hover:underline"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          View image
-                        </button>
+          {/* Credentials */}
+          {credentials.length > 0 && (
+            <section>
+              <h3 className="text-xs uppercase tracking-wider text-muted font-semibold mb-2 flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5" />
+                Credentials
+              </h3>
+              <div className="space-y-2">
+                {credentials.map((resource) => (
+                  <div
+                    key={resource.id}
+                    className="bg-background border border-border rounded-lg p-3"
+                  >
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`p-1.5 rounded shrink-0 ${RESOURCE_STYLE.credential.bg}`}>
+                        <KeyRound className={`w-4 h-4 ${RESOURCE_STYLE.credential.color}`} />
+                      </span>
+                      {resource.label && (
+                        <p className="text-sm font-medium truncate">{resource.label}</p>
                       )}
                     </div>
-                  );
-                })}
+                    <div className="text-sm space-y-1 pl-9">
+                      {resource.username && (
+                        <p>
+                          <span className="text-muted">User: </span>
+                          {resource.username}
+                        </p>
+                      )}
+                      {resource.password && (
+                        <p className="flex items-center gap-2">
+                          <span className="text-muted">Password: </span>
+                          <span className="font-mono">
+                            {visiblePasswords.has(resource.id)
+                              ? resource.password
+                              : "•".repeat(resource.password.length)}
+                          </span>
+                          <button
+                            onClick={() => togglePassword(resource.id)}
+                            className="text-muted hover:text-primary"
+                          >
+                            {visiblePasswords.has(resource.id) ? (
+                              <EyeOff className="w-3.5 h-3.5" />
+                            ) : (
+                              <Eye className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
+            </section>
+          )}
+
+          {/* Notes */}
+          {notes.length > 0 && (
+            <section>
+              <h3 className="text-xs uppercase tracking-wider text-muted font-semibold mb-2 flex items-center gap-1.5">
+                <StickyNote className="w-3.5 h-3.5" />
+                Notes
+              </h3>
+              <div className="space-y-2">
+                {notes.map((resource) => (
+                  <div
+                    key={resource.id}
+                    className="bg-background border border-border rounded-lg p-3"
+                  >
+                    {resource.label && (
+                      <p className="text-sm font-medium mb-1">{resource.label}</p>
+                    )}
+                    {resource.value && (
+                      <p className="text-sm text-muted whitespace-pre-wrap">
+                        {resource.value}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
         </div>
 

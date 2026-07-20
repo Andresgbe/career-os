@@ -27,7 +27,12 @@ import type {
   PaymentStatus,
   ResourceType,
 } from "../types";
-import { PROJECT_STATUSES, PAYMENT_STATUSES, RESOURCE_TYPES } from "../types";
+import {
+  PROJECT_STATUSES,
+  PAYMENT_STATUSES,
+  RESOURCE_TYPES,
+  RESOURCE_STYLE,
+} from "../types";
 import ConfirmDialog from "./ConfirmDialog";
 
 interface ProjectForm {
@@ -134,12 +139,12 @@ export default function ProjectModal({
     resources[index] = { ...resources[index], ...fields };
     setForm({ ...form, resources });
   };
-  const addResource = (type: ResourceType) =>
+  const addResource = () =>
     setForm({
       ...form,
       resources: [
         ...form.resources,
-        { ...emptyResource, id: crypto.randomUUID(), type },
+        { ...emptyResource, id: crypto.randomUUID(), type: "note" },
       ],
     });
   const removeResource = (index: number) =>
@@ -272,7 +277,7 @@ export default function ProjectModal({
       onClick={onClose}
     >
       <div
-        className="bg-surface border border-border rounded-xl p-5 w-full max-w-xl max-h-[90vh] overflow-y-auto"
+        className="bg-surface border border-border rounded-xl p-5 w-full max-w-3xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <input
@@ -329,7 +334,7 @@ export default function ProjectModal({
               onChange={(e) =>
                 setForm({ ...form, description: e.target.value })
               }
-              className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none resize-none"
+              className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none resize-y min-h-[100px]"
             />
           </div>
 
@@ -427,29 +432,49 @@ export default function ProjectModal({
 
           {/* Resources: links, credentials, images, notes */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs text-muted">Resources</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-muted">
+                Resources — just add and type; you can pick the kind (or
+                change it) any time.
+              </label>
+            </div>
 
             {form.resources.map((resource, index) => {
               const Icon = RESOURCE_ICON[resource.type];
+              const style = RESOURCE_STYLE[resource.type];
               return (
                 <div
                   key={resource.id}
                   className="bg-background border border-border rounded-lg p-3 space-y-2"
                 >
                   <div className="flex items-center gap-2">
-                    <Icon className="w-4 h-4 text-muted shrink-0" />
+                    <span className={`p-1.5 rounded shrink-0 ${style.bg}`}>
+                      <Icon className={`w-4 h-4 ${style.color}`} />
+                    </span>
                     <input
                       type="text"
-                      placeholder="Label"
+                      placeholder="Label (optional)"
                       value={resource.label}
                       onChange={(e) =>
                         setResource(index, { label: e.target.value })
                       }
                       className="flex-1 bg-surface border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
                     />
-                    <span className="text-[10px] uppercase tracking-wider text-muted px-1.5 shrink-0">
-                      {RESOURCE_TYPES.find((t) => t.value === resource.type)?.label}
-                    </span>
+                    <select
+                      value={resource.type}
+                      onChange={(e) =>
+                        setResource(index, {
+                          type: e.target.value as ResourceType,
+                        })
+                      }
+                      className="bg-surface border border-border rounded px-2 py-2 text-xs focus:border-primary outline-none shrink-0"
+                    >
+                      {RESOURCE_TYPES.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
                     <button
                       onClick={() => removeResource(index)}
                       className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-red-400 shrink-0"
@@ -547,21 +572,13 @@ export default function ProjectModal({
               );
             })}
 
-            <div className="flex flex-wrap gap-3 pt-1">
-              {RESOURCE_TYPES.map((t) => {
-                const Icon = RESOURCE_ICON[t.value];
-                return (
-                  <button
-                    key={t.value}
-                    onClick={() => addResource(t.value)}
-                    className="flex items-center gap-1.5 text-xs text-primary hover:underline"
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    Add {t.label.toLowerCase()}
-                  </button>
-                );
-              })}
-            </div>
+            <button
+              onClick={addResource}
+              className="flex items-center gap-1.5 text-xs text-primary hover:underline w-fit pt-1"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add item
+            </button>
           </div>
 
           {/* Milestones */}

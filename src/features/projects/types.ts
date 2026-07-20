@@ -46,11 +46,18 @@ export interface ProjectMilestone {
 export type ResourceType = "link" | "credential" | "image" | "note";
 
 export const RESOURCE_TYPES: { value: ResourceType; label: string }[] = [
+  { value: "note", label: "Note" },
   { value: "link", label: "Link" },
   { value: "credential", label: "Credential" },
   { value: "image", label: "Image" },
-  { value: "note", label: "Note" },
 ];
+
+export const RESOURCE_STYLE: Record<ResourceType, { color: string; bg: string }> = {
+  note: { color: "text-emerald-400", bg: "bg-emerald-400/10" },
+  link: { color: "text-blue-400", bg: "bg-blue-400/10" },
+  credential: { color: "text-amber-400", bg: "bg-amber-400/10" },
+  image: { color: "text-purple-400", bg: "bg-purple-400/10" },
+};
 
 export interface ProjectResource {
   id: string;
