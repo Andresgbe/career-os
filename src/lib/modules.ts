@@ -41,7 +41,7 @@ export const MODULES: ModuleDef[] = [
   {
     id: "projects",
     name: "Project Management",
-    path: "/projects",
+    path: "/projects", 
     description: "Manage IT projects and track their progress",
     icon: Laptop,
   },
