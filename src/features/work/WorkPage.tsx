@@ -1,9 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ListChecks, Users, FolderKanban, Info } from "lucide-react";
 import TasksTab from "./tabs/TasksTab";
 import PeopleTab from "./tabs/PeopleTab";
 import ProjectsTab from "./tabs/ProjectsTab";
 import GeneralInfoTab from "./tabs/GeneralInfoTab";
+import ShortcutsBar from "../../components/ShortcutsBar";
+import {
+  getWorkShortcuts,
+  addWorkShortcut,
+  deleteWorkShortcut,
+  reorderWorkShortcuts,
+  uploadShortcutIcon,
+} from "./api";
+import type { WorkShortcutRow } from "./types";
 
 const TABS = [
   { id: "tasks", label: "Tasks", icon: ListChecks },
@@ -16,16 +25,19 @@ type TabId = (typeof TABS)[number]["id"];
 
 export default function WorkPage() {
   const [activeTab, setActiveTab] = useState<TabId>("tasks");
+  const [shortcuts, setShortcuts] = useState<WorkShortcutRow[]>([]);
+  const [shortcutsLoading, setShortcutsLoading] = useState(true);
+  const [shortcutsError, setShortcutsError] = useState("");
+
+  useEffect(() => {
+    getWorkShortcuts()
+      .then(setShortcuts)
+      .catch((e) => setShortcutsError(e.message))
+      .finally(() => setShortcutsLoading(false));
+  }, []);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold mb-1">Work Tracker</h1>
-        <p className="text-sm text-muted">
-          Keep track of your tasks, teammates, projects, and reference info.
-        </p>
-      </div>
-
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-border pb-0 overflow-x-auto">
         {TABS.map((tab) => {
@@ -47,6 +59,26 @@ export default function WorkPage() {
           );
         })}
       </div>
+
+      {/* Shortcuts */}
+      {shortcutsError && (
+        <p className="text-sm text-red-400">{shortcutsError}</p>
+      )}
+      {!shortcutsLoading && (
+        <ShortcutsBar
+          items={shortcuts}
+          size="lg"
+          addShortcut={addWorkShortcut}
+          deleteShortcut={deleteWorkShortcut}
+          reorderShortcuts={reorderWorkShortcuts}
+          uploadIcon={uploadShortcutIcon}
+          onAdded={(item) => setShortcuts((prev) => [...prev, item])}
+          onDeleted={(id) =>
+            setShortcuts((prev) => prev.filter((s) => s.id !== id))
+          }
+          onReordered={setShortcuts}
+        />
+      )}
 
       {/* Tab content */}
       {activeTab === "tasks" && <TasksTab />}

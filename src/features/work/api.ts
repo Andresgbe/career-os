@@ -6,6 +6,7 @@ import type {
   WorkProjectRow,
   ProjectResource,
   GeneralInfoRow,
+  WorkShortcutRow,
 } from "./types";
 
 async function requireUser() {
@@ -174,7 +175,7 @@ export async function getGeneralInfo(): Promise<GeneralInfoRow[]> {
 }
 
 export async function saveGeneralInfo(
-  fields: { title: string; content: string },
+  fields: { title: string; content: string; code: string },
   existingId: string | null
 ): Promise<GeneralInfoRow> {
   if (existingId) {
@@ -204,6 +205,97 @@ export async function deleteGeneralInfo(id: string): Promise<void> {
     .delete()
     .eq("id", id);
   if (error) throw error;
+}
+
+// ============================================
+// SHORTCUTS
+// ============================================
+
+export async function getWorkShortcuts(): Promise<WorkShortcutRow[]> {
+  const { data, error } = await supabase
+    .from("work_shortcuts")
+    .select("*")
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addWorkShortcut(
+  name: string,
+  url: string,
+  iconUrl: string | null
+): Promise<WorkShortcutRow> {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("work_shortcuts")
+    .insert({
+      user_id: user.id,
+      name,
+      url,
+      icon_url: iconUrl,
+      sort_order: Date.now(),
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as WorkShortcutRow;
+}
+
+// Upload a custom shortcut logo (used when a site has no discoverable
+// favicon, e.g. internal/local tools). Public bucket so the URL can be
+// embedded directly without re-signing it every render.
+export async function uploadShortcutIcon(file: File): Promise<string> {
+  const user = await requireUser();
+  const filePath = `${user.id}/${Date.now()}-${file.name}`;
+
+  const { error } = await supabase.storage
+    .from("shortcut-icons")
+    .upload(filePath, file);
+  if (error) throw error;
+
+  return supabase.storage.from("shortcut-icons").getPublicUrl(filePath).data
+    .publicUrl;
+}
+
+export async function deleteWorkShortcut(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("work_shortcuts")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function reorderWorkShortcuts(
+  order: { id: string; sort_order: number }[]
+): Promise<void> {
+  const results = await Promise.all(
+    order.map(({ id, sort_order }) =>
+      supabase.from("work_shortcuts").update({ sort_order }).eq("id", id)
+    )
+  );
+  for (const { error } of results) if (error) throw error;
+}
+
+// ============================================
+// GENERAL INFO IMAGES (Supabase Storage, public bucket)
+// ============================================
+
+const WORK_FILES_BUCKET = "work-files";
+
+// Upload an image embedded in a General Info rich-text entry.
+// The bucket is public so the returned URL can be embedded directly in
+// stored HTML without needing to re-sign it every time it's rendered.
+export async function uploadWorkImage(file: File): Promise<string> {
+  const user = await requireUser();
+  const filePath = `${user.id}/${Date.now()}-${file.name}`;
+
+  const { error } = await supabase.storage
+    .from(WORK_FILES_BUCKET)
+    .upload(filePath, file);
+  if (error) throw error;
+
+  return supabase.storage.from(WORK_FILES_BUCKET).getPublicUrl(filePath).data
+    .publicUrl;
 }
 
 // Supabase returns jsonb as raw JSON; ensure arrays are properly typed
