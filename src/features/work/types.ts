@@ -78,6 +78,21 @@ export interface GeneralInfoRow {
   id: string;
   user_id: string;
   title: string;
-  content: string;
+  content: string; // rich HTML (bold, color, bullets, inline images)
+  code: string; // optional collapsible code snippet
+  created_at: string;
+}
+
+// ============================================
+// SHORTCUTS
+// ============================================
+
+export interface WorkShortcutRow {
+  id: string;
+  user_id: string;
+  name: string;
+  url: string;
+  icon_url: string | null; // custom uploaded logo; falls back to auto favicon when null
+  sort_order: number;
   created_at: string;
 }

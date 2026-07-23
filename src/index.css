@@ -10,3 +10,10 @@
   --color-foreground: #f4f4f5;
   --color-muted: #a1a1aa;
 }
+
+/* Placeholder for the rich-text contentEditable used in Work Tracker's General Info */
+.rich-text-editable:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-muted);
+  pointer-events: none;
+}

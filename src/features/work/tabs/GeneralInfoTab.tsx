@@ -3,13 +3,40 @@ import { Plus, Pencil, Trash2, Save, Copy, Check } from "lucide-react";
 import { getGeneralInfo, saveGeneralInfo, deleteGeneralInfo } from "../api";
 import type { GeneralInfoRow } from "../types";
 import ConfirmDialog from "../components/ConfirmDialog";
+import RichTextEditor, { RICH_CONTENT_CLASS } from "../components/RichTextEditor";
+import CodeBlock from "../components/CodeBlock";
 
 interface InfoForm {
   title: string;
   content: string;
+  code: string;
 }
 
-const emptyForm: InfoForm = { title: "", content: "" };
+const emptyForm: InfoForm = { title: "", content: "", code: "" };
+
+// contentEditable often leaves block-level tags behind even when "empty";
+// treat those as empty too so we don't render an empty box.
+function isRichContentEmpty(html: string): boolean {
+  if (!html) return true;
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html;
+  if (tmp.querySelector("img")) return false;
+  return !tmp.textContent?.trim();
+}
+
+// Best-effort HTML → plain text so "Copy" pastes readable text/newlines
+// instead of raw HTML tags.
+function htmlToPlainText(html: string): string {
+  const withBreaks = html
+    .replace(/<div>/gi, "\n")
+    .replace(/<\/div>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<li>/gi, "\n• ")
+    .replace(/<\/li>/gi, "");
+  const tmp = document.createElement("div");
+  tmp.innerHTML = withBreaks;
+  return (tmp.textContent || "").trim();
+}
 
 export default function GeneralInfoTab() {
   const [entries, setEntries] = useState<GeneralInfoRow[]>([]);
@@ -36,7 +63,7 @@ export default function GeneralInfoTab() {
   };
 
   const startEdit = (entry: GeneralInfoRow) => {
-    setForm({ title: entry.title, content: entry.content });
+    setForm({ title: entry.title, content: entry.content, code: entry.code });
     setEditingId(entry.id);
     setShowForm(true);
   };
@@ -57,7 +84,7 @@ export default function GeneralInfoTab() {
     setError("");
     try {
       const saved = await saveGeneralInfo(
-        { title: form.title.trim(), content: form.content },
+        { title: form.title.trim(), content: form.content, code: form.code },
         editingId
       );
       setEntries((prev) =>
@@ -87,7 +114,7 @@ export default function GeneralInfoTab() {
 
   const handleCopy = async (entry: GeneralInfoRow) => {
     try {
-      await navigator.clipboard.writeText(entry.content);
+      await navigator.clipboard.writeText(htmlToPlainText(entry.content));
       setCopiedId(entry.id);
       setTimeout(() => setCopiedId((id) => (id === entry.id ? null : id)), 1500);
     } catch {
@@ -126,16 +153,22 @@ export default function GeneralInfoTab() {
               className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
             />
           </div>
+
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted">Content</label>
-            <textarea
-              rows={5}
-              placeholder="Mask pattern, script, or any text you want to copy later..."
+            <RichTextEditor
               value={form.content}
-              onChange={(e) => setForm({ ...form, content: e.target.value })}
-              className="bg-background border border-border rounded px-3 py-2 text-sm font-mono focus:border-primary outline-none resize-none"
+              onChange={(html) => setForm({ ...form, content: html })}
+              placeholder="Mask pattern, notes, images... use the toolbar for bold, uppercase, color, or bullets."
             />
           </div>
+
+          <CodeBlock
+            value={form.code}
+            onChange={(code) => setForm({ ...form, code })}
+            placeholder="Paste a code snippet..."
+          />
+
           <div className="flex justify-end gap-2">
             <button
               onClick={cancelForm}
@@ -162,15 +195,15 @@ export default function GeneralInfoTab() {
           {entries.map((entry) => (
             <li
               key={entry.id}
-              className="bg-surface border border-border rounded-lg p-4"
+              className="bg-surface border border-border rounded-lg p-4 space-y-3"
             >
-              <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center justify-between gap-2">
                 <span className="font-medium text-sm">{entry.title}</span>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
                     onClick={() => handleCopy(entry)}
                     className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-primary"
-                    title="Copy to clipboard"
+                    title="Copy content to clipboard"
                   >
                     {copiedId === entry.id ? (
                       <Check className="w-4 h-4 text-emerald-400" />
@@ -194,11 +227,15 @@ export default function GeneralInfoTab() {
                   </button>
                 </div>
               </div>
-              {entry.content && (
-                <pre className="text-xs font-mono text-muted bg-background border border-border rounded px-3 py-2 whitespace-pre-wrap break-all">
-                  {entry.content}
-                </pre>
+
+              {!isRichContentEmpty(entry.content) && (
+                <div
+                  className={`text-sm text-muted bg-background border border-border rounded px-3 py-2 ${RICH_CONTENT_CLASS}`}
+                  dangerouslySetInnerHTML={{ __html: entry.content }}
+                />
               )}
+
+              <CodeBlock value={entry.code} />
             </li>
           ))}
         </ul>
