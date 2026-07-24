@@ -74,12 +74,21 @@ export interface WorkProjectRow {
 // GENERAL INFO
 // ============================================
 
+export interface GeneralInfoTableData {
+  rows: number;
+  cols: number;
+  cells: string[][];
+  colWidths?: (number | null)[]; // null = auto-fit remaining width; number = user-resized (px)
+  rowHeights?: number[]; // px, defaults applied when absent/short
+}
+
 export interface GeneralInfoRow {
   id: string;
   user_id: string;
   title: string;
   content: string; // rich HTML (bold, color, bullets, inline images)
   code: string; // optional collapsible code snippet
+  table_data: GeneralInfoTableData | null; // optional collapsible table
   created_at: string;
 }
 

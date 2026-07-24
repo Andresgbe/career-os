@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Save, Copy, Check } from "lucide-react";
 import { getGeneralInfo, saveGeneralInfo, deleteGeneralInfo } from "../api";
-import type { GeneralInfoRow } from "../types";
+import type { GeneralInfoRow, GeneralInfoTableData } from "../types";
 import ConfirmDialog from "../components/ConfirmDialog";
 import RichTextEditor, { RICH_CONTENT_CLASS } from "../components/RichTextEditor";
 import CodeBlock from "../components/CodeBlock";
+import TableBlock from "../components/TableBlock";
 
 interface InfoForm {
   title: string;
   content: string;
   code: string;
+  table: GeneralInfoTableData | null;
 }
 
-const emptyForm: InfoForm = { title: "", content: "", code: "" };
+const emptyForm: InfoForm = { title: "", content: "", code: "", table: null };
 
 // contentEditable often leaves block-level tags behind even when "empty";
 // treat those as empty too so we don't render an empty box.
@@ -63,7 +65,12 @@ export default function GeneralInfoTab() {
   };
 
   const startEdit = (entry: GeneralInfoRow) => {
-    setForm({ title: entry.title, content: entry.content, code: entry.code });
+    setForm({
+      title: entry.title,
+      content: entry.content,
+      code: entry.code,
+      table: entry.table_data,
+    });
     setEditingId(entry.id);
     setShowForm(true);
   };
@@ -84,7 +91,12 @@ export default function GeneralInfoTab() {
     setError("");
     try {
       const saved = await saveGeneralInfo(
-        { title: form.title.trim(), content: form.content, code: form.code },
+        {
+          title: form.title.trim(),
+          content: form.content,
+          code: form.code,
+          table_data: form.table,
+        },
         editingId
       );
       setEntries((prev) =>
@@ -169,6 +181,11 @@ export default function GeneralInfoTab() {
             placeholder="Paste a code snippet..."
           />
 
+          <TableBlock
+            value={form.table}
+            onChange={(table) => setForm({ ...form, table })}
+          />
+
           <div className="flex justify-end gap-2">
             <button
               onClick={cancelForm}
@@ -236,6 +253,7 @@ export default function GeneralInfoTab() {
               )}
 
               <CodeBlock value={entry.code} />
+              <TableBlock value={entry.table_data} />
             </li>
           ))}
         </ul>

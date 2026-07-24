@@ -6,6 +6,7 @@ import type {
   WorkProjectRow,
   ProjectResource,
   GeneralInfoRow,
+  GeneralInfoTableData,
   WorkShortcutRow,
 } from "./types";
 
@@ -171,11 +172,16 @@ export async function getGeneralInfo(): Promise<GeneralInfoRow[]> {
     .select("*")
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).map(normalizeGeneralInfo);
 }
 
 export async function saveGeneralInfo(
-  fields: { title: string; content: string; code: string },
+  fields: {
+    title: string;
+    content: string;
+    code: string;
+    table_data: GeneralInfoTableData | null;
+  },
   existingId: string | null
 ): Promise<GeneralInfoRow> {
   if (existingId) {
@@ -186,7 +192,7 @@ export async function saveGeneralInfo(
       .select("*")
       .single();
     if (error) throw error;
-    return data as GeneralInfoRow;
+    return normalizeGeneralInfo(data);
   }
 
   const user = await requireUser();
@@ -196,7 +202,7 @@ export async function saveGeneralInfo(
     .select("*")
     .single();
   if (error) throw error;
-  return data as GeneralInfoRow;
+  return normalizeGeneralInfo(data);
 }
 
 export async function deleteGeneralInfo(id: string): Promise<void> {
@@ -312,5 +318,13 @@ function normalizeProject(row: any): WorkProjectRow {
   return {
     ...row,
     resources: Array.isArray(row.resources) ? row.resources : [],
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeGeneralInfo(row: any): GeneralInfoRow {
+  return {
+    ...row,
+    table_data: Array.isArray(row.table_data?.cells) ? row.table_data : null,
   };
 }
