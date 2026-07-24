@@ -1,5 +1,5 @@
 import { supabase } from "../../lib/supabase";
-import type { SubjectRow, EvaluationRow } from "./types";
+import type { SubjectRow, EvaluationRow, GradesShortcutRow } from "./types";
 
 // ============================================
 // SHARED HELPERS
@@ -109,4 +109,131 @@ export async function deleteEvaluation(id: string): Promise<void> {
     .delete()
     .eq("id", id);
   if (error) throw error;
+}
+
+// ============================================
+// CURRICULUM MAP PROGRESS
+// ============================================
+
+export type CurriculumStatus = "seen" | "tentative";
+
+export interface CurriculumProgressEntry {
+  subject_id: string;
+  status: CurriculumStatus;
+}
+
+export async function getCurriculumProgress(): Promise<CurriculumProgressEntry[]> {
+  const { data, error } = await supabase
+    .from("grades_curriculum_progress")
+    .select("subject_id, status");
+  if (error) throw error;
+  return (data ?? []) as CurriculumProgressEntry[];
+}
+
+export async function setSubjectStatus(
+  subjectId: string,
+  status: CurriculumStatus
+): Promise<void> {
+  const user = await requireUser();
+  const { error } = await supabase
+    .from("grades_curriculum_progress")
+    .upsert(
+      { user_id: user.id, subject_id: subjectId, status },
+      { onConflict: "user_id,subject_id" }
+    );
+  if (error) throw error;
+}
+
+export async function clearSubjectStatus(subjectId: string): Promise<void> {
+  const { error } = await supabase
+    .from("grades_curriculum_progress")
+    .delete()
+    .eq("subject_id", subjectId);
+  if (error) throw error;
+}
+
+export async function getCurrentUC(): Promise<number> {
+  const { data, error } = await supabase
+    .from("grades_curriculum_stats")
+    .select("current_uc")
+    .maybeSingle();
+  if (error) throw error;
+  return data?.current_uc ?? 0;
+}
+
+export async function setCurrentUC(uc: number): Promise<void> {
+  const user = await requireUser();
+  const { error } = await supabase
+    .from("grades_curriculum_stats")
+    .upsert({ user_id: user.id, current_uc: uc });
+  if (error) throw error;
+}
+
+// ============================================
+// SHORTCUTS
+// ============================================
+
+export async function getGradesShortcuts(): Promise<GradesShortcutRow[]> {
+  const { data, error } = await supabase
+    .from("grades_shortcuts")
+    .select("*")
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addGradesShortcut(
+  name: string,
+  url: string,
+  iconUrl: string | null
+): Promise<GradesShortcutRow> {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("grades_shortcuts")
+    .insert({
+      user_id: user.id,
+      name,
+      url,
+      icon_url: iconUrl,
+      sort_order: Date.now(),
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as GradesShortcutRow;
+}
+
+// Upload a custom shortcut logo (used when a site has no discoverable
+// favicon, e.g. internal/local tools). Shares the same public bucket as
+// the dashboard, work, and programming shortcuts.
+export async function uploadShortcutIcon(file: File): Promise<string> {
+  const user = await requireUser();
+  const filePath = `${user.id}/${Date.now()}-${file.name}`;
+
+  const { error } = await supabase.storage
+    .from("shortcut-icons")
+    .upload(filePath, file);
+  if (error) throw error;
+
+  return supabase.storage.from("shortcut-icons").getPublicUrl(filePath).data
+    .publicUrl;
+}
+
+export async function deleteGradesShortcut(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("grades_shortcuts")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function reorderGradesShortcuts(
+  order: { id: string; sort_order: number }[]
+): Promise<void> {
+  const results = await Promise.all(
+    order.map(({ id, sort_order }) =>
+      supabase.from("grades_shortcuts").update({ sort_order }).eq("id", id)
+    )
+  );
+  for (const { error } of results) if (error) throw error;
 }
