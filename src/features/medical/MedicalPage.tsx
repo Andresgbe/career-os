@@ -16,12 +16,6 @@ export default function MedicalPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold mb-1">Medical</h1>
-        <p className="text-sm text-muted">
-          Track your medical history, exams, and contacts.
-        </p>
-      </div>
 
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-border pb-0">

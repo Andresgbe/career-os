@@ -1,6 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BookOpen, Code2 } from "lucide-react";
 import ResourcesTab from "./tabs/ResourcesTab";
+import ShortcutsBar from "../../components/ShortcutsBar";
+import {
+  getProgrammingShortcuts,
+  addProgrammingShortcut,
+  deleteProgrammingShortcut,
+  reorderProgrammingShortcuts,
+  uploadShortcutIcon,
+} from "./api";
+import type { ProgrammingShortcutRow } from "./types";
 
 const TABS = [
   { id: "resources", label: "Resources", icon: BookOpen },
@@ -11,6 +20,16 @@ type TabId = (typeof TABS)[number]["id"];
 
 export default function ProgrammingPage() {
   const [activeTab, setActiveTab] = useState<TabId>("resources");
+  const [shortcuts, setShortcuts] = useState<ProgrammingShortcutRow[]>([]);
+  const [shortcutsLoading, setShortcutsLoading] = useState(true);
+  const [shortcutsError, setShortcutsError] = useState("");
+
+  useEffect(() => {
+    getProgrammingShortcuts()
+      .then(setShortcuts)
+      .catch((e) => setShortcutsError(e.message))
+      .finally(() => setShortcutsLoading(false));
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -42,6 +61,26 @@ export default function ProgrammingPage() {
           );
         })}
       </div>
+
+      {/* Shortcuts */}
+      {shortcutsError && (
+        <p className="text-sm text-red-400">{shortcutsError}</p>
+      )}
+      {!shortcutsLoading && (
+        <ShortcutsBar
+          items={shortcuts}
+          size="lg"
+          addShortcut={addProgrammingShortcut}
+          deleteShortcut={deleteProgrammingShortcut}
+          reorderShortcuts={reorderProgrammingShortcuts}
+          uploadIcon={uploadShortcutIcon}
+          onAdded={(item) => setShortcuts((prev) => [...prev, item])}
+          onDeleted={(id) =>
+            setShortcuts((prev) => prev.filter((s) => s.id !== id))
+          }
+          onReordered={setShortcuts}
+        />
+      )}
 
       {/* Tab content */}
       {activeTab === "resources" && <ResourcesTab />}

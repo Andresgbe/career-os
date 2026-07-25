@@ -8,6 +8,7 @@ import MedicalPage from "../features/medical/MedicalPage";
 import ContentPage from "../features/content/ContentPage";
 import GradesPage from "../features/grades/GradesPage";
 import ProjectsPage from "../features/projects/ProjectsPage";
+import ProjectWorkspacePage from "../features/projects/ProjectWorkspacePage";
 import ProgrammingPage from "../features/programming/ProgrammingPage";
 import TasksPage from "../features/tasks/TasksPage";
 import InsurancePage from "../features/insurance/InsurancePage";
@@ -50,6 +51,7 @@ export const router = createBrowserRouter([
       { path: "content", element: <ContentPage /> },
       { path: "grades", element: <GradesPage /> },
       { path: "projects", element: <ProjectsPage /> },
+      { path: "projects/:id", element: <ProjectWorkspacePage /> },
       { path: "programming", element: <ProgrammingPage /> },
       { path: "tasks", element: <TasksPage /> },
       { path: "insurance", element: <InsurancePage /> },

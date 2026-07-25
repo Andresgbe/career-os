@@ -33,3 +33,13 @@ export function getEarnedPoints(weight: number, grade: number | null): number {
 export function getSubjectTotal(evaluations: EvaluationRow[]): number {
   return evaluations.reduce((acc, ev) => acc + getEarnedPoints(ev.weight, ev.grade), 0);
 }
+
+export interface GradesShortcutRow {
+  id: string;
+  user_id: string;
+  name: string;
+  url: string;
+  icon_url: string | null; // custom uploaded logo; falls back to auto favicon when null
+  sort_order: number;
+  created_at: string;
+}
