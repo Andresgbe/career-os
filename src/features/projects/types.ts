@@ -2,6 +2,8 @@
 // A lightweight tracker for personal/freelance software projects.
 // These mirror the DB row (snake_case), same approach as the other modules.
 
+import type { RichTableData } from "../../components/TableBlock";
+
 export type ProjectStatus =
   | "planning"
   | "in_progress"
@@ -82,5 +84,22 @@ export interface ProjectRow {
   resources: ProjectResource[]; // stored as jsonb in Supabase
   milestones: ProjectMilestone[];
   sort_order: number;
+  created_at: string;
+}
+
+// ============================================
+// ENTRIES (Notion-style pages inside a project)
+// ============================================
+
+export type ProjectEntryTableData = RichTableData;
+
+export interface ProjectEntryRow {
+  id: string;
+  user_id: string;
+  project_id: string;
+  title: string;
+  content: string; // rich HTML (bold, color, bullets, inline images)
+  code: string; // optional collapsible code snippet
+  table_data: ProjectEntryTableData | null; // optional collapsible table
   created_at: string;
 }

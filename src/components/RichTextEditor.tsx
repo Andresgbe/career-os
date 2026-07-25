@@ -1,6 +1,5 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bold, CaseUpper, List, Palette, Image as ImageIcon, Loader2 } from "lucide-react";
-import { uploadWorkImage } from "../api";
 
 // Shared with the read-only render so bullets/images look the same in both places.
 export const RICH_CONTENT_CLASS =
@@ -11,18 +10,32 @@ const COLORS = ["#f4f4f5", "#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#a78bfa"
 interface RichTextEditorProps {
   value: string; // HTML
   onChange: (html: string) => void;
+  uploadImage: (file: File) => Promise<string>;
   placeholder?: string;
 }
 
 export default function RichTextEditor({
   value,
   onChange,
+  uploadImage,
   placeholder,
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [showColors, setShowColors] = useState(false);
+
+  // Set the initial content once on mount only. Re-applying `value` via
+  // dangerouslySetInnerHTML on every render (i.e. on every keystroke, since
+  // onChange flows the new HTML straight back down as `value`) would reset
+  // the caret to the start of the div each time — every typed character
+  // would land before the previous one, scrambling the text backwards.
+  // After mount, the DOM itself is the source of truth; onInput is the only
+  // channel back to the parent.
+  useEffect(() => {
+    if (editorRef.current) editorRef.current.innerHTML = value;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const emitChange = () => {
     if (editorRef.current) onChange(editorRef.current.innerHTML);
@@ -50,7 +63,7 @@ export default function RichTextEditor({
     if (!file) return;
     setUploading(true);
     try {
-      const url = await uploadWorkImage(file);
+      const url = await uploadImage(file);
       editorRef.current?.focus();
       document.execCommand("insertImage", false, url);
       emitChange();
@@ -143,7 +156,6 @@ export default function RichTextEditor({
         suppressContentEditableWarning
         onInput={emitChange}
         data-placeholder={placeholder}
-        dangerouslySetInnerHTML={{ __html: value }}
         className={`rich-text-editable min-h-[120px] max-h-[400px] overflow-y-auto bg-background px-3 py-2 text-sm focus:outline-none ${RICH_CONTENT_CLASS}`}
       />
     </div>

@@ -1,20 +1,25 @@
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Save, Copy, Check } from "lucide-react";
-import { getGeneralInfo, saveGeneralInfo, deleteGeneralInfo, uploadWorkImage } from "../api";
-import type { GeneralInfoRow, GeneralInfoTableData } from "../types";
+import {
+  getProjectEntries,
+  saveProjectEntry,
+  deleteProjectEntry,
+  uploadProjectEntryImage,
+} from "../api";
+import type { ProjectEntryRow, ProjectEntryTableData } from "../types";
 import ConfirmDialog from "../components/ConfirmDialog";
 import RichTextEditor, { RICH_CONTENT_CLASS } from "../../../components/RichTextEditor";
 import CodeBlock from "../../../components/CodeBlock";
 import TableBlock from "../../../components/TableBlock";
 
-interface InfoForm {
+interface EntryForm {
   title: string;
   content: string;
   code: string;
-  table: GeneralInfoTableData | null;
+  table: ProjectEntryTableData | null;
 }
 
-const emptyForm: InfoForm = { title: "", content: "", code: "", table: null };
+const emptyForm: EntryForm = { title: "", content: "", code: "", table: null };
 
 // contentEditable often leaves block-level tags behind even when "empty";
 // treat those as empty too so we don't render an empty box.
@@ -40,23 +45,27 @@ function htmlToPlainText(html: string): string {
   return (tmp.textContent || "").trim();
 }
 
-export default function GeneralInfoTab() {
-  const [entries, setEntries] = useState<GeneralInfoRow[]>([]);
+interface EntriesTabProps {
+  projectId: string;
+}
+
+export default function EntriesTab({ projectId }: EntriesTabProps) {
+  const [entries, setEntries] = useState<ProjectEntryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [form, setForm] = useState<InfoForm>(emptyForm);
+  const [form, setForm] = useState<EntryForm>(emptyForm);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [toDelete, setToDelete] = useState<GeneralInfoRow | null>(null);
+  const [toDelete, setToDelete] = useState<ProjectEntryRow | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
-    getGeneralInfo()
+    getProjectEntries(projectId)
       .then(setEntries)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [projectId]);
 
   const startAdd = () => {
     setForm(emptyForm);
@@ -64,7 +73,7 @@ export default function GeneralInfoTab() {
     setShowForm(true);
   };
 
-  const startEdit = (entry: GeneralInfoRow) => {
+  const startEdit = (entry: ProjectEntryRow) => {
     setForm({
       title: entry.title,
       content: entry.content,
@@ -90,7 +99,8 @@ export default function GeneralInfoTab() {
     setSaving(true);
     setError("");
     try {
-      const saved = await saveGeneralInfo(
+      const saved = await saveProjectEntry(
+        projectId,
         {
           title: form.title.trim(),
           content: form.content,
@@ -100,9 +110,7 @@ export default function GeneralInfoTab() {
         editingId
       );
       setEntries((prev) =>
-        editingId
-          ? prev.map((e) => (e.id === editingId ? saved : e))
-          : [...prev, saved]
+        editingId ? prev.map((e) => (e.id === editingId ? saved : e)) : [...prev, saved]
       );
       cancelForm();
     } catch (err) {
@@ -115,7 +123,7 @@ export default function GeneralInfoTab() {
   const confirmDelete = async () => {
     if (!toDelete) return;
     try {
-      await deleteGeneralInfo(toDelete.id);
+      await deleteProjectEntry(toDelete.id);
       setEntries((prev) => prev.filter((e) => e.id !== toDelete.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed");
@@ -124,7 +132,7 @@ export default function GeneralInfoTab() {
     }
   };
 
-  const handleCopy = async (entry: GeneralInfoRow) => {
+  const handleCopy = async (entry: ProjectEntryRow) => {
     try {
       await navigator.clipboard.writeText(htmlToPlainText(entry.content));
       setCopiedId(entry.id);
@@ -139,7 +147,7 @@ export default function GeneralInfoTab() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold">General info</h2>
+        <h2 className="font-semibold">Entries</h2>
         {!showForm && (
           <button
             onClick={startAdd}
@@ -159,7 +167,7 @@ export default function GeneralInfoTab() {
             <label className="text-xs text-muted">Title *</label>
             <input
               type="text"
-              placeholder="e.g. RIF mask, Phone mask, Deploy script..."
+              placeholder="e.g. Deploy steps, API notes, meeting recap..."
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
@@ -171,8 +179,8 @@ export default function GeneralInfoTab() {
             <RichTextEditor
               value={form.content}
               onChange={(html) => setForm({ ...form, content: html })}
-              uploadImage={uploadWorkImage}
-              placeholder="Mask pattern, notes, images... use the toolbar for bold, uppercase, color, or bullets."
+              uploadImage={uploadProjectEntryImage}
+              placeholder="Notes, images... use the toolbar for bold, uppercase, color, or bullets."
             />
           </div>
 
@@ -182,10 +190,7 @@ export default function GeneralInfoTab() {
             placeholder="Paste a code snippet..."
           />
 
-          <TableBlock
-            value={form.table}
-            onChange={(table) => setForm({ ...form, table })}
-          />
+          <TableBlock value={form.table} onChange={(table) => setForm({ ...form, table })} />
 
           <div className="flex justify-end gap-2">
             <button
@@ -211,10 +216,7 @@ export default function GeneralInfoTab() {
       ) : (
         <ul className="space-y-3">
           {entries.map((entry) => (
-            <li
-              key={entry.id}
-              className="bg-surface border border-border rounded-lg p-4 space-y-3"
-            >
+            <li key={entry.id} className="bg-surface border border-border rounded-lg p-4 space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium text-sm">{entry.title}</span>
                 <div className="flex items-center gap-1 shrink-0">

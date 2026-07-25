@@ -1,18 +1,17 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Plus } from "lucide-react";
 import ProjectCard from "./components/ProjectCard";
 import ProjectModal from "./components/ProjectModal";
-import ProjectDetail from "./components/ProjectDetail";
 import { getProjects } from "./api";
 import type { ProjectRow, ProjectStatus } from "./types";
 import { PROJECT_STATUSES } from "./types";
 
 export default function ProjectsPage() {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [viewing, setViewing] = useState<ProjectRow | null>(null);
-  const [editing, setEditing] = useState<ProjectRow | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "all">("all");
 
@@ -24,17 +23,10 @@ export default function ProjectsPage() {
   }, []);
 
   const startAdd = () => {
-    setEditing(null);
     setShowModal(true);
   };
 
-  const startView = (project: ProjectRow) => setViewing(project);
-
-  const startEdit = (project: ProjectRow) => {
-    setViewing(null);
-    setEditing(project);
-    setShowModal(true);
-  };
+  const openProject = (project: ProjectRow) => navigate(`/projects/${project.id}`);
 
   const handleSaved = (saved: ProjectRow) => {
     setProjects((prev) => {
@@ -49,7 +41,6 @@ export default function ProjectsPage() {
   const handleDeleted = (id: string) => {
     setProjects((prev) => prev.filter((p) => p.id !== id));
     setShowModal(false);
-    setViewing(null);
   };
 
   const visibleProjects =
@@ -121,24 +112,15 @@ export default function ProjectsPage() {
             <ProjectCard
               key={project.id}
               project={project}
-              onClick={() => startView(project)}
+              onClick={() => openProject(project)}
             />
           ))}
         </div>
       )}
 
-      {viewing && (
-        <ProjectDetail
-          project={viewing}
-          onClose={() => setViewing(null)}
-          onEdit={() => startEdit(viewing)}
-          onDeleted={handleDeleted}
-        />
-      )}
-
       {showModal && (
         <ProjectModal
-          project={editing}
+          project={null}
           defaultStatus="planning"
           nextSortOrder={projects.length}
           onClose={() => setShowModal(false)}

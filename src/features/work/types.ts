@@ -1,6 +1,8 @@
 // Work Tracker module types.
 // These mirror the DB rows (snake_case), same approach as the other modules.
 
+import type { RichTableData } from "../../components/TableBlock";
+
 // ============================================
 // TASKS
 // ============================================
@@ -74,13 +76,7 @@ export interface WorkProjectRow {
 // GENERAL INFO
 // ============================================
 
-export interface GeneralInfoTableData {
-  rows: number;
-  cols: number;
-  cells: string[][];
-  colWidths?: (number | null)[]; // null = auto-fit remaining width; number = user-resized (px)
-  rowHeights?: number[]; // px, defaults applied when absent/short
-}
+export type GeneralInfoTableData = RichTableData;
 
 export interface GeneralInfoRow {
   id: string;

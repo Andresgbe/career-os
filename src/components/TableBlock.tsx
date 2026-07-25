@@ -1,10 +1,17 @@
 import { Fragment, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Table2, Plus, Trash2 } from "lucide-react";
-import type { GeneralInfoTableData } from "../types";
+
+export interface RichTableData {
+  rows: number;
+  cols: number;
+  cells: string[][];
+  colWidths?: (number | null)[]; // null = auto-fit remaining width; number = user-resized (px)
+  rowHeights?: number[]; // px, defaults applied when absent/short
+}
 
 interface TableBlockProps {
-  value: GeneralInfoTableData | null;
-  onChange?: (value: GeneralInfoTableData | null) => void; // provide to make it editable
+  value: RichTableData | null;
+  onChange?: (value: RichTableData | null) => void; // provide to make it editable
 }
 
 const DEFAULT_ROW_HEIGHT = 40;
@@ -78,12 +85,7 @@ export default function TableBlock({ value, onChange }: TableBlockProps) {
 
   const removeRow = () => {
     if (!value || value.rows <= 1) return;
-    onChange!({
-      ...value,
-      rows: value.rows - 1,
-      cells: value.cells.slice(0, -1),
-      rowHeights: rowHeights.slice(0, -1),
-    });
+    onChange!({ ...value, rows: value.rows - 1, cells: value.cells.slice(0, -1), rowHeights: rowHeights.slice(0, -1) });
   };
 
   const addCol = () => {

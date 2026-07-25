@@ -5,6 +5,7 @@ import type {
   PaymentStatus,
   ProjectResource,
   ProjectMilestone,
+  ProjectEntryRow,
 } from "./types";
 
 async function requireUser() {
@@ -33,6 +34,16 @@ export async function getProjects(): Promise<ProjectRow[]> {
     .order("sort_order", { ascending: true });
   if (error) throw error;
   return (data ?? []).map(normalizeProject);
+}
+
+export async function getProject(id: string): Promise<ProjectRow> {
+  const { data, error } = await supabase
+    .from("personal_projects")
+    .select("*")
+    .eq("id", id)
+    .single();
+  if (error) throw error;
+  return normalizeProject(data);
 }
 
 export interface ProjectFormFields {
@@ -82,6 +93,36 @@ export async function deleteProject(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// Partial updates used by the workspace tabs, so adding a link/credential/
+// image or checking off a milestone doesn't require the full edit modal.
+export async function updateProjectResources(
+  id: string,
+  resources: ProjectResource[]
+): Promise<ProjectRow> {
+  const { data, error } = await supabase
+    .from("personal_projects")
+    .update({ resources })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return normalizeProject(data);
+}
+
+export async function updateProjectMilestones(
+  id: string,
+  milestones: ProjectMilestone[]
+): Promise<ProjectRow> {
+  const { data, error } = await supabase
+    .from("personal_projects")
+    .update({ milestones })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return normalizeProject(data);
+}
+
 // ============================================
 // PROJECT IMAGES (Supabase Storage)
 // ============================================
@@ -105,4 +146,76 @@ export async function getProjectFileUrl(filePath: string): Promise<string> {
     .createSignedUrl(filePath, 60 * 60); // valid for 1 hour
   if (error) throw error;
   return data.signedUrl;
+}
+
+// ============================================
+// ENTRIES (Notion-style pages inside a project)
+// ============================================
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeEntry(row: any): ProjectEntryRow {
+  return {
+    ...row,
+    table_data: Array.isArray(row.table_data?.cells) ? row.table_data : null,
+  };
+}
+
+export async function getProjectEntries(projectId: string): Promise<ProjectEntryRow[]> {
+  const { data, error } = await supabase
+    .from("project_entries")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(normalizeEntry);
+}
+
+export async function saveProjectEntry(
+  projectId: string,
+  fields: { title: string; content: string; code: string; table_data: ProjectEntryRow["table_data"] },
+  existingId: string | null
+): Promise<ProjectEntryRow> {
+  if (existingId) {
+    const { data, error } = await supabase
+      .from("project_entries")
+      .update(fields)
+      .eq("id", existingId)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return normalizeEntry(data);
+  }
+
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("project_entries")
+    .insert({ user_id: user.id, project_id: projectId, ...fields })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return normalizeEntry(data);
+}
+
+export async function deleteProjectEntry(id: string): Promise<void> {
+  const { error } = await supabase.from("project_entries").delete().eq("id", id);
+  if (error) throw error;
+}
+
+const ENTRY_FILES_BUCKET = "project-entry-files";
+
+// Upload an image embedded inline in an entry's rich text. Separate public
+// bucket (unlike the private "project-files" gallery bucket) so the
+// returned URL can be embedded directly in stored HTML without re-signing
+// it every render — same reasoning as the Work module's inline images.
+export async function uploadProjectEntryImage(file: File): Promise<string> {
+  const user = await requireUser();
+  const filePath = `${user.id}/${Date.now()}-${file.name}`;
+
+  const { error } = await supabase.storage
+    .from(ENTRY_FILES_BUCKET)
+    .upload(filePath, file);
+  if (error) throw error;
+
+  return supabase.storage.from(ENTRY_FILES_BUCKET).getPublicUrl(filePath).data
+    .publicUrl;
 }
