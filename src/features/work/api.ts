@@ -8,6 +8,8 @@ import type {
   GeneralInfoRow,
   GeneralInfoTableData,
   WorkShortcutRow,
+  EndpointRow,
+  EndpointHeader,
 } from "./types";
 
 async function requireUser() {
@@ -214,6 +216,62 @@ export async function deleteGeneralInfo(id: string): Promise<void> {
 }
 
 // ============================================
+// ENDPOINTS
+// ============================================
+
+export async function getEndpoints(): Promise<EndpointRow[]> {
+  const { data, error } = await supabase
+    .from("work_endpoints")
+    .select("*")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(normalizeEndpoint);
+}
+
+export async function saveEndpoint(
+  fields: {
+    title: string;
+    method: string;
+    route: string;
+    base_url: string;
+    headers: EndpointHeader[];
+    project_ids: string[];
+    details: string;
+    code: string;
+    table_data: GeneralInfoTableData | null;
+  },
+  existingId: string | null
+): Promise<EndpointRow> {
+  if (existingId) {
+    const { data, error } = await supabase
+      .from("work_endpoints")
+      .update(fields)
+      .eq("id", existingId)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return normalizeEndpoint(data);
+  }
+
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("work_endpoints")
+    .insert({ user_id: user.id, ...fields })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return normalizeEndpoint(data);
+}
+
+export async function deleteEndpoint(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("work_endpoints")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// ============================================
 // SHORTCUTS
 // ============================================
 
@@ -325,6 +383,16 @@ function normalizeProject(row: any): WorkProjectRow {
 function normalizeGeneralInfo(row: any): GeneralInfoRow {
   return {
     ...row,
+    table_data: Array.isArray(row.table_data?.cells) ? row.table_data : null,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeEndpoint(row: any): EndpointRow {
+  return {
+    ...row,
+    headers: Array.isArray(row.headers) ? row.headers : [],
+    project_ids: Array.isArray(row.project_ids) ? row.project_ids : [],
     table_data: Array.isArray(row.table_data?.cells) ? row.table_data : null,
   };
 }

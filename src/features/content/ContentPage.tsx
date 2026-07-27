@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Lightbulb, Tags } from "lucide-react";
+import { Lightbulb, Tags, CheckCircle2 } from "lucide-react";
 import IdeasTab from "./tabs/IdeasTab";
 import CategoriesTab from "./tabs/CategoriesTab";
+import DoneTab from "./tabs/DoneTab";
 
 const TABS = [
   { id: "ideas", label: "Ideas", icon: Lightbulb },
+  { id: "done", label: "Done", icon: CheckCircle2 },
   { id: "categories", label: "Categories", icon: Tags },
 ] as const;
 
@@ -15,12 +17,6 @@ export default function ContentPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold mb-1">Content</h1>
-        <p className="text-sm text-muted">
-          Organize your content ideas, scripts, and publishing pipeline.
-        </p>
-      </div>
 
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-border pb-0">
@@ -46,6 +42,7 @@ export default function ContentPage() {
 
       {/* Tab content */}
       {activeTab === "ideas" && <IdeasTab />}
+      {activeTab === "done" && <DoneTab />}
       {activeTab === "categories" && <CategoriesTab />}
     </div>
   );

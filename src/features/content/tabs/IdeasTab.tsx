@@ -126,6 +126,10 @@ export default function IdeasTab() {
     );
   };
 
+  const pendingIdeas = ideas.filter(
+    (i) => !(i.script_done && i.recorded && i.edited)
+  );
+
   return (
     <div className="space-y-6">
       {/* New entry */}
@@ -243,12 +247,16 @@ export default function IdeasTab() {
       <section className="space-y-3">
         {loading ? (
           <p className="text-sm text-muted">Loading...</p>
-        ) : ideas.length === 0 ? (
+        ) : pendingIdeas.length === 0 ? (
           <div className="bg-surface border border-border rounded-xl p-8 text-center">
-            <p className="text-muted text-sm">No content ideas yet. Add your first idea above!</p>
+            <p className="text-muted text-sm">
+              {ideas.length === 0
+                ? "No content ideas yet. Add your first idea above!"
+                : "All caught up! Finished ideas moved to the Done tab."}
+            </p>
           </div>
         ) : (
-          ideas.map((idea) => (
+          pendingIdeas.map((idea) => (
             <ContentCard
               key={idea.id}
               idea={idea}
