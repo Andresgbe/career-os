@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { ListChecks, Users, FolderKanban, Info } from "lucide-react";
+import { ListChecks, Users, FolderKanban, Info, Webhook } from "lucide-react";
 import TasksTab from "./tabs/TasksTab";
 import PeopleTab from "./tabs/PeopleTab";
 import ProjectsTab from "./tabs/ProjectsTab";
 import GeneralInfoTab from "./tabs/GeneralInfoTab";
+import EndpointsTab from "./tabs/EndpointsTab";
 import ShortcutsBar from "../../components/ShortcutsBar";
 import {
   getWorkShortcuts,
@@ -18,6 +19,7 @@ const TABS = [
   { id: "tasks", label: "Tasks", icon: ListChecks },
   { id: "people", label: "People", icon: Users },
   { id: "projects", label: "Projects", icon: FolderKanban },
+  { id: "endpoints", label: "Endpoints", icon: Webhook },
   { id: "general", label: "General Info", icon: Info },
 ] as const;
 
@@ -84,6 +86,7 @@ export default function WorkPage() {
       {activeTab === "tasks" && <TasksTab />}
       {activeTab === "people" && <PeopleTab />}
       {activeTab === "projects" && <ProjectsTab />}
+      {activeTab === "endpoints" && <EndpointsTab />}
       {activeTab === "general" && <GeneralInfoTab />}
     </div>
   );

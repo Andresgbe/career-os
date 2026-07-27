@@ -89,6 +89,33 @@ export interface GeneralInfoRow {
 }
 
 // ============================================
+// ENDPOINTS
+// ============================================
+
+export const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
+export type HttpMethod = (typeof HTTP_METHODS)[number];
+
+export interface EndpointHeader {
+  key: string;
+  value: string;
+}
+
+export interface EndpointRow {
+  id: string;
+  user_id: string;
+  title: string;
+  method: string; // usually one of HTTP_METHODS, but stored free-form
+  route: string; // path, e.g. /api/users/:id
+  base_url: string; // optional full host/swagger url
+  headers: EndpointHeader[]; // stored as jsonb
+  project_ids: string[]; // stored as jsonb — associated work_projects
+  details: string; // rich HTML notes
+  code: string; // optional collapsible code snippet (body/response example)
+  table_data: GeneralInfoTableData | null; // optional collapsible table
+  created_at: string;
+}
+
+// ============================================
 // SHORTCUTS
 // ============================================
 
