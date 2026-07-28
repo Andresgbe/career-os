@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { getContacts, saveContact, deleteContact } from "../api";
 import type { ContactRow } from "../types";
-import ConfirmDialog from "../components/ConfirmDialog";
+import ConfirmDialog from "../../../components/ConfirmDialog";
 
 interface ContactForm {
   name: string;

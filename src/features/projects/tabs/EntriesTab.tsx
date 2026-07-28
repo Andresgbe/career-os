@@ -7,7 +7,7 @@ import {
   uploadProjectEntryImage,
 } from "../api";
 import type { ProjectEntryRow, ProjectEntryTableData } from "../types";
-import ConfirmDialog from "../components/ConfirmDialog";
+import ConfirmDialog from "../../../components/ConfirmDialog";
 import RichTextEditor, { RICH_CONTENT_CLASS } from "../../../components/RichTextEditor";
 import CodeBlock from "../../../components/CodeBlock";
 import TableBlock from "../../../components/TableBlock";

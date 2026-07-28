@@ -32,7 +32,7 @@ import {
   type HistoryFileRow,
   type HistoryEntryType,
 } from "../types";
-import ConfirmDialog from "../components/ConfirmDialog";
+import ConfirmDialog from "../../../components/ConfirmDialog";
 
 // Today's date in yyyy-mm-dd (local time) for the date input default
 const today = () => {

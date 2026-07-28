@@ -14,7 +14,7 @@ import { getProject, deleteProject } from "./api";
 import type { ProjectRow } from "./types";
 import { PROJECT_STATUSES } from "./types";
 import ProjectModal from "./components/ProjectModal";
-import ConfirmDialog from "./components/ConfirmDialog";
+import ConfirmDialog from "../../components/ConfirmDialog";
 import OverviewTab from "./tabs/OverviewTab";
 import LinksTab from "./tabs/LinksTab";
 import CredentialsTab from "./tabs/CredentialsTab";

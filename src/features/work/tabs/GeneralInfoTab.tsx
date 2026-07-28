@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Save, Copy, Check } from "lucide-react";
 import { getGeneralInfo, saveGeneralInfo, deleteGeneralInfo, uploadWorkImage } from "../api";
 import type { GeneralInfoRow, GeneralInfoTableData } from "../types";
-import ConfirmDialog from "../components/ConfirmDialog";
+import ConfirmDialog from "../../../components/ConfirmDialog";
 import RichTextEditor, { RICH_CONTENT_CLASS } from "../../../components/RichTextEditor";
 import CodeBlock from "../../../components/CodeBlock";
 import TableBlock from "../../../components/TableBlock";

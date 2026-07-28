@@ -33,7 +33,7 @@ import {
   RESOURCE_TYPES,
   RESOURCE_STYLE,
 } from "../types";
-import ConfirmDialog from "./ConfirmDialog";
+import ConfirmDialog from "../../../components/ConfirmDialog";
 
 interface ProjectForm {
   name: string;

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { X, Save, Trash2, Plus, Link2 } from "lucide-react";
 import { saveWorkProject, deleteWorkProject } from "../api";
 import type { ProjectResource, WorkProjectRow } from "../types";
-import ConfirmDialog from "./ConfirmDialog";
+import ConfirmDialog from "../../../components/ConfirmDialog";
 
 interface ProjectForm {
   name: string;

@@ -17,7 +17,7 @@ import {
   getFileUrl,
 } from "../api";
 import type { ExamRow } from "../types";
-import ConfirmDialog from "../components/ConfirmDialog";
+import ConfirmDialog from "../../../components/ConfirmDialog";
 
 const NAME_LIMIT = 30; // characters before "show more"
 
