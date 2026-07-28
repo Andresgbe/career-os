@@ -5,6 +5,7 @@ import { APP_NAME } from "../../lib/constants";
 import { MODULES } from "../../lib/modules";
 import { useAuth } from "../../hooks/useAuth";
 import { supabase } from "../../lib/supabase";
+import SectionContextButton from "../../components/SectionContextButton";
 
 export default function AppLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -155,6 +156,8 @@ export default function AppLayout() {
           </aside>
         </div>
       )}
+
+      <SectionContextButton />
 
       {/* Page content */}
       <main className="px-4 py-8 sm:px-6 lg:px-8">
