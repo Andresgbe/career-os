@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus, X, Pencil, Trash2, Save, UserRound, Route } from "lucide-react";
 import { getPeople, savePerson, deletePerson } from "../api";
 import type { PersonRow } from "../types";
-import ConfirmDialog from "../components/ConfirmDialog";
+import ConfirmDialog from "../../../components/ConfirmDialog";
 
 interface PersonForm {
   name: string;

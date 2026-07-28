@@ -3,7 +3,7 @@ import { X, Save, Trash2, Phone, Plus, UserRound } from "lucide-react";
 import { saveInsurancePolicy, deleteInsurancePolicy } from "../api";
 import type { InsuranceContact, InsuranceRow, PolicyType } from "../types";
 import { POLICY_TYPES } from "../types";
-import ConfirmDialog from "./ConfirmDialog";
+import ConfirmDialog from "../../../components/ConfirmDialog";
 
 interface InsuranceForm {
   insurer_name: string;

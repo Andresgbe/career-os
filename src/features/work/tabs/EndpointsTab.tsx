@@ -14,7 +14,7 @@ import type {
   WorkProjectRow,
 } from "../types";
 import { HTTP_METHODS } from "../types";
-import ConfirmDialog from "../components/ConfirmDialog";
+import ConfirmDialog from "../../../components/ConfirmDialog";
 import RichTextEditor, { RICH_CONTENT_CLASS } from "../../../components/RichTextEditor";
 import CodeBlock from "../../../components/CodeBlock";
 import TableBlock from "../../../components/TableBlock";
