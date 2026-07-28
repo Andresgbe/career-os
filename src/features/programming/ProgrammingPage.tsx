@@ -33,12 +33,6 @@ export default function ProgrammingPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold mb-1">Programming</h1>
-        <p className="text-sm text-muted">
-          Manage your programming resources, useful links, and code snippets.
-        </p>
-      </div>
 
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-border pb-0">
