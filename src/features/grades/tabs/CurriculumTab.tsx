@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import {
   getCurriculumProgress,
@@ -9,6 +9,7 @@ import {
   type CurriculumStatus,
 } from "../api";
 import CurriculumMap from "../components/CurriculumMap";
+import { CURRICULUM_SUBJECTS } from "../curriculumData";
 
 export default function CurriculumTab() {
   const [statusMap, setStatusMap] = useState<Map<string, CurriculumStatus>>(new Map());
@@ -67,6 +68,12 @@ export default function CurriculumTab() {
     }
   };
 
+  const seenCount = useMemo(
+    () => Array.from(statusMap.values()).filter((s) => s === "seen").length,
+    [statusMap]
+  );
+  const remainingCount = CURRICULUM_SUBJECTS.length - seenCount;
+
   if (loading) return <p className="text-sm text-muted">Loading...</p>;
 
   return (
@@ -89,6 +96,13 @@ export default function CurriculumTab() {
               className="w-20 bg-background border border-border rounded px-2 py-1 text-sm text-foreground focus:border-primary outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
           </label>
+          <span className="flex items-center gap-2 text-sm text-muted whitespace-nowrap">
+            Materias restantes:{" "}
+            <span className="font-semibold text-foreground">{remainingCount}</span>
+            <span className="text-muted/60">
+              ({seenCount}/{CURRICULUM_SUBJECTS.length} vistas)
+            </span>
+          </span>
           <button
             onClick={handleSaveUC}
             disabled={savingUC || Number(ucInput) === currentUC}
