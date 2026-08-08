@@ -1,5 +1,5 @@
 import { supabase } from "../../lib/supabase";
-import type { BillRow } from "./types";
+import type { BillRow, MonthlyExpenseRow } from "./types";
 
 async function requireUser() {
   const {
@@ -62,5 +62,64 @@ export async function updateBill(
 
 export async function deleteBill(id: string): Promise<void> {
   const { error } = await supabase.from("finance_bills").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ============================================
+// MONTHLY BUDGET
+// ============================================
+
+export async function getMonthlyExpenses(): Promise<MonthlyExpenseRow[]> {
+  const { data, error } = await supabase
+    .from("finance_monthly_budget")
+    .select("*")
+    .order("month", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addMonthlyExpense(fields: {
+  month: string;
+  category: string;
+  description: string;
+  amount: number;
+  recurring: boolean;
+}): Promise<MonthlyExpenseRow> {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("finance_monthly_budget")
+    .insert({ user_id: user.id, ...fields })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as MonthlyExpenseRow;
+}
+
+export async function updateMonthlyExpense(
+  id: string,
+  fields: {
+    month?: string;
+    category?: string;
+    description?: string;
+    amount?: number;
+    recurring?: boolean;
+  }
+): Promise<MonthlyExpenseRow> {
+  const { data, error } = await supabase
+    .from("finance_monthly_budget")
+    .update(fields)
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as MonthlyExpenseRow;
+}
+
+export async function deleteMonthlyExpense(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("finance_monthly_budget")
+    .delete()
+    .eq("id", id);
   if (error) throw error;
 }
