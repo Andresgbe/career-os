@@ -13,3 +13,14 @@ export interface BillRow {
   paid: boolean;
   created_at: string;
 }
+
+export interface MonthlyExpenseRow {
+  id: string;
+  user_id: string;
+  month: string; // yyyy-mm the entry was logged for (or started, if recurring)
+  category: string;
+  description: string;
+  amount: number;
+  recurring: boolean; // true = repeats every month, false = one-time for `month`
+  created_at: string;
+}

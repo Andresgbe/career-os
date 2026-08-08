@@ -9,6 +9,7 @@ import {
   KeyRound,
   Image as ImageIcon,
   NotebookText,
+  Palette,
 } from "lucide-react";
 import { getProject, deleteProject } from "./api";
 import type { ProjectRow } from "./types";
@@ -20,6 +21,7 @@ import LinksTab from "./tabs/LinksTab";
 import CredentialsTab from "./tabs/CredentialsTab";
 import ImagesTab from "./tabs/ImagesTab";
 import EntriesTab from "./tabs/EntriesTab";
+import DesignTab from "./tabs/DesignTab";
 
 const TABS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -27,6 +29,7 @@ const TABS = [
   { id: "credentials", label: "Credentials", icon: KeyRound },
   { id: "images", label: "Images", icon: ImageIcon },
   { id: "entries", label: "Entries", icon: NotebookText },
+  { id: "design", label: "Design", icon: Palette },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -159,6 +162,7 @@ export default function ProjectWorkspacePage() {
       )}
       {activeTab === "images" && <ImagesTab project={project} onProjectChange={setProject} />}
       {activeTab === "entries" && <EntriesTab projectId={project.id} />}
+      {activeTab === "design" && <DesignTab projectId={project.id} />}
 
       {showEditModal && (
         <ProjectModal

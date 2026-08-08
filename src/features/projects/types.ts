@@ -103,3 +103,22 @@ export interface ProjectEntryRow {
   table_data: ProjectEntryTableData | null; // optional collapsible table
   created_at: string;
 }
+
+// ============================================
+// DESIGN (titled photo galleries per project)
+// ============================================
+
+export interface ProjectDesignImage {
+  id: string;
+  file_path: string; // path inside the "project-files" bucket
+  label: string;
+}
+
+export interface ProjectDesignEntryRow {
+  id: string;
+  user_id: string;
+  project_id: string;
+  title: string;
+  images: ProjectDesignImage[]; // stored as jsonb in Supabase
+  created_at: string;
+}

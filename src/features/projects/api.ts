@@ -6,6 +6,8 @@ import type {
   ProjectResource,
   ProjectMilestone,
   ProjectEntryRow,
+  ProjectDesignEntryRow,
+  ProjectDesignImage,
 } from "./types";
 
 async function requireUser() {
@@ -218,4 +220,73 @@ export async function uploadProjectEntryImage(file: File): Promise<string> {
 
   return supabase.storage.from(ENTRY_FILES_BUCKET).getPublicUrl(filePath).data
     .publicUrl;
+}
+
+// ============================================
+// DESIGN (titled photo galleries per project)
+// ============================================
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeDesignEntry(row: any): ProjectDesignEntryRow {
+  return {
+    ...row,
+    images: Array.isArray(row.images) ? row.images : [],
+  };
+}
+
+export async function getProjectDesignEntries(
+  projectId: string
+): Promise<ProjectDesignEntryRow[]> {
+  const { data, error } = await supabase
+    .from("project_design_entries")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(normalizeDesignEntry);
+}
+
+export async function saveProjectDesignEntry(
+  projectId: string,
+  title: string,
+  existingId: string | null
+): Promise<ProjectDesignEntryRow> {
+  if (existingId) {
+    const { data, error } = await supabase
+      .from("project_design_entries")
+      .update({ title })
+      .eq("id", existingId)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return normalizeDesignEntry(data);
+  }
+
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("project_design_entries")
+    .insert({ user_id: user.id, project_id: projectId, title, images: [] })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return normalizeDesignEntry(data);
+}
+
+export async function updateProjectDesignImages(
+  id: string,
+  images: ProjectDesignImage[]
+): Promise<ProjectDesignEntryRow> {
+  const { data, error } = await supabase
+    .from("project_design_entries")
+    .update({ images })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return normalizeDesignEntry(data);
+}
+
+export async function deleteProjectDesignEntry(id: string): Promise<void> {
+  const { error } = await supabase.from("project_design_entries").delete().eq("id", id);
+  if (error) throw error;
 }
