@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
   Paperclip,
@@ -16,6 +16,8 @@ import {
   X,
   Pencil,
   Save,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import {
   getHistory,
@@ -33,6 +35,29 @@ import {
   type HistoryEntryType,
 } from "../types";
 import ConfirmDialog from "../../../components/ConfirmDialog";
+
+const SPANISH_MONTHS = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre",
+];
+
+// Turns "2026-12-03" into "3 de diciembre del 2026" (parsed manually so it
+// isn't shifted a day by timezone conversion like `new Date(str)` would be)
+const formatDateLong = (dateStr: string) => {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  if (!year || !month || !day) return "";
+  return `${day} de ${SPANISH_MONTHS[month - 1]} del ${year}`;
+};
 
 // Today's date in yyyy-mm-dd (local time) for the date input default
 const today = () => {
@@ -68,8 +93,18 @@ export default function HistoryTab() {
   const [form, setForm] = useState(emptyForm);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [adding, setAdding] = useState(false);
+  const [showNewEntryForm, setShowNewEntryForm] = useState(false);
+  const [collapsedYears, setCollapsedYears] = useState<Set<number>>(new Set());
+  const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(
+    new Set()
+  );
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<HistoryRow | null>(null);
+
+  // In-app image preview (skips the download step for image attachments)
+  const [previewFile, setPreviewFile] = useState<HistoryFileRow | null>(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewError, setPreviewError] = useState(false);
 
   // Inline editing of an existing entry
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -134,6 +169,7 @@ export default function HistoryTab() {
 
       setForm(emptyForm);
       setPendingFiles([]);
+      setShowNewEntryForm(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error saving entry");
     } finally {
@@ -193,14 +229,16 @@ export default function HistoryTab() {
   const handleFileSelected = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const file = e.target.files?.[0];
+    const selected = Array.from(e.target.files ?? []);
     const entryId = pendingEntryId.current;
-    if (!file || !entryId) return;
+    if (selected.length === 0 || !entryId) return;
     setUploadingFor(entryId);
     setError("");
     try {
-      const row = await uploadHistoryFile(entryId, file);
-      setFiles((prev) => [...prev, row]);
+      const uploaded = await Promise.all(
+        selected.map((file) => uploadHistoryFile(entryId, file))
+      );
+      setFiles((prev) => [...prev, ...uploaded]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -214,6 +252,19 @@ export default function HistoryTab() {
     try {
       const url = await getFileUrl(path);
       window.open(url, "_blank");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open file");
+    }
+  };
+
+  const isImageFile = (name: string) => /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif)$/i.test(name);
+
+  const previewImage = async (f: HistoryFileRow) => {
+    try {
+      const url = await getFileUrl(f.file_path);
+      setPreviewError(false);
+      setPreviewUrl(url);
+      setPreviewFile(f);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not open file");
     }
@@ -263,15 +314,71 @@ export default function HistoryTab() {
     }
   };
 
+  const toggleYear = (year: number) => {
+    setCollapsedYears((prev) => {
+      const next = new Set(prev);
+      if (next.has(year)) next.delete(year);
+      else next.add(year);
+      return next;
+    });
+  };
+
+  const toggleMonth = (key: string) => {
+    setCollapsedMonths((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // Group entries by year, then by month within each year (newest first)
+  const groupedEntries = useMemo(() => {
+    const byYear = new Map<number, Map<number, HistoryRow[]>>();
+    for (const entry of entries) {
+      const [yearStr, monthStr] = entry.entry_date.split("-");
+      const year = Number(yearStr);
+      const month = Number(monthStr);
+      if (!byYear.has(year)) byYear.set(year, new Map());
+      const byMonth = byYear.get(year)!;
+      if (!byMonth.has(month)) byMonth.set(month, []);
+      byMonth.get(month)!.push(entry);
+    }
+    return Array.from(byYear.entries())
+      .sort(([a], [b]) => b - a)
+      .map(([year, byMonth]) => ({
+        year,
+        months: Array.from(byMonth.entries())
+          .sort(([a], [b]) => b - a)
+          .map(([month, monthEntries]) => ({
+            month,
+            label: SPANISH_MONTHS[month - 1],
+            entries: monthEntries,
+          })),
+      }));
+  }, [entries]);
+
   return (
     <div className="space-y-6">
       {/* Add new entry */}
       <section className="bg-surface border border-border rounded-xl p-5">
-        <h2 className="font-semibold mb-4">New Entry</h2>
+        <button
+          onClick={() => setShowNewEntryForm((v) => !v)}
+          className="flex items-center gap-2 px-4 py-2 rounded bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors"
+        >
+          {showNewEntryForm ? (
+            <ChevronDown className="w-4 h-4" />
+          ) : (
+            <Plus className="w-4 h-4" />
+          )}
+          New Entry
+        </button>
 
-        {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
+        {error && <p className="text-sm text-red-400 mt-3">{error}</p>}
 
-        <div className="grid grid-cols-1 sm:grid-cols-[10rem_1fr] gap-4 mb-4">
+        {showNewEntryForm && (
+          <>
+        <div className="grid grid-cols-1 sm:grid-cols-[10rem_1fr] gap-4 mb-4 mt-4">
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted">Date</label>
             <input
@@ -389,6 +496,8 @@ export default function HistoryTab() {
           <Plus className="w-4 h-4" />
           {adding ? "Adding..." : "Add entry"}
         </button>
+          </>
+        )}
       </section>
 
       {/* Timeline */}
@@ -400,8 +509,47 @@ export default function HistoryTab() {
         ) : entries.length === 0 ? (
           <p className="text-sm text-muted">No entries yet.</p>
         ) : (
-          <ul className="space-y-3">
-            {entries.map((entry) => {
+          <div className="space-y-6">
+            {groupedEntries.map((yearGroup) => {
+              const yearCollapsed = collapsedYears.has(yearGroup.year);
+              return (
+              <div key={yearGroup.year}>
+                <button
+                  onClick={() => toggleYear(yearGroup.year)}
+                  className="flex items-center gap-2 mb-3"
+                >
+                  {yearCollapsed ? (
+                    <ChevronRight className="w-4 h-4 text-muted" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-muted" />
+                  )}
+                  <h3 className="text-base font-bold text-foreground">
+                    {yearGroup.year}
+                  </h3>
+                </button>
+                {!yearCollapsed && (
+                <div className="space-y-4">
+                  {yearGroup.months.map((monthGroup) => {
+                    const monthKey = `${yearGroup.year}-${monthGroup.month}`;
+                    const monthCollapsed = collapsedMonths.has(monthKey);
+                    return (
+                    <div key={monthGroup.month}>
+                      <button
+                        onClick={() => toggleMonth(monthKey)}
+                        className="flex items-center gap-1.5 mb-2"
+                      >
+                        {monthCollapsed ? (
+                          <ChevronRight className="w-3.5 h-3.5 text-muted" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5 text-muted" />
+                        )}
+                        <p className="text-sm font-semibold uppercase tracking-wide text-muted">
+                          {monthGroup.label}
+                        </p>
+                      </button>
+                      {!monthCollapsed && (
+                      <ul className="space-y-3">
+                        {monthGroup.entries.map((entry) => {
               const entryFiles = files.filter(
                 (f) => f.history_id === entry.id
               );
@@ -499,6 +647,21 @@ export default function HistoryTab() {
                           className="bg-surface border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none resize-none"
                         />
                       </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted">
+                          Attachments
+                        </label>
+                        <button
+                          onClick={() => pickFileFor(entry.id)}
+                          disabled={uploadingFor === entry.id}
+                          className="flex items-center gap-2 px-3 py-2 rounded bg-surface-hover hover:bg-border text-foreground text-sm font-medium transition-colors w-fit disabled:opacity-50"
+                        >
+                          <Paperclip className="w-4 h-4" />
+                          {uploadingFor === entry.id
+                            ? "Uploading..."
+                            : "Add images / files"}
+                        </button>
+                      </div>
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={cancelEdit}
@@ -523,6 +686,9 @@ export default function HistoryTab() {
                           <CalendarDays className="w-5 h-5 text-primary shrink-0" />
                           <span className="text-lg font-semibold text-foreground">
                             {entry.entry_date}
+                          </span>
+                          <span className="text-sm text-muted">
+                            ({formatDateLong(entry.entry_date)})
                           </span>
                           <span className="flex items-center gap-1 text-xs bg-primary/15 text-primary px-2 py-0.5 rounded-full shrink-0">
                             <TypeIcon className="w-3 h-3" />
@@ -591,13 +757,21 @@ export default function HistoryTab() {
                         >
                           <FileText className="w-4 h-4 text-primary shrink-0" />
                           <button
-                            onClick={() => openFile(f.file_path)}
+                            onClick={() =>
+                              isImageFile(f.file_name)
+                                ? previewImage(f)
+                                : openFile(f.file_path)
+                            }
                             className="flex-1 min-w-0 text-xs text-left hover:text-primary transition-colors break-all"
                           >
                             {f.file_name}
                           </button>
                           <button
-                            onClick={() => openFile(f.file_path)}
+                            onClick={() =>
+                              isImageFile(f.file_name)
+                                ? previewImage(f)
+                                : openFile(f.file_path)
+                            }
                             className="p-1 rounded text-muted hover:bg-surface-hover hover:text-primary shrink-0"
                             title="Preview"
                           >
@@ -623,14 +797,25 @@ export default function HistoryTab() {
                   )}
                 </li>
               );
+                        })}
+                      </ul>
+                      )}
+                    </div>
+                    );
+                  })}
+                </div>
+                )}
+              </div>
+              );
             })}
-          </ul> 
+          </div>
         )}
       </section>
 
       <input
         ref={fileInputRef}
         type="file"
+        multiple
         onChange={handleFileSelected}
         className="hidden"
       />
@@ -642,6 +827,51 @@ export default function HistoryTab() {
           onConfirm={confirmDeleteEntry}
           onCancel={() => setToDelete(null)}
         />
+      )}
+
+      {previewFile && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setPreviewFile(null)}
+        >
+          <div
+            className="relative max-w-3xl w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setPreviewFile(null)}
+              className="absolute -top-10 right-0 p-1.5 text-white/80 hover:text-white"
+              title="Close"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            {previewError ? (
+              <div className="bg-surface border border-border rounded-xl p-8 flex flex-col items-center gap-3 text-center">
+                <FileText className="w-10 h-10 text-muted" />
+                <p className="text-sm text-muted">
+                  Can't preview "{previewFile.file_name}" in the browser
+                  (unsupported format).
+                </p>
+                <button
+                  onClick={() =>
+                    downloadFile(previewFile.file_path, previewFile.file_name)
+                  }
+                  className="flex items-center gap-2 px-4 py-2 rounded bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Download
+                </button>
+              </div>
+            ) : (
+              <img
+                src={previewUrl}
+                alt={previewFile.file_name}
+                onError={() => setPreviewError(true)}
+                className="max-w-full max-h-[85vh] mx-auto rounded-lg object-contain"
+              />
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
