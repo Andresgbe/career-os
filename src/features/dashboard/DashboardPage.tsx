@@ -63,7 +63,6 @@ export default function DashboardPage() {
                 </div>
                 <h2 className="font-semibold">{m.name}</h2>
               </div>
-              <p className="text-sm text-muted">{m.description}</p>
             </Link>
           );
         })}
