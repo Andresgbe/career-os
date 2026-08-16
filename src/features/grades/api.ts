@@ -1,5 +1,10 @@
 import { supabase } from "../../lib/supabase";
-import type { SubjectRow, EvaluationRow, GradesShortcutRow } from "./types";
+import type {
+  SubjectRow,
+  EvaluationRow,
+  GradesShortcutRow,
+  PaymentPlanRow,
+} from "./types";
 
 // ============================================
 // SHARED HELPERS
@@ -166,6 +171,70 @@ export async function setCurrentUC(uc: number): Promise<void> {
   const { error } = await supabase
     .from("grades_curriculum_stats")
     .upsert({ user_id: user.id, current_uc: uc });
+  if (error) throw error;
+}
+
+// ============================================
+// PAYMENT PLANS
+// ============================================
+
+function normalizePaymentPlan(row: Record<string, unknown>): PaymentPlanRow {
+  return {
+    ...row,
+    subjects: Array.isArray(row.subjects) ? (row.subjects as string[]) : [],
+  } as PaymentPlanRow;
+}
+
+export async function getPaymentPlans(): Promise<PaymentPlanRow[]> {
+  const { data, error } = await supabase
+    .from("grades_payment_plans")
+    .select("*")
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(normalizePaymentPlan);
+}
+
+export async function addPaymentPlan(name: string): Promise<PaymentPlanRow> {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("grades_payment_plans")
+    .insert({ user_id: user.id, name, sort_order: Date.now() })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return normalizePaymentPlan(data);
+}
+
+export async function updatePaymentPlan(
+  id: string,
+  fields: Partial<{
+    name: string;
+    cuota_inicial: number;
+    mes_2: number;
+    mes_3: number;
+    mes_4: number;
+    mes_5: number;
+    ci: number;
+    subjects: string[];
+    sort_order: number;
+  }>
+): Promise<PaymentPlanRow> {
+  const { data, error } = await supabase
+    .from("grades_payment_plans")
+    .update(fields)
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return normalizePaymentPlan(data);
+}
+
+export async function deletePaymentPlan(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("grades_payment_plans")
+    .delete()
+    .eq("id", id);
   if (error) throw error;
 }
 
