@@ -99,6 +99,7 @@ export default function GradesPage() {
             setShortcuts((prev) => prev.filter((s) => s.id !== id))
           }
           onReordered={setShortcuts}
+          storageKey="grades"
         />
       )}
 

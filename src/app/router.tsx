@@ -13,7 +13,6 @@ import ProgrammingPage from "../features/programming/ProgrammingPage";
 import TasksPage from "../features/tasks/TasksPage";
 import InsurancePage from "../features/insurance/InsurancePage";
 import FinancePage from "../features/finance/FinancePage";
-import WorkPage from "../features/work/WorkPage";
 import PasswordsPage from "../features/passwords/PasswordsPage";
 import LoginPage from "../features/auth/LoginPage";
 
@@ -57,7 +56,6 @@ export const router = createBrowserRouter([
       { path: "tasks", element: <TasksPage /> },
       { path: "insurance", element: <InsurancePage /> },
       { path: "finance", element: <FinancePage /> },
-      { path: "work", element: <WorkPage /> },
       { path: "passwords", element: <PasswordsPage /> },
     ],
   },
