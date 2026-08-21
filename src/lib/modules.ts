@@ -10,6 +10,12 @@ export interface ModuleDef {
 
 export const MODULES: ModuleDef[] = [
   {
+    id: "tasks",
+    name: "Tasks",
+    path: "/tasks",
+    icon: ListTodo,
+  },
+  {
     id: "motorcycle",
     name: "Motorcycle",
     path: "/motorcycle",
@@ -44,12 +50,6 @@ export const MODULES: ModuleDef[] = [
     name: "Programming",
     path: "/programming",
     icon: Terminal,
-  },
-  {
-    id: "tasks",
-    name: "Tasks",
-    path: "/tasks",
-    icon: ListTodo,
   },
   {
     id: "insurance",
