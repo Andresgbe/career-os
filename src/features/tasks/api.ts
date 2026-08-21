@@ -1,5 +1,5 @@
 import { supabase } from "../../lib/supabase";
-import type { Priority, Subtask, TaskRow } from "./types";
+import type { Priority, Subtask, TaskRow, TaskStatusRow } from "./types";
 
 async function requireUser() {
   const {
@@ -28,6 +28,7 @@ export async function getTasks(): Promise<TaskRow[]> {
 
 export async function addTask(fields: {
   title: string;
+  status_id: string;
   priority: Priority;
   due: string | null;
   project: string;
@@ -46,7 +47,7 @@ export async function updateTask(
   id: string,
   fields: Partial<{
     title: string;
-    done: boolean;
+    status_id: string;
     priority: Priority;
     due: string | null;
     project: string;
@@ -77,4 +78,46 @@ export async function reorderTasks(
     )
   );
   for (const { error } of results) if (error) throw error;
+}
+
+// ============================================
+// TASK STATUSES
+// ============================================
+
+export async function getTaskStatuses(): Promise<TaskStatusRow[]> {
+  const { data, error } = await supabase
+    .from("task_statuses")
+    .select("*")
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addTaskStatus(fields: {
+  name: string;
+  color: string;
+  is_done: boolean;
+  sort_order: number;
+}): Promise<TaskStatusRow> {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("task_statuses")
+    .insert({ user_id: user.id, ...fields })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as TaskStatusRow;
+}
+
+export async function updateTaskStatus(
+  id: string,
+  fields: Partial<{ name: string; color: string; is_done: boolean; sort_order: number }>
+): Promise<void> {
+  const { error } = await supabase.from("task_statuses").update(fields).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteTaskStatus(id: string): Promise<void> {
+  const { error } = await supabase.from("task_statuses").delete().eq("id", id);
+  if (error) throw error;
 }

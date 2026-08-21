@@ -23,6 +23,12 @@ import {
 } from "../types";
 import ConfirmDialog from "../../../components/ConfirmDialog";
 
+// Suggested next name so the add input always comes pre-filled — clicking
+// "+" with no typing just adds "Pastilla N" for the next N.
+function nextPillLabel(existing: PillItemRow[]): string {
+  return `Pastilla ${existing.length + 1}`;
+}
+
 function formatDate(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   if (!y || !m || !d) return dateStr;
@@ -47,8 +53,7 @@ export default function PillTrackerButton() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const [showNewItemForm, setShowNewItemForm] = useState(false);
-  const [newItemName, setNewItemName] = useState("");
+  const [newItemName, setNewItemName] = useState("Pastilla 1");
   const [adding, setAdding] = useState(false);
   const [toggling, setToggling] = useState<Set<string>>(new Set());
   const [toDelete, setToDelete] = useState<PillItemRow | null>(null);
@@ -67,6 +72,7 @@ export default function PillTrackerButton() {
       ]);
       setItems(itemRows);
       setLogs(logRows);
+      setNewItemName(nextPillLabel(itemRows));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error loading pill tracker");
     } finally {
@@ -103,14 +109,15 @@ export default function PillTrackerButton() {
   };
 
   const handleAddItem = async () => {
-    if (!newItemName.trim()) return;
+    const name = newItemName.trim();
+    if (!name) return;
     setAdding(true);
     setError("");
     try {
-      const row = await addPillItem(newItemName.trim());
-      setItems((prev) => [...prev, row]);
-      setNewItemName("");
-      setShowNewItemForm(false);
+      const row = await addPillItem(name);
+      const updated = [...items, row];
+      setItems(updated);
+      setNewItemName(nextPillLabel(updated));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error adding pill");
     } finally {
@@ -295,33 +302,23 @@ export default function PillTrackerButton() {
             </div>
 
             {view === "today" && (
-              <div className="mt-4 pt-4 border-t border-border">
+              <div className="mt-4 pt-4 border-t border-border flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newItemName}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setNewItemName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddItem()}
+                  className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none flex-1"
+                />
                 <button
-                  onClick={() => setShowNewItemForm((v) => !v)}
-                  className="flex items-center gap-2 px-3 py-2 rounded bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors"
+                  onClick={handleAddItem}
+                  disabled={adding || !newItemName.trim()}
+                  title="Agregar"
+                  className="p-2.5 rounded bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 shrink-0"
                 >
                   <Plus className="w-4 h-4" />
-                  New entry
                 </button>
-                {showNewItemForm && (
-                  <div className="flex items-center gap-2 mt-3">
-                    <input
-                      type="text"
-                      placeholder="e.g. Pastilla 1"
-                      value={newItemName}
-                      onChange={(e) => setNewItemName(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleAddItem()}
-                      className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none flex-1"
-                    />
-                    <button
-                      onClick={handleAddItem}
-                      disabled={adding}
-                      className="px-3 py-2 rounded bg-surface-hover hover:bg-border text-foreground text-sm font-medium transition-colors disabled:opacity-50 shrink-0"
-                    >
-                      {adding ? "..." : "Add"}
-                    </button>
-                  </div>
-                )}
               </div>
             )}
           </div>

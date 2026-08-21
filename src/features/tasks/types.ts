@@ -15,7 +15,7 @@ export interface TaskRow {
   id: string;
   user_id: string;
   title: string;
-  done: boolean;
+  status_id: string;
   priority: Priority;
   due: string | null; // YYYY-MM-DD
   project: string; // freeform project/tag label, '' if none
@@ -23,6 +23,26 @@ export interface TaskRow {
   sort_order: number;
   created_at: string;
 }
+
+// A user-defined task status (e.g. "Por hacer", "En progreso", "Bloqueada",
+// "Hecha") — a single one is assigned per task, like a mini-kanban. Whether
+// it counts as "done" for bucketing/agenda purposes is the is_done flag,
+// not the name, so users can add their own completed-style statuses too
+// (e.g. "Cancelada").
+export interface TaskStatusRow {
+  id: string;
+  user_id: string;
+  name: string;
+  color: string;
+  is_done: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export const STATUS_COLOR_PRESETS = [
+  "#71717a", "#8b5cf6", "#f87171", "#fbbf24",
+  "#38bdf8", "#22c55e", "#f472b6", "#a3a3a3",
+];
 
 export const PRIORITY_LABELS: Record<Priority, string> = {
   alta: "Alta",
@@ -78,8 +98,8 @@ export function formatDueShort(iso: string): string {
   return `${parseInt(d, 10)} ${MONTHS_SHORT[parseInt(m, 10) - 1]}`;
 }
 
-export function bucketOf(task: TaskRow, today: string): BucketKey {
-  if (task.done) return "completadas";
+export function bucketOf(task: TaskRow, today: string, isDone: boolean): BucketKey {
+  if (isDone) return "completadas";
   if (!task.due) return "sin_fecha";
   if (task.due < today) return "atrasadas";
   if (task.due === today) return "hoy";
