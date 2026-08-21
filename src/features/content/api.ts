@@ -1,5 +1,5 @@
 import { supabase } from "../../lib/supabase";
-import type { CategoryRow, ContentIdeaRow, Platform } from "./types";
+import type { CategoryRow, ContentIdeaRow } from "./types";
 
 // ============================================
 // SHARED HELPERS
@@ -14,23 +14,27 @@ async function requireUser() {
 }
 
 // ============================================
-// CATEGORIES
+// CATEGORIES (board columns)
 // ============================================
 
 export async function getCategories(): Promise<CategoryRow[]> {
   const { data, error } = await supabase
     .from("content_categories")
     .select("*")
-    .order("name", { ascending: true });
+    .order("sort_order", { ascending: true });
   if (error) throw error;
   return data ?? [];
 }
 
-export async function addCategory(name: string, color: string) {
+export async function addCategory(
+  name: string,
+  color: string,
+  sortOrder: number
+): Promise<CategoryRow> {
   const user = await requireUser();
   const { data, error } = await supabase
     .from("content_categories")
-    .insert({ user_id: user.id, name, color })
+    .insert({ user_id: user.id, name, color, sort_order: sortOrder })
     .select("*")
     .single();
   if (error) throw error;
@@ -39,8 +43,13 @@ export async function addCategory(name: string, color: string) {
 
 export async function updateCategory(
   id: string,
-  fields: { name?: string; color?: string }
-) {
+  fields: Partial<{
+    name: string;
+    color: string;
+    sort_order: number;
+    collapsed: boolean;
+  }>
+): Promise<CategoryRow> {
   const { data, error } = await supabase
     .from("content_categories")
     .update(fields)
@@ -51,7 +60,7 @@ export async function updateCategory(
   return data as CategoryRow;
 }
 
-export async function deleteCategory(id: string) {
+export async function deleteCategory(id: string): Promise<void> {
   const { error } = await supabase
     .from("content_categories")
     .delete()
@@ -67,41 +76,42 @@ interface ContentIdeaInsert {
   title: string;
   description: string;
   script: string;
-  platforms: Platform[];
-  category_ids: string[];
+  category_id: string | null;
+  sort_order: number;
 }
 
 export async function getContentIdeas(): Promise<ContentIdeaRow[]> {
   const { data, error } = await supabase
     .from("content_ideas")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("sort_order", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map(normalizeIdea);
+  return data ?? [];
 }
 
-export async function addContentIdea(idea: ContentIdeaInsert) {
+export async function addContentIdea(
+  idea: ContentIdeaInsert
+): Promise<ContentIdeaRow> {
   const user = await requireUser();
   const { data, error } = await supabase
     .from("content_ideas")
-    .insert({
-      user_id: user.id,
-      title: idea.title,
-      description: idea.description,
-      script: idea.script,
-      platforms: idea.platforms,
-      category_ids: idea.category_ids,
-    })
+    .insert({ user_id: user.id, ...idea })
     .select("*")
     .single();
   if (error) throw error;
-  return normalizeIdea(data);
+  return data as ContentIdeaRow;
 }
 
 export async function updateContentIdea(
   id: string,
-  fields: Partial<ContentIdeaInsert & { script_done: boolean; recorded: boolean; edited: boolean }>
-) {
+  fields: Partial<
+    ContentIdeaInsert & {
+      script_done: boolean;
+      recorded: boolean;
+      edited: boolean;
+    }
+  >
+): Promise<ContentIdeaRow> {
   const { data, error } = await supabase
     .from("content_ideas")
     .update({ ...fields, updated_at: new Date().toISOString() })
@@ -109,14 +119,14 @@ export async function updateContentIdea(
     .select("*")
     .single();
   if (error) throw error;
-  return normalizeIdea(data);
+  return data as ContentIdeaRow;
 }
 
 export async function toggleIdeaStatus(
   id: string,
   field: "script_done" | "recorded" | "edited",
   value: boolean
-) {
+): Promise<ContentIdeaRow> {
   const { data, error } = await supabase
     .from("content_ideas")
     .update({ [field]: value, updated_at: new Date().toISOString() })
@@ -124,10 +134,10 @@ export async function toggleIdeaStatus(
     .select("*")
     .single();
   if (error) throw error;
-  return normalizeIdea(data);
+  return data as ContentIdeaRow;
 }
 
-export async function deleteContentIdea(id: string) {
+export async function deleteContentIdea(id: string): Promise<void> {
   const { error } = await supabase
     .from("content_ideas")
     .delete()
@@ -135,12 +145,18 @@ export async function deleteContentIdea(id: string) {
   if (error) throw error;
 }
 
-// Supabase returns jsonb as raw JSON; ensure arrays are properly typed
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function normalizeIdea(row: any): ContentIdeaRow {
-  return {
-    ...row,
-    platforms: Array.isArray(row.platforms) ? row.platforms : [],
-    category_ids: Array.isArray(row.category_ids) ? row.category_ids : [],
-  };
+// Persist a drag-and-drop move: which column (category) each moved idea
+// now belongs to and its new position within that column.
+export async function reorderContentIdeas(
+  order: { id: string; category_id: string | null; sort_order: number }[]
+): Promise<void> {
+  const results = await Promise.all(
+    order.map(({ id, category_id, sort_order }) =>
+      supabase
+        .from("content_ideas")
+        .update({ category_id, sort_order })
+        .eq("id", id)
+    )
+  );
+  for (const { error } of results) if (error) throw error;
 }

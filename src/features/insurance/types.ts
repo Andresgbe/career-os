@@ -24,7 +24,6 @@ export interface InsuranceRow {
   insurer_name: string; // e.g. "Mapfre", "Seguros Caracas"
   policy_type: PolicyType;
   policy_number: string;
-  premium: number | null; // optional amount, currency left to the user's notes
   renewal_date: string | null; // ISO date (yyyy-mm-dd)
   contacts: InsuranceContact[]; // stored as jsonb in Supabase
   contact_email: string;

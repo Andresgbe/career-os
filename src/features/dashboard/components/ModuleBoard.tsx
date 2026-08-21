@@ -1,65 +1,22 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Plus, X, ChevronDown, ChevronRight } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
 import { MODULES } from "../../../lib/modules";
-import {
-  getColumns,
-  addColumn,
-  updateColumn,
-  deleteColumn,
-  getModulePositions,
-  addModulePosition,
-  reorderModulePositions,
-} from "../api";
+import { addColumn, updateColumn, deleteColumn, reorderModulePositions } from "../api";
 import type { ColumnRow, ModulePositionRow } from "../types";
-
-const DEFAULT_COLUMN_NAME = "Módulos";
+import { useBoardContext } from "../BoardContext";
 
 export default function ModuleBoard() {
-  const [columns, setColumns] = useState<ColumnRow[]>([]);
-  const [positions, setPositions] = useState<ModulePositionRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { columns, positions, loading, loadError, setColumns, setPositions } =
+    useBoardContext();
   const [error, setError] = useState("");
 
   const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
   const [editingColumnName, setEditingColumnName] = useState("");
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnName, setNewColumnName] = useState("");
-
-  useEffect(() => {
-    Promise.all([getColumns(), getModulePositions()])
-      .then(async ([cols, poss]) => {
-        let nextColumns = cols;
-        let nextPositions = poss;
-
-        if (nextColumns.length === 0) {
-          const col = await addColumn(DEFAULT_COLUMN_NAME, 0);
-          nextColumns = [col];
-          nextPositions = await Promise.all(
-            MODULES.map((m, i) => addModulePosition(m.id, col.id, i))
-          );
-        } else {
-          const missing = MODULES.filter(
-            (m) => !nextPositions.some((p) => p.module_id === m.id)
-          );
-          if (missing.length > 0) {
-            const firstCol = nextColumns[0];
-            const base = nextPositions.filter((p) => p.column_id === firstCol.id).length;
-            const added = await Promise.all(
-              missing.map((m, i) => addModulePosition(m.id, firstCol.id, base + i))
-            );
-            nextPositions = [...nextPositions, ...added];
-          }
-        }
-
-        setColumns(nextColumns);
-        setPositions(nextPositions);
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : "Error loading board"))
-      .finally(() => setLoading(false));
-  }, []);
 
   function reportError(err: unknown) {
     setError(err instanceof Error ? err.message : "Something went wrong");
@@ -173,7 +130,9 @@ export default function ModuleBoard() {
 
   return (
     <div>
-      {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
+      {(loadError || error) && (
+        <p className="text-sm text-red-400 mb-3">{loadError || error}</p>
+      )}
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="flex items-start gap-4 overflow-x-auto pb-2">
           {board.map(({ column, items }) =>

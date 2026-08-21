@@ -44,7 +44,10 @@ export default function CategoriesTab() {
     setAdding(true);
     setError("");
     try {
-      const row = await addCategory(newName.trim(), newColor);
+      const sortOrder = categories.length
+        ? Math.max(...categories.map((c) => c.sort_order)) + 1
+        : 0;
+      const row = await addCategory(newName.trim(), newColor, sortOrder);
       setCategories((prev) => [...prev, row]);
       setNewName("");
       // Cycle to next color
