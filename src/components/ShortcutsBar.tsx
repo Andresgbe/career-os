@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { Plus, X, Save, Upload, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Plus, X, Save, Upload, Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
 import ShortcutTile from "./ShortcutTile";
@@ -28,6 +28,9 @@ interface ShortcutsBarProps<T extends ShortcutItem> {
   onDeleted: (id: string) => void;
   onReordered: (items: T[]) => void;
   size?: "md" | "lg";
+  // Distinct per host page (e.g. "dashboard", "grades") so each shortcuts
+  // row remembers its own collapsed state independently, in this browser.
+  storageKey: string;
 }
 
 // Reusable "browser new-tab" style shortcuts row: tiles with real favicons,
@@ -44,7 +47,25 @@ export default function ShortcutsBar<T extends ShortcutItem>({
   onDeleted,
   onReordered,
   size = "md",
+  storageKey,
 }: ShortcutsBarProps<T>) {
+  const storageId = `shortcuts-collapsed:${storageKey}`;
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(storageId) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageId, collapsed ? "1" : "0");
+    } catch {
+      // private mode / storage disabled — collapse state just won't persist
+    }
+  }, [collapsed, storageId]);
+
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -137,6 +158,17 @@ export default function ShortcutsBar<T extends ShortcutItem>({
       {error && !showForm && (
         <p className="text-sm text-red-400 mb-3">{error}</p>
       )}
+
+      <button
+        onClick={() => setCollapsed((c) => !c)}
+        className="flex items-center gap-1.5 text-xs text-muted hover:text-foreground transition-colors mb-2"
+        title={collapsed ? "Mostrar shortcuts" : "Minimizar shortcuts"}
+      >
+        {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        {collapsed ? `Shortcuts (${items.length})` : "Shortcuts"}
+      </button>
+
+      {!collapsed && (
       <DragDropContext onDragEnd={handleDragEnd}>
         <Droppable droppableId="shortcuts" direction="horizontal">
           {(provided) => (
@@ -183,6 +215,7 @@ export default function ShortcutsBar<T extends ShortcutItem>({
           )}
         </Droppable>
       </DragDropContext>
+      )}
 
       {showForm && (
         <div

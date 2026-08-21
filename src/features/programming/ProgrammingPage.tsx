@@ -73,6 +73,7 @@ export default function ProgrammingPage() {
             setShortcuts((prev) => prev.filter((s) => s.id !== id))
           }
           onReordered={setShortcuts}
+          storageKey="programming"
         />
       )}
 
