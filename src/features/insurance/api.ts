@@ -31,7 +31,6 @@ export interface InsuranceFormFields {
   insurer_name: string;
   policy_type: PolicyType;
   policy_number: string;
-  premium: number | null;
   renewal_date: string | null;
   contacts: InsuranceContact[];
   contact_email: string;

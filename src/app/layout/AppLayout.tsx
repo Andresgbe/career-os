@@ -2,10 +2,11 @@ import { useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X, LogOut } from "lucide-react";
 import { APP_NAME } from "../../lib/constants";
-import { MODULES } from "../../lib/modules";
 import { useAuth } from "../../hooks/useAuth";
 import { supabase } from "../../lib/supabase";
 import SectionContextButton from "../../components/SectionContextButton";
+import ModuleNavGroups from "./ModuleNavGroups";
+import { BoardProvider } from "../../features/dashboard/BoardContext";
 
 export default function AppLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -21,7 +22,8 @@ export default function AppLayout() {
   const userInitial = user?.email?.charAt(0).toUpperCase() ?? "?";
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <BoardProvider>
+      <div className="min-h-screen bg-background text-foreground">
       {/* Topbar */}
       <header className="flex items-center gap-4 border-b border-border bg-surface px-4 h-14">
         <button
@@ -36,8 +38,8 @@ export default function AppLayout() {
           {APP_NAME}
         </Link>
 
-        {/* Horizontal tabs */}
-        <nav className="hidden sm:flex gap-1 ml-4">
+        {/* Horizontal tabs, grouped like the dashboard's module board */}
+        <nav className="hidden sm:flex items-center gap-1 ml-4 flex-wrap">
           <Link
             to="/"
             className={`px-3 py-1.5 rounded text-sm transition-colors ${
@@ -48,19 +50,7 @@ export default function AppLayout() {
           >
             Dashboard
           </Link>
-          {MODULES.map((m) => (
-            <Link
-              key={m.id}
-              to={m.path}
-              className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                location.pathname === m.path
-                  ? "bg-primary text-white"
-                  : "text-muted hover:bg-surface-hover"
-              }`}
-            >
-              {m.name}
-            </Link>
-          ))}
+          <ModuleNavGroups variant="topbar" />
         </nav>
 
           {/* Spacer */}
@@ -116,20 +106,10 @@ export default function AppLayout() {
               >
                 Dashboard
               </Link>
-              {MODULES.map((m) => {
-                const Icon = m.icon;
-                return (
-                  <Link
-                    key={m.id}
-                    to={m.path}
-                    onClick={() => setDrawerOpen(false)}
-                    className="flex items-center gap-2 px-3 py-2 rounded text-sm text-muted hover:bg-surface-hover transition-colors"
-                  >
-                    <Icon className="w-4 h-4" />
-                    {m.name}
-                  </Link>
-                );
-              })}
+              <ModuleNavGroups
+                variant="drawer"
+                onNavigate={() => setDrawerOpen(false)}
+              />
             </nav>
 
               {/* Drawer footer: user + logout */}
@@ -166,5 +146,6 @@ export default function AppLayout() {
         </div>
       </main>
     </div>
+    </BoardProvider>
   );
 }

@@ -9,7 +9,6 @@ interface InsuranceForm {
   insurer_name: string;
   policy_type: PolicyType;
   policy_number: string;
-  premium: string; // kept as string while editing, parsed on save
   renewal_date: string;
   contacts: InsuranceContact[];
   contact_email: string;
@@ -22,7 +21,6 @@ const emptyForm: InsuranceForm = {
   insurer_name: "",
   policy_type: "auto",
   policy_number: "",
-  premium: "",
   renewal_date: "",
   contacts: [],
   contact_email: "",
@@ -34,7 +32,6 @@ function toForm(policy: InsuranceRow): InsuranceForm {
     insurer_name: policy.insurer_name,
     policy_type: policy.policy_type,
     policy_number: policy.policy_number,
-    premium: policy.premium == null ? "" : String(policy.premium),
     renewal_date: policy.renewal_date ?? "",
     contacts: policy.contacts.map((c) => ({ ...c })),
     contact_email: policy.contact_email,
@@ -90,7 +87,6 @@ export default function InsuranceModal({
           insurer_name: form.insurer_name.trim(),
           policy_type: form.policy_type,
           policy_number: form.policy_number.trim(),
-          premium: form.premium.trim() === "" ? null : Number(form.premium),
           renewal_date: form.renewal_date || null,
           contacts: form.contacts
             .map((c) => ({ ...c, name: c.name.trim(), phone: c.phone.trim() }))
@@ -125,7 +121,7 @@ export default function InsuranceModal({
       onClick={onClose}
     >
       <div
-        className="bg-surface border border-border rounded-xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto"
+        className="bg-surface border border-border rounded-xl p-5 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
@@ -178,32 +174,16 @@ export default function InsuranceModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted">Policy number</label>
-              <input
-                type="text"
-                value={form.policy_number}
-                onChange={(e) =>
-                  setForm({ ...form, policy_number: e.target.value })
-                }
-                className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted">
-                Premium (optional)
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={form.premium}
-                onChange={(e) =>
-                  setForm({ ...form, premium: e.target.value })
-                }
-                className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
-              />
-            </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted">Policy number</label>
+            <input
+              type="text"
+              value={form.policy_number}
+              onChange={(e) =>
+                setForm({ ...form, policy_number: e.target.value })
+              }
+              className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
+            />
           </div>
 
           <div className="flex flex-col gap-1">
@@ -296,11 +276,11 @@ export default function InsuranceModal({
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted">Notes</label>
             <textarea
-              rows={3}
+              rows={8}
               placeholder="Coverage details, deductible, exclusions..."
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none resize-none"
+              className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none resize-y"
             />
           </div>
         </div>
