@@ -14,6 +14,7 @@ import TasksPage from "../features/tasks/TasksPage";
 import InsurancePage from "../features/insurance/InsurancePage";
 import FinancePage from "../features/finance/FinancePage";
 import PasswordsPage from "../features/passwords/PasswordsPage";
+import ToBuyPage from "../features/tobuy/ToBuyPage";
 import LoginPage from "../features/auth/LoginPage";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -57,6 +58,7 @@ export const router = createBrowserRouter([
       { path: "insurance", element: <InsurancePage /> },
       { path: "finance", element: <FinancePage /> },
       { path: "passwords", element: <PasswordsPage /> },
+      { path: "tobuy", element: <ToBuyPage /> },
     ],
   },
 ]);
