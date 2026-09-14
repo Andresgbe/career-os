@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { BookOpen, LineChart, Workflow, Wallet } from "lucide-react";
+import { BookOpen, LineChart, Workflow, Wallet, CalendarClock } from "lucide-react";
 import SubjectsTab from "./tabs/SubjectsTab";
 import SummaryTab from "./tabs/SummaryTab";
 import CurriculumTab from "./tabs/CurriculumTab";
 import PaymentTab from "./tabs/PaymentTab";
+import ScheduleTab from "./tabs/ScheduleTab";
 import ShortcutsBar from "../../components/ShortcutsBar";
 import {
   getSubjects,
@@ -20,6 +21,7 @@ const TABS = [
   { id: "subjects", label: "Subjects & Grades", icon: BookOpen },
   { id: "summary", label: "Summary", icon: LineChart },
   { id: "curriculum", label: "Malla Curricular", icon: Workflow },
+  { id: "schedule", label: "Horarios", icon: CalendarClock },
   { id: "payment", label: "Payment", icon: Wallet },
 ] as const;
 
@@ -120,6 +122,7 @@ export default function GradesPage() {
             <SummaryTab subjects={subjects} evaluations={evaluations} />
           )}
           {activeTab === "curriculum" && <CurriculumTab />}
+          {activeTab === "schedule" && <ScheduleTab />}
           {activeTab === "payment" && <PaymentTab />}
         </>
       )}

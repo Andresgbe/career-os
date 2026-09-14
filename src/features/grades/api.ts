@@ -4,6 +4,9 @@ import type {
   EvaluationRow,
   GradesShortcutRow,
   PaymentPlanRow,
+  SchedulePersonRow,
+  ScheduleBlockRow,
+  ScheduleDay,
 } from "./types";
 
 // ============================================
@@ -305,4 +308,94 @@ export async function reorderGradesShortcuts(
     )
   );
   for (const { error } of results) if (error) throw error;
+}
+
+// ============================================
+// SCHEDULE (Horarios)
+// ============================================
+
+export async function getSchedulePeople(): Promise<SchedulePersonRow[]> {
+  const { data, error } = await supabase
+    .from("grades_schedule_people")
+    .select("*")
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addSchedulePerson(
+  name: string,
+  color: string,
+  sortOrder: number
+): Promise<SchedulePersonRow> {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("grades_schedule_people")
+    .insert({ user_id: user.id, name, color, sort_order: sortOrder })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as SchedulePersonRow;
+}
+
+export async function deleteSchedulePerson(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("grades_schedule_people")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function getScheduleBlocks(): Promise<ScheduleBlockRow[]> {
+  const { data, error } = await supabase
+    .from("grades_schedule_blocks")
+    .select("*")
+    .order("start_time", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+interface ScheduleBlockInsert {
+  person_id: string | null;
+  day: ScheduleDay;
+  start_time: string;
+  end_time: string;
+  subject: string;
+  color: string;
+}
+
+export async function addScheduleBlock(
+  block: ScheduleBlockInsert
+): Promise<ScheduleBlockRow> {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("grades_schedule_blocks")
+    .insert({ user_id: user.id, ...block })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as ScheduleBlockRow;
+}
+
+export async function updateScheduleBlock(
+  id: string,
+  fields: Partial<ScheduleBlockInsert>
+): Promise<ScheduleBlockRow> {
+  const { data, error } = await supabase
+    .from("grades_schedule_blocks")
+    .update(fields)
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as ScheduleBlockRow;
+}
+
+export async function deleteScheduleBlock(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("grades_schedule_blocks")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
 }

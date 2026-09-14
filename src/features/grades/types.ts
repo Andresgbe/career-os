@@ -85,3 +85,45 @@ export interface GradesShortcutRow {
   sort_order: number;
   created_at: string;
 }
+
+// ============================================
+// SCHEDULE (Horarios)
+// ============================================
+
+// A friend whose class schedule is tracked alongside the user's own, to
+// compare free time (e.g. "who can give me a ride").
+export interface SchedulePersonRow {
+  id: string;
+  user_id: string;
+  name: string;
+  color: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export type ScheduleDay = 0 | 1 | 2 | 3 | 4; // Monday .. Friday
+
+export const SCHEDULE_DAYS: { value: ScheduleDay; label: string }[] = [
+  { value: 0, label: "Lunes" },
+  { value: 1, label: "Martes" },
+  { value: 2, label: "Miércoles" },
+  { value: 3, label: "Jueves" },
+  { value: 4, label: "Viernes" },
+];
+
+// One class block on a weekly grid. person_id === null means it belongs to
+// the user's own schedule; otherwise it belongs to that SchedulePersonRow.
+export interface ScheduleBlockRow {
+  id: string;
+  user_id: string;
+  person_id: string | null;
+  day: ScheduleDay;
+  start_time: string; // "HH:MM", 24h
+  end_time: string;   // "HH:MM", 24h
+  subject: string;
+  color: string;
+  created_at: string;
+}
+
+export const SCHEDULE_GRID_START_HOUR = 6;
+export const SCHEDULE_GRID_END_HOUR = 18;
