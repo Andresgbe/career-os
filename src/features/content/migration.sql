@@ -35,7 +35,7 @@ where category_id is null
 with ranked as (
   select id, row_number() over (
     partition by user_id, category_id order by created_at
-  ) - 1 as rn
+  ) - 1 as rn 
   from content_ideas
 )
 update content_ideas i
