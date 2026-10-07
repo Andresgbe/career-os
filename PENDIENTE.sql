@@ -519,6 +519,9 @@ begin
       ('insurance_policies',        'insurance'),
       ('finance_monthly_budget',    'finance'),
       ('finance_bills',             'finance'),
+      ('finance_categories',       'finance'),
+      ('finance_rates',            'finance'),
+      ('finance_transactions',     'finance'),
       ('site_credentials',          'passwords'),
       ('knowledge_folders',         'knowledge'),
       ('knowledge_docs',            'knowledge')
@@ -664,3 +667,164 @@ create policy "nexus delete" on tasks for delete
 -- Sus políticas viejas (auth.uid() = user_id) ya hacen exactamente eso,
 -- así que no se tocan.
 -- ------------------------------------------------------------
+
+
+-- ============================================
+-- BLOQUE 5 — FINANZAS: INGRESOS Y GASTOS
+--
+-- Cada transacción se guarda en la moneda en la que pasó, con la tasa que
+-- se usó ese día, y además su equivalente en dólares BCV ya calculado.
+-- El equivalente se guarda, no se recalcula: un gasto de hace tres meses
+-- no debe cambiar de valor porque hoy se movió la tasa.
+--
+-- Regla única de conversión:
+--   rate_per_usd = cuántas unidades de esa moneda equivalen a 1 USD BCV
+--   amount_usd   = amount / rate_per_usd
+-- Para USD la tasa es 1. Para bolívares a 36,50 es 36.50. Para euros a
+-- 0,925 € por dólar es 0.925.
+-- ============================================
+
+-- ------------------------------------------------------------
+-- 5.1 Categorías
+-- ------------------------------------------------------------
+
+create table if not exists finance_categories (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  kind text not null default 'expense' check (kind in ('income', 'expense', 'both')),
+  color text not null default '#8b5cf6',
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  unique (user_id, name)
+);
+
+-- ------------------------------------------------------------
+-- 5.2 Tasas de cambio guardadas
+--
+-- per_usd queda en null a propósito hasta que Andrés las cargue: una tasa
+-- inventada convertiría mal sin avisar.
+-- ------------------------------------------------------------
+
+create table if not exists finance_rates (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  code text not null,
+  label text not null default '',
+  currency text not null default 'VES',
+  per_usd numeric check (per_usd is null or per_usd > 0),
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  unique (user_id, code)
+);
+
+-- ------------------------------------------------------------
+-- 5.3 Transacciones
+-- ------------------------------------------------------------
+
+create table if not exists finance_transactions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  kind text not null check (kind in ('income', 'expense')),
+  occurred_on date not null default current_date,
+  description text not null default '',
+  place text not null default '',
+  category_id uuid references finance_categories(id) on delete set null,
+  amount numeric not null check (amount > 0),
+  currency text not null default 'USD',
+  rate_per_usd numeric not null default 1 check (rate_per_usd > 0),
+  rate_label text not null default '',
+  amount_usd numeric not null,
+  note text not null default '',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists finance_transactions_month_idx
+  on finance_transactions (user_id, occurred_on desc);
+
+-- ------------------------------------------------------------
+-- 5.4 Semilla: categorías y tasas para la cuenta de Andrés
+-- ------------------------------------------------------------
+
+insert into finance_categories (user_id, name, kind, color, sort_order)
+select u.id, c.name, c.kind, c.color, c.ord
+from auth.users u
+cross join (values
+  ('Supermercado',    'expense', '#10b981', 0),
+  ('Comida fuera',    'expense', '#f59e0b', 1),
+  ('Transporte',      'expense', '#06b6d4', 2),
+  ('Gasolina',        'expense', '#ef4444', 3),
+  ('Moto',            'expense', '#f97316', 4),
+  ('Universidad',     'expense', '#8b5cf6', 5),
+  ('Salud',           'expense', '#ec4899', 6),
+  ('Servicios',       'expense', '#3b82f6', 7),
+  ('Suscripciones',   'expense', '#a855f7', 8),
+  ('Casa',            'expense', '#14b8a6', 9),
+  ('Ocio',            'expense', '#eab308', 10),
+  ('Otros gastos',    'expense', '#64748b', 11),
+  ('Agencia',         'income',  '#22c55e', 12),
+  ('Freelance',       'income',  '#84cc16', 13),
+  ('Otros ingresos',  'income',  '#64748b', 14)
+) as c(name, kind, color, ord)
+where u.email = 'andresgilbe2021@gmail.com'
+on conflict (user_id, name) do nothing;
+
+insert into finance_rates (user_id, code, label, currency, per_usd)
+select u.id, r.code, r.label, r.currency, null
+from auth.users u
+cross join (values
+  ('BCV',      'Bolívar BCV',       'VES'),
+  ('PARALELO', 'Bolívar paralelo',  'VES'),
+  ('EUR',      'Euro',              'EUR')
+) as r(code, label, currency)
+where u.email = 'andresgilbe2021@gmail.com'
+on conflict (user_id, code) do nothing;
+
+-- ------------------------------------------------------------
+-- 5.5 RLS — mismas cuatro políticas que el resto del módulo finance
+-- ------------------------------------------------------------
+
+do $do$
+declare
+  t text;
+  pol record;
+begin
+  foreach t in array array['finance_categories', 'finance_rates', 'finance_transactions']
+  loop
+    execute format('alter table public.%I enable row level security', t);
+
+    for pol in
+      select policyname from pg_policies where schemaname = 'public' and tablename = t
+    loop
+      execute format('drop policy %I on public.%I', pol.policyname, t);
+    end loop;
+  end loop;
+end
+$do$;
+
+create policy "nexus read" on finance_categories for select
+  using (user_id = auth.uid() or public.nexus_can_view('finance'));
+create policy "nexus insert" on finance_categories for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('finance')));
+create policy "nexus update" on finance_categories for update
+  using (user_id = auth.uid() or public.nexus_can_edit('finance'));
+create policy "nexus delete" on finance_categories for delete
+  using (user_id = auth.uid());
+
+create policy "nexus read" on finance_rates for select
+  using (user_id = auth.uid() or public.nexus_can_view('finance'));
+create policy "nexus insert" on finance_rates for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('finance')));
+create policy "nexus update" on finance_rates for update
+  using (user_id = auth.uid() or public.nexus_can_edit('finance'));
+create policy "nexus delete" on finance_rates for delete
+  using (user_id = auth.uid());
+
+create policy "nexus read" on finance_transactions for select
+  using (user_id = auth.uid() or public.nexus_can_view('finance'));
+create policy "nexus insert" on finance_transactions for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('finance')));
+create policy "nexus update" on finance_transactions for update
+  using (user_id = auth.uid() or public.nexus_can_edit('finance'));
+create policy "nexus delete" on finance_transactions for delete
+  using (user_id = auth.uid());

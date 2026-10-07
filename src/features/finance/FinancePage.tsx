@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Receipt, Wallet, CalendarRange } from "lucide-react";
+import { Receipt, CalendarRange, ArrowLeftRight } from "lucide-react";
 import BillsTab from "./tabs/BillsTab";
-import IncomeTab from "./tabs/IncomeTab";
+import FlowTab from "./tabs/FlowTab";
 import MonthlyBudgetTab from "./tabs/MonthlyBudgetTab";
 
 const TABS = [
+  { id: "flow", label: "Ingresos y gastos", icon: ArrowLeftRight },
   { id: "bills", label: "Bills", icon: Receipt },
-  { id: "income", label: "Income", icon: Wallet },
   { id: "budget", label: "Monthly Budget", icon: CalendarRange },
 ] as const;
 
@@ -16,14 +16,14 @@ type TabId = (typeof TABS)[number]["id"];
 // administrador. Ahora quien ve Finance se decide con los permisos (y RLS),
 // así que el PIN sobraba: era una pantalla más, no una barrera real.
 export default function FinancePage() {
-  const [activeTab, setActiveTab] = useState<TabId>("bills");
+  const [activeTab, setActiveTab] = useState<TabId>("flow");
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold mb-1">Finance</h1>
         <p className="text-sm text-muted">
-          Track your bills, debts, income, and monthly budget.
+          Ingresos, gastos, deudas y presupuesto mensual.
         </p>
       </div>
 
@@ -50,8 +50,8 @@ export default function FinancePage() {
       </div>
 
       {/* Tab content */}
+      {activeTab === "flow" && <FlowTab />}
       {activeTab === "bills" && <BillsTab />}
-      {activeTab === "income" && <IncomeTab />}
       {activeTab === "budget" && <MonthlyBudgetTab />}
     </div>
   );

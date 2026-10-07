@@ -27,11 +27,17 @@ const PermissionsContext = createContext<PermissionsContextValue>({
 });
 
 interface LoadedPermissions {
+  // false = las tablas de permisos todavía no existen (BLOQUE 4 sin correr)
+  installed: boolean;
   profile: ProfileRow | null;
   modules: Record<string, { can_view: boolean; can_edit: boolean }>;
 }
 
-const EMPTY: LoadedPermissions = { profile: null, modules: {} };
+const NOT_INSTALLED: LoadedPermissions = {
+  installed: false,
+  profile: null,
+  modules: {},
+};
 
 // Qué módulos puede abrir la cuenta actual.
 //
@@ -52,7 +58,12 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
     Promise.all([getMyProfile(), getModulePermissions()])
       .then(([profile, perms]) => {
         if (cancelled) return;
+        // La consulta respondió, así que las tablas existen. Que no haya
+        // perfil para esta cuenta significa "sin acceso", NO "sin sistema
+        // de permisos": si no, cualquiera a quien RLS le esconda su propia
+        // fila pasaría por administrador.
         setLoaded({
+          installed: true,
           profile,
           modules: Object.fromEntries(
             perms.map((p) => [
@@ -63,11 +74,11 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
         });
       })
       .catch(() => {
-        // Sin tabla app_profiles todavía (BLOQUE 4 sin correr) la app no
-        // puede saber quién es admin. Se queda sin perfil, y eso significa
-        // "mostrá todo": como funcionaba antes de los permisos, una cuenta
-        // sola viendo sus propias filas.
-        if (!cancelled) setLoaded(EMPTY);
+        // Falla la consulta = la tabla no existe todavía (BLOQUE 4 sin
+        // correr). Ahí la app se comporta como antes de los permisos: una
+        // cuenta sola viendo sus propias filas, en vez de quedarse en
+        // blanco.
+        if (!cancelled) setLoaded(NOT_INSTALLED);
       });
 
     return () => {
@@ -77,13 +88,13 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
 
   // Sin sesión no hay nada que cargar, así que no se espera por nada.
   const loading = authLoading || (!!session && loaded === null);
-  const current = session ? (loaded ?? EMPTY) : EMPTY;
-  const { profile, modules } = current;
+  const current = session ? (loaded ?? NOT_INSTALLED) : NOT_INSTALLED;
+  const { installed, profile, modules } = current;
 
   const isAdmin = profile?.role === "admin" && profile.active;
-  // Sin perfil no hay sistema de permisos instalado: la app se comporta
-  // como antes en vez de quedarse en blanco.
-  const unmanaged = !!session && profile === null;
+  // Antes de instalar los permisos no hay a quién limitar: la única cuenta
+  // es la de Andrés.
+  const unmanaged = !!session && !installed;
 
   const canView = useCallback(
     (moduleId: string) =>
