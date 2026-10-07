@@ -1,3 +1,4 @@
+import { errorMessage } from "../../lib/errors";
 import {
   createContext,
   useContext,
@@ -8,6 +9,7 @@ import {
   type SetStateAction,
 } from "react";
 import { MODULES } from "../../lib/modules";
+import { usePermissions } from "../../hooks/usePermissions";
 import {
   getColumns,
   addColumn,
@@ -36,12 +38,18 @@ const BoardContext = createContext<BoardContextValue | null>(null);
 // other — they're reading and writing the same React state, not two
 // independent fetches.
 export function BoardProvider({ children }: { children: ReactNode }) {
+  const { canView, loading: permissionsLoading } = usePermissions();
   const [columns, setColumns] = useState<ColumnRow[]>([]);
   const [positions, setPositions] = useState<ModulePositionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    if (permissionsLoading) return;
+    // Sembrar el tablero con módulos que la cuenta no puede abrir le
+    // dejaría tarjetas muertas en el dashboard.
+    const allowed = MODULES.filter((m) => canView(m.id));
+
     Promise.all([getColumns(), getModulePositions()])
       .then(async ([cols, poss]) => {
         let nextColumns = cols;
@@ -51,10 +59,10 @@ export function BoardProvider({ children }: { children: ReactNode }) {
           const col = await addColumn(DEFAULT_COLUMN_NAME, 0);
           nextColumns = [col];
           nextPositions = await Promise.all(
-            MODULES.map((m, i) => addModulePosition(m.id, col.id, i))
+            allowed.map((m, i) => addModulePosition(m.id, col.id, i))
           );
         } else {
-          const missing = MODULES.filter(
+          const missing = allowed.filter(
             (m) => !nextPositions.some((p) => p.module_id === m.id)
           );
           if (missing.length > 0) {
@@ -70,9 +78,9 @@ export function BoardProvider({ children }: { children: ReactNode }) {
         setColumns(nextColumns);
         setPositions(nextPositions);
       })
-      .catch((err) => setLoadError(err instanceof Error ? err.message : "Error loading board"))
+      .catch((err) => setLoadError(errorMessage(err, "Error loading board")))
       .finally(() => setLoading(false));
-  }, []);
+  }, [permissionsLoading, canView]);
 
   return (
     <BoardContext.Provider

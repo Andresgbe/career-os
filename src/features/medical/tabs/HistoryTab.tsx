@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
@@ -171,7 +172,7 @@ export default function HistoryTab() {
       setPendingFiles([]);
       setShowNewEntryForm(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error saving entry");
+      setError(errorMessage(err, "Error saving entry"));
     } finally {
       setAdding(false);
     }
@@ -215,7 +216,7 @@ export default function HistoryTab() {
       );
       cancelEdit();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error saving entry");
+      setError(errorMessage(err, "Error saving entry"));
     } finally {
       setSavingEdit(false);
     }
@@ -240,7 +241,7 @@ export default function HistoryTab() {
       );
       setFiles((prev) => [...prev, ...uploaded]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(errorMessage(err, "Upload failed"));
     } finally {
       setUploadingFor(null);
       pendingEntryId.current = null;
@@ -253,7 +254,7 @@ export default function HistoryTab() {
       const url = await getFileUrl(path);
       window.open(url, "_blank");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open file");
+      setError(errorMessage(err, "Could not open file"));
     }
   };
 
@@ -266,7 +267,7 @@ export default function HistoryTab() {
       setPreviewUrl(url);
       setPreviewFile(f);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open file");
+      setError(errorMessage(err, "Could not open file"));
     }
   };
 
@@ -284,7 +285,7 @@ export default function HistoryTab() {
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not download file");
+      setError(errorMessage(err, "Could not download file"));
     }
   };
 
@@ -293,7 +294,7 @@ export default function HistoryTab() {
       await deleteHistoryFile(id, path);
       setFiles((prev) => prev.filter((f) => f.id !== id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      setError(errorMessage(err, "Delete failed"));
     }
   };
 
@@ -308,7 +309,7 @@ export default function HistoryTab() {
       setEntries((prev) => prev.filter((x) => x.id !== toDelete.id));
       setFiles((prev) => prev.filter((f) => f.history_id !== toDelete.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      setError(errorMessage(err, "Delete failed"));
     } finally {
       setToDelete(null);
     }

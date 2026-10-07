@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useRef, useState } from "react";
 import {
   Upload,
@@ -52,7 +53,7 @@ export default function ExamsTab() {
       const row = await uploadExam(file, nextOrder);
       setExams((prev) => [...prev, row]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(errorMessage(err, "Upload failed"));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -74,7 +75,7 @@ export default function ExamsTab() {
     try {
       await updateExam(id, fields);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error saving");
+      setError(errorMessage(err, "Error saving"));
     }
   };
 
@@ -96,7 +97,7 @@ export default function ExamsTab() {
       await swapExamOrder(a, b);
     } catch (err) {
       setExams(exams); // revert on failure
-      setError(err instanceof Error ? err.message : "Error reordering");
+      setError(errorMessage(err, "Error reordering"));
     }
   };
 
@@ -105,7 +106,7 @@ export default function ExamsTab() {
       const url = await getFileUrl(path);
       window.open(url, "_blank");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open file");
+      setError(errorMessage(err, "Could not open file"));
     }
   };
 
@@ -124,7 +125,7 @@ export default function ExamsTab() {
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not download file");
+      setError(errorMessage(err, "Could not download file"));
     }
   };
 
@@ -134,7 +135,7 @@ export default function ExamsTab() {
       await deleteExam(toDelete.id, toDelete.file_path);
       setExams((prev) => prev.filter((x) => x.id !== toDelete.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      setError(errorMessage(err, "Delete failed"));
     } finally {
       setToDelete(null);
     }

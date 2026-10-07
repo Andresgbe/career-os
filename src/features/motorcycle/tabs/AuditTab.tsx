@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useState } from "react";
 import { Plus, Trash2, Pencil, Check, X } from "lucide-react";
 import {
@@ -43,7 +44,7 @@ export default function AuditTab() {
   useEffect(() => {
     getAuditLog()
       .then(setEntries)
-      .catch((e) => setError(e instanceof Error ? e.message : "Error loading"))
+      .catch((e) => setError(errorMessage(e, "Error loading")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -65,7 +66,7 @@ export default function AuditTab() {
       setLocation("");
       setKm("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error adding entry");
+      setError(errorMessage(e, "Error adding entry"));
     }
   };
 
@@ -98,7 +99,7 @@ export default function AuditTab() {
       );
       setEditId(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error updating entry");
+      setError(errorMessage(e, "Error updating entry"));
     }
   };
 
@@ -107,7 +108,7 @@ export default function AuditTab() {
     try {
       await deleteAuditEntry(id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error deleting entry");
+      setError(errorMessage(e, "Error deleting entry"));
     }
   };
 

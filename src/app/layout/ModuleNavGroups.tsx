@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { MODULES, type ModuleDef } from "../../lib/modules";
+import { ADMIN_MODULE, MODULES, type ModuleDef } from "../../lib/modules";
 import { useBoardContext } from "../../features/dashboard/BoardContext";
+import { usePermissions } from "../../hooks/usePermissions";
 
 interface ModuleGroup {
   id: string;
@@ -39,6 +40,10 @@ export default function ModuleNavGroups({
 }: ModuleNavGroupsProps) {
   const location = useLocation();
   const { columns, positions, loading } = useBoardContext();
+  const { canView, isAdmin } = usePermissions();
+  // Los módulos que esta cuenta puede abrir. El resto no se dibuja: un link
+  // a una página que RLS deja vacía solo confunde.
+  const visibleModules = MODULES.filter((m) => canView(m.id));
   // null = no manual choice yet; fall back to auto-opening the group that
   // contains the current page. Once the user toggles anything, this takes
   // over completely so their choice sticks across navigation.
@@ -53,12 +58,15 @@ export default function ModuleNavGroups({
       modules: positions
         .filter((p) => p.column_id === col.id)
         .sort((a, b) => a.sort_order - b.sort_order)
-        .map((p) => MODULES.find((m) => m.id === p.module_id))
+        .map((p) => visibleModules.find((m) => m.id === p.module_id))
         .filter((m): m is ModuleDef => !!m),
     }));
 
   const groupedIds = new Set(positions.map((p) => p.module_id));
-  const ungrouped = MODULES.filter((m) => !groupedIds.has(m.id));
+  const ungrouped = [
+    ...visibleModules.filter((m) => !groupedIds.has(m.id)),
+    ...(isAdmin ? [ADMIN_MODULE] : []),
+  ];
   const useFlatNav = loading || columns.length === 0;
 
   // Until the user makes a manual choice, keep whichever group contains
@@ -94,7 +102,7 @@ export default function ModuleNavGroups({
     if (useFlatNav) {
       return (
         <>
-          {MODULES.map((m) => (
+          {[...visibleModules, ...(isAdmin ? [ADMIN_MODULE] : [])].map((m) => (
             <Link key={m.id} to={m.path} className={linkClass(location.pathname === m.path)}>
               {m.name}
             </Link>
@@ -167,7 +175,7 @@ export default function ModuleNavGroups({
   if (useFlatNav) {
     return (
       <>
-        {MODULES.map((m) => {
+        {[...visibleModules, ...(isAdmin ? [ADMIN_MODULE] : [])].map((m) => {
           const Icon = m.icon;
           return (
             <Link

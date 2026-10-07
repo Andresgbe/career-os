@@ -1,30 +1,60 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { Plus, Table2, LayoutGrid, Search } from "lucide-react";
 import ProjectCard from "./components/ProjectCard";
+import ProjectTable from "./components/ProjectTable";
 import ProjectModal from "./components/ProjectModal";
 import { getProjects } from "./api";
-import type { ProjectRow, ProjectStatus } from "./types";
-import { PROJECT_STATUSES } from "./types";
+import { getTasks } from "../tasks/api";
+import type { ProjectRow } from "./types";
+
+type ViewMode = "table" | "cards";
+const VIEW_KEY = "projects-view";
 
 export default function ProjectsPage() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [openTaskCount, setOpenTaskCount] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<ProjectStatus | "all">("all");
+  const [search, setSearch] = useState("");
+  const [view, setView] = useState<ViewMode>(() => {
+    try {
+      return localStorage.getItem(VIEW_KEY) === "cards" ? "cards" : "table";
+    } catch {
+      return "table";
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_KEY, view);
+    } catch {
+      // private mode — the view choice just won't persist
+    }
+  }, [view]);
 
   useEffect(() => {
     getProjects()
       .then(setProjects)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, []);
 
-  const startAdd = () => {
-    setShowModal(true);
-  };
+    // Open task count per project, shown as a property on each row
+    getTasks()
+      .then((tasks) => {
+        const counts: Record<string, number> = {};
+        for (const t of tasks) {
+          if (!t.project_id || t.done) continue;
+          counts[t.project_id] = (counts[t.project_id] ?? 0) + 1;
+        }
+        setOpenTaskCount(counts);
+      })
+      .catch(() => {
+        // tasks are a nice-to-have here; the project list still works
+      });
+  }, []);
 
   const openProject = (project: ProjectRow) => navigate(`/projects/${project.id}`);
 
@@ -43,15 +73,20 @@ export default function ProjectsPage() {
     setShowModal(false);
   };
 
-  const visibleProjects =
-    statusFilter === "all"
-      ? projects
-      : projects.filter((p) => p.status === statusFilter);
+  const needle = search.trim().toLowerCase();
+  const visibleProjects = needle
+    ? projects.filter(
+        (p) =>
+          p.name.toLowerCase().includes(needle) ||
+          p.client.toLowerCase().includes(needle) ||
+          p.tech_stack.some((t) => t.toLowerCase().includes(needle))
+      )
+    : projects;
 
   if (loading) return <p className="text-sm text-muted">Loading...</p>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold mb-1">Project Management</h1>
@@ -60,7 +95,7 @@ export default function ProjectsPage() {
           </p>
         </div>
         <button
-          onClick={startAdd}
+          onClick={() => setShowModal(true)}
           className="flex items-center gap-2 px-4 py-2 rounded bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -74,44 +109,68 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Status filter */}
-      <div className="flex gap-1 flex-wrap">
-        <button
-          onClick={() => setStatusFilter("all")}
-          className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
-            statusFilter === "all"
-              ? "bg-primary text-white"
-              : "bg-surface-hover text-muted hover:text-foreground"
-          }`}
-        >
-          All ({projects.length})
-        </button>
-        {PROJECT_STATUSES.map((status) => {
-          const count = projects.filter((p) => p.status === status.value).length;
-          return (
-            <button
-              key={status.value}
-              onClick={() => setStatusFilter(status.value)}
-              className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
-                statusFilter === status.value
-                  ? "bg-primary text-white"
-                  : `${status.bg} ${status.color} hover:opacity-80`
-              }`}
-            >
-              {status.label} ({count})
-            </button>
-          );
-        })}
+      {/* View switcher + search, the way a Notion database header works */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-1 bg-surface border border-border rounded-lg p-1">
+          <button
+            onClick={() => setView("table")}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+              view === "table"
+                ? "bg-surface-hover text-foreground"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            <Table2 className="w-3.5 h-3.5" />
+            Tabla
+          </button>
+          <button
+            onClick={() => setView("cards")}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+              view === "cards"
+                ? "bg-surface-hover text-foreground"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            Tarjetas
+          </button>
+        </div>
+
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted" />
+          <input
+            type="text"
+            placeholder="Buscar proyecto, cliente o stack..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-surface border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs focus:border-primary outline-none"
+          />
+        </div>
+
+        <span className="text-xs text-muted">
+          {visibleProjects.length} de {projects.length}
+        </span>
       </div>
 
       {visibleProjects.length === 0 ? (
-        <p className="text-sm text-muted">No projects yet.</p>
+        <p className="text-sm text-muted">
+          {projects.length === 0
+            ? "No projects yet."
+            : "Ningún proyecto coincide con la búsqueda."}
+        </p>
+      ) : view === "table" ? (
+        <ProjectTable
+          projects={visibleProjects}
+          openTaskCount={openTaskCount}
+          onOpen={openProject}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {visibleProjects.map((project) => (
             <ProjectCard
               key={project.id}
               project={project}
+              openTasks={openTaskCount[project.id] ?? 0}
               onClick={() => openProject(project)}
             />
           ))}
@@ -121,7 +180,6 @@ export default function ProjectsPage() {
       {showModal && (
         <ProjectModal
           project={null}
-          defaultStatus="planning"
           nextSortOrder={projects.length}
           onClose={() => setShowModal(false)}
           onSaved={handleSaved}

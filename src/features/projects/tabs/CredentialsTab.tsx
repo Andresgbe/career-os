@@ -1,7 +1,9 @@
+import { errorMessage } from "../../../lib/errors";
 import { useState } from "react";
-import { Plus, Trash2, KeyRound, Eye, EyeOff } from "lucide-react";
+import { Plus, Trash2, KeyRound, Eye, EyeOff, Pencil, Check, X } from "lucide-react";
+import ConfirmDialog from "../../../components/ConfirmDialog";
 import { updateProjectResources } from "../api";
-import type { ProjectRow } from "../types";
+import type { ProjectRow, ProjectResource } from "../types";
 
 interface CredentialsTabProps {
   project: ProjectRow;
@@ -16,6 +18,13 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
   const [error, setError] = useState("");
   const [visible, setVisible] = useState<Set<string>>(new Set());
 
+  // Per-item editing: one credential at a time, not the whole project
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editUsername, setEditUsername] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [toDelete, setToDelete] = useState<ProjectResource | null>(null);
+
   const credentials = project.resources.filter((r) => r.type === "credential");
 
   const toggleVisible = (id: string) => {
@@ -25,6 +34,58 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
       else next.add(id);
       return next;
     });
+  };
+
+  // Writes the whole resources array back, but only ever changes one item
+  const persist = async (resources: ProjectResource[], failMsg: string) => {
+    const prev = project;
+    onProjectChange({ ...project, resources });
+    try {
+      const updated = await updateProjectResources(project.id, resources);
+      onProjectChange(updated);
+      return true;
+    } catch (err) {
+      onProjectChange(prev);
+      setError(err instanceof Error ? err.message : failMsg);
+      return false;
+    }
+  };
+
+  const startEdit = (resource: ProjectResource) => {
+    setEditId(resource.id);
+    setEditLabel(resource.label);
+    setEditUsername(resource.username);
+    setEditPassword(resource.password);
+    setError("");
+  };
+
+  const saveEdit = async () => {
+    const id = editId;
+    if (!id) return;
+    setEditId(null);
+    await persist(
+      project.resources.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              label: editLabel.trim(),
+              username: editUsername.trim(),
+              password: editPassword.trim(),
+            }
+          : r
+      ),
+      "Error updating credential"
+    );
+  };
+
+  const confirmDelete = async () => {
+    const resource = toDelete;
+    setToDelete(null);
+    if (!resource) return;
+    await persist(
+      project.resources.filter((r) => r.id !== resource.id),
+      "Error deleting credential"
+    );
   };
 
   const handleAdd = async () => {
@@ -53,21 +114,9 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
       setUsername("");
       setPassword("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error adding credential");
+      setError(errorMessage(err, "Error adding credential"));
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    const prev = project;
-    const resources = project.resources.filter((r) => r.id !== id);
-    onProjectChange({ ...project, resources });
-    try {
-      await updateProjectResources(project.id, resources);
-    } catch (err) {
-      onProjectChange(prev);
-      setError(err instanceof Error ? err.message : "Error deleting credential");
     }
   };
 
@@ -115,7 +164,56 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
           <p className="text-sm text-muted">No credentials yet.</p>
         ) : (
           <div className="space-y-2">
-            {credentials.map((resource) => (
+            {credentials.map((resource) =>
+              editId === resource.id ? (
+                <div
+                  key={resource.id}
+                  className="bg-background border border-primary rounded-lg p-3 space-y-2"
+                >
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Label (optional)"
+                    value={editLabel}
+                    onChange={(e) => setEditLabel(e.target.value)}
+                    className="w-full bg-surface border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Username"
+                    value={editUsername}
+                    onChange={(e) => setEditUsername(e.target.value)}
+                    className="w-full bg-surface border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Password"
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveEdit();
+                      if (e.key === "Escape") setEditId(null);
+                    }}
+                    className="w-full bg-surface border border-border rounded px-3 py-2 text-sm font-mono focus:border-primary outline-none"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setEditId(null)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-surface-hover hover:bg-border text-xs font-medium transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Cancel
+                    </button>
+                    <button
+                      onClick={saveEdit}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-xs font-medium transition-colors"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      Save
+                    </button>
+                  </div>
+                </div>
+              ) : (
               <div
                 key={resource.id}
                 className="bg-background border border-border rounded-lg p-3"
@@ -128,7 +226,14 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
                     <p className="text-sm font-medium truncate flex-1">{resource.label}</p>
                   )}
                   <button
-                    onClick={() => handleDelete(resource.id)}
+                    onClick={() => startEdit(resource)}
+                    className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-primary shrink-0"
+                    title="Edit"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setToDelete(resource)}
                     className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-red-400 shrink-0"
                     title="Delete"
                   >
@@ -164,10 +269,20 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
                   )}
                 </div>
               </div>
-            ))}
+              )
+            )}
           </div>
         )}
       </section>
+
+      {toDelete && (
+        <ConfirmDialog
+          title="Delete credential"
+          message={`Delete "${toDelete.label || toDelete.username || "this credential"}"?`}
+          onConfirm={confirmDelete}
+          onCancel={() => setToDelete(null)}
+        />
+      )}
     </div>
   );
 }

@@ -48,7 +48,10 @@ export default function ScheduleGrid({
   const columns = "44px repeat(5, minmax(0, 1fr))";
 
   return (
-    <div className="bg-surface/60 border border-border rounded-xl overflow-hidden">
+    <div className="bg-surface/60 border border-border rounded-xl overflow-x-auto">
+      {/* Five day columns can't shrink below a readable width, so the whole
+          grid scrolls sideways on narrow screens instead of squashing. */}
+      <div className="min-w-[560px]">
       {/* Day header row */}
       <div className="grid" style={{ gridTemplateColumns: columns }}>
         <div className="border-b border-border" />
@@ -123,6 +126,7 @@ export default function ScheduleGrid({
             </span>
           </button>
         ))}
+      </div>
       </div>
     </div>
   );

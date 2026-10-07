@@ -1,0 +1,18 @@
+{
+  "name": "nexus-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server exposing NEXUS (career-os) data to Claude",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "worker": "node worker.js"
+  },
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.3.1",
+    "@supabase/supabase-js": "^2.117.2",
+    "dotenv": "^18.0.6",
+    "zod": "^4.6.5"
+  },
+  "private": true
+}

@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useMemo, useState } from "react";
 import {
   Pill,
@@ -74,7 +75,7 @@ export default function PillTrackerButton() {
       setLogs(logRows);
       setNewItemName(nextPillLabel(itemRows));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error loading pill tracker");
+      setError(errorMessage(e, "Error loading pill tracker"));
     } finally {
       setLoading(false);
     }
@@ -98,7 +99,7 @@ export default function PillTrackerButton() {
         setLogs((prev) => [row, ...prev]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error updating pill");
+      setError(errorMessage(err, "Error updating pill"));
     } finally {
       setToggling((prev) => {
         const next = new Set(prev);
@@ -119,7 +120,7 @@ export default function PillTrackerButton() {
       setItems(updated);
       setNewItemName(nextPillLabel(updated));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error adding pill");
+      setError(errorMessage(err, "Error adding pill"));
     } finally {
       setAdding(false);
     }
@@ -132,7 +133,7 @@ export default function PillTrackerButton() {
       setItems((prev) => prev.filter((i) => i.id !== toDelete.id));
       setLogs((prev) => prev.filter((l) => l.item_id !== toDelete.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error deleting pill");
+      setError(errorMessage(err, "Error deleting pill"));
     } finally {
       setToDelete(null);
     }

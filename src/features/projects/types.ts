@@ -4,39 +4,6 @@
 
 import type { RichTableData } from "../../components/TableBlock";
 
-export type ProjectStatus =
-  | "planning"
-  | "in_progress"
-  | "review"
-  | "on_hold"
-  | "completed";
-
-export interface ProjectStatusDef {
-  value: ProjectStatus;
-  label: string;
-  color: string;
-  bg: string;
-}
-
-// Pipeline order — planning → active work → client review →
-// (optionally stalled) → completed. This is the flow most freelance/solo
-// software work actually goes through.
-export const PROJECT_STATUSES: ProjectStatusDef[] = [
-  { value: "planning", label: "Planning", color: "text-muted", bg: "bg-surface-hover" },
-  { value: "in_progress", label: "In Progress", color: "text-blue-400", bg: "bg-blue-400/10" },
-  { value: "review", label: "Review", color: "text-amber-400", bg: "bg-amber-400/10" },
-  { value: "on_hold", label: "On Hold", color: "text-red-400", bg: "bg-red-400/10" },
-  { value: "completed", label: "Completed", color: "text-emerald-400", bg: "bg-emerald-400/10" },
-];
-
-export type PaymentStatus = "unpaid" | "partial" | "paid";
-
-export const PAYMENT_STATUSES: { value: PaymentStatus; label: string }[] = [
-  { value: "unpaid", label: "Unpaid" },
-  { value: "partial", label: "Partially paid" },
-  { value: "paid", label: "Paid" },
-];
-
 export interface ProjectMilestone {
   id: string;
   title: string;
@@ -77,9 +44,6 @@ export interface ProjectRow {
   name: string;
   client: string;
   description: string;
-  status: ProjectStatus;
-  budget: number | null;
-  payment_status: PaymentStatus;
   tech_stack: string[];
   resources: ProjectResource[]; // stored as jsonb in Supabase
   milestones: ProjectMilestone[];

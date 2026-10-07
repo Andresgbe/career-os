@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useState } from "react";
 import { X, Save, Trash2, Phone, Plus, UserRound } from "lucide-react";
 import { saveInsurancePolicy, deleteInsurancePolicy } from "../api";
@@ -98,7 +99,7 @@ export default function InsuranceModal({
       );
       onSaved(saved);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error saving policy");
+      setError(errorMessage(err, "Error saving policy"));
     } finally {
       setSaving(false);
     }
@@ -110,7 +111,7 @@ export default function InsuranceModal({
       await deleteInsurancePolicy(policy.id);
       onDeleted(policy.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      setError(errorMessage(err, "Delete failed"));
       setConfirmingDelete(false);
     }
   };

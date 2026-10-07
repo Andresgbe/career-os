@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useState } from "react";
 import {
   Plus,
@@ -105,7 +106,7 @@ export default function ContactsTab() {
       });
       cancelForm();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error saving contact");
+      setError(errorMessage(err, "Error saving contact"));
     } finally {
       setSaving(false);
     }
@@ -117,7 +118,7 @@ export default function ContactsTab() {
       await deleteContact(toDelete.id);
       setContacts((prev) => prev.filter((c) => c.id !== toDelete.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      setError(errorMessage(err, "Delete failed"));
     } finally {
       setToDelete(null);
     }
@@ -126,7 +127,7 @@ export default function ContactsTab() {
   return (
     <div className="space-y-6">
       <section className="bg-surface border border-border rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
           <h2 className="font-semibold">Contacts</h2>
           {!showForm && (
             <button

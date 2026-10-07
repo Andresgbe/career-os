@@ -1,8 +1,11 @@
+import { errorMessage } from "../../../lib/errors";
 import { useState } from "react";
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Check, X } from "lucide-react";
 import type { SubjectRow, EvaluationRow } from "../types";
 import { addSubject, updateSubject, deleteSubject } from "../api";
 import EvaluationTable from "../components/EvaluationTable";
+import EvalPlanCard from "../components/EvalPlanCard";
+import EvalPlanModal from "../components/EvalPlanModal";
 
 const DEFAULT_COLORS = [
   "#8b5cf6", // purple
@@ -43,6 +46,17 @@ export default function SubjectsTab({
   // Expand state
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
+  // Evaluation plan previewer: which subject is open, and whether it should
+  // open straight into edit mode (when adding a plan for the first time).
+  const [planSubjectId, setPlanSubjectId] = useState<string | null>(null);
+  const [planStartInEdit, setPlanStartInEdit] = useState(false);
+  const planSubject = subjects.find((s) => s.id === planSubjectId) ?? null;
+
+  const openPlan = (subjectId: string, startInEdit: boolean) => {
+    setPlanSubjectId(subjectId);
+    setPlanStartInEdit(startInEdit);
+  };
+
   const handleAdd = async () => {
     if (!newName.trim()) {
       setError("Enter a subject name.");
@@ -59,7 +73,7 @@ export default function SubjectsTab({
       // Auto expand new subject
       toggleExpand(row.id, true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error adding subject");
+      setError(errorMessage(err, "Error adding subject"));
     } finally {
       setAdding(false);
     }
@@ -82,7 +96,7 @@ export default function SubjectsTab({
       onSubjectsChange(subjects.map((s) => (s.id === editId ? updated : s)));
       setEditId(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error updating subject");
+      setError(errorMessage(err, "Error updating subject"));
     }
   };
 
@@ -94,7 +108,7 @@ export default function SubjectsTab({
       // Removing its evaluations locally
       onEvaluationsChange(evaluations.filter((ev) => ev.subject_id !== id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error deleting subject");
+      setError(errorMessage(err, "Error deleting subject"));
     }
   };
 
@@ -192,7 +206,7 @@ export default function SubjectsTab({
 
                     {isEditing ? (
                       <div
-                        className="flex items-center gap-3"
+                        className="flex items-center gap-3 flex-wrap"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <input
@@ -273,6 +287,10 @@ export default function SubjectsTab({
                 {/* Expanded Content */}
                 {isExpanded && (
                   <div className="p-4 border-t border-border bg-background">
+                    <EvalPlanCard
+                      subject={sub}
+                      onOpen={(startInEdit) => openPlan(sub.id, startInEdit)}
+                    />
                     <EvaluationTable
                       subjectId={sub.id}
                       evaluations={subjectEvals}
@@ -290,6 +308,19 @@ export default function SubjectsTab({
           })
         )}
       </section>
+
+      {planSubject && (
+        <EvalPlanModal
+          subject={planSubject}
+          startInEdit={planStartInEdit}
+          onClose={() => setPlanSubjectId(null)}
+          onSaved={(updated) =>
+            onSubjectsChange(
+              subjects.map((s) => (s.id === updated.id ? updated : s))
+            )
+          }
+        />
+      )}
     </div>
   );
 }

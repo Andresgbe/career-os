@@ -1,3 +1,4 @@
+import { errorMessage } from "../lib/errors";
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { StickyNote, X, Copy, Check, Save } from "lucide-react";
@@ -28,7 +29,7 @@ export default function SectionContextButton() {
     try {
       setContent(await getSectionContext(sectionId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error loading context");
+      setError(errorMessage(e, "Error loading context"));
     } finally {
       setLoading(false);
     }
@@ -52,7 +53,7 @@ export default function SectionContextButton() {
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error saving context");
+      setError(errorMessage(err, "Error saving context"));
     } finally {
       setSaving(false);
     }
@@ -60,13 +61,17 @@ export default function SectionContextButton() {
 
   return (
     <>
+      {/* Compact round FAB on phones (a left-edge vertical tab would sit on
+          top of the page content there), the docked side tab from sm up. */}
       <button
         onClick={openModal}
-        className="fixed left-0 top-1/2 -translate-y-1/2 z-40 flex items-center gap-1.5 px-2 py-3 bg-primary hover:bg-primary-hover text-white text-xs font-semibold tracking-wide rounded-r-lg shadow-lg transition-colors [writing-mode:vertical-rl] rotate-180"
+        className="fixed z-40 flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-semibold tracking-wide shadow-lg transition-colors
+          bottom-4 right-4 p-3 rounded-full
+          sm:bottom-auto sm:right-auto sm:left-0 sm:top-1/2 sm:-translate-y-1/2 sm:px-2 sm:py-3 sm:rounded-l-none sm:rounded-r-lg sm:[writing-mode:vertical-rl] sm:rotate-180"
         title="Section context"
       >
-        <StickyNote className="w-4 h-4 rotate-90" />
-        CONTEXT
+        <StickyNote className="w-4 h-4 sm:rotate-90" />
+        <span className="hidden sm:inline">CONTEXT</span>
       </button>
 
       {open && (
@@ -98,7 +103,7 @@ export default function SectionContextButton() {
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Free-form notes for this section... paste anything here."
-                className="flex-1 min-h-[300px] bg-background border border-border rounded px-3 py-2 text-sm font-mono focus:border-primary outline-none resize-none"
+                className="flex-1 min-h-[180px] sm:min-h-[300px] bg-background border border-border rounded px-3 py-2 text-sm font-mono focus:border-primary outline-none resize-none"
               />
             )}
 

@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import type { BillRow } from "../types";
@@ -72,7 +73,7 @@ export default function BillsTab() {
       setNewRate("");
       setNewDueDate("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error adding bill");
+      setError(errorMessage(err, "Error adding bill"));
     } finally {
       setAdding(false);
     }
@@ -117,7 +118,7 @@ export default function BillsTab() {
       setBills(bills.map((b) => (b.id === editId ? updated : b)));
       setEditId(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error updating bill");
+      setError(errorMessage(err, "Error updating bill"));
     }
   };
 
@@ -127,7 +128,7 @@ export default function BillsTab() {
       const updated = await updateBill(bill.id, { paid: !bill.paid });
       setBills(bills.map((b) => (b.id === bill.id ? updated : b)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error updating bill");
+      setError(errorMessage(err, "Error updating bill"));
     }
   };
 
@@ -137,7 +138,7 @@ export default function BillsTab() {
       await deleteBill(id);
       setBills(bills.filter((b) => b.id !== id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error deleting bill");
+      setError(errorMessage(err, "Error deleting bill"));
     }
   };
 
@@ -161,7 +162,7 @@ export default function BillsTab() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left">
+        <table className="w-full min-w-[820px] text-sm text-left">
           <thead className="text-xs text-muted uppercase bg-surface-hover">
             <tr>
               <th className="px-4 py-3 rounded-tl-lg">Name</th>

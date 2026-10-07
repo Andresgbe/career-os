@@ -11,6 +11,22 @@
   --color-muted: #a1a1aa;
 }
 
+/* Nothing should scroll the page sideways — wide content (boards, tables,
+   the curriculum map) lives in its own overflow-x-auto container instead. */
+body {
+  overflow-x: hidden;
+}
+
+/* Horizontally scrollable strips (tab bars, the topbar nav) that should scroll
+   on narrow screens without showing a scrollbar inside their own height */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Placeholder for the rich-text contentEditable used in Work Tracker's General Info */
 .rich-text-editable:empty::before {
   content: attr(data-placeholder);

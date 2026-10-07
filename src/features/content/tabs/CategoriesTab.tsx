@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import { getCategories, addCategory, updateCategory, deleteCategory } from "../api";
@@ -54,7 +55,7 @@ export default function CategoriesTab() {
       const idx = DEFAULT_COLORS.indexOf(newColor);
       setNewColor(DEFAULT_COLORS[(idx + 1) % DEFAULT_COLORS.length]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error adding category");
+      setError(errorMessage(err, "Error adding category"));
     } finally {
       setAdding(false);
     }
@@ -84,7 +85,7 @@ export default function CategoriesTab() {
       );
       setEditId(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error updating category");
+      setError(errorMessage(err, "Error updating category"));
     }
   };
 
@@ -94,7 +95,7 @@ export default function CategoriesTab() {
       await deleteCategory(id);
       setCategories((prev) => prev.filter((c) => c.id !== id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error deleting category");
+      setError(errorMessage(err, "Error deleting category"));
     }
   };
 

@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Save, Upload, Image as ImageIcon } from "lucide-react";
 import {
@@ -112,7 +113,7 @@ export default function DesignTab({ projectId }: DesignTabProps) {
       );
       cancelForm();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error saving design");
+      setError(errorMessage(err, "Error saving design"));
     } finally {
       setSaving(false);
     }
@@ -139,7 +140,7 @@ export default function DesignTab({ projectId }: DesignTabProps) {
       }
       setFormImages((prev) => [...prev, ...uploaded]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(errorMessage(err, "Upload failed"));
     } finally {
       setFormUploading(false);
       if (formFileInputRef.current) formFileInputRef.current.value = "";
@@ -156,7 +157,7 @@ export default function DesignTab({ projectId }: DesignTabProps) {
       await deleteProjectDesignEntry(toDelete.id);
       setEntries((prev) => prev.filter((e) => e.id !== toDelete.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      setError(errorMessage(err, "Delete failed"));
     } finally {
       setToDelete(null);
     }
@@ -186,7 +187,7 @@ export default function DesignTab({ projectId }: DesignTabProps) {
       const updated = await updateProjectDesignImages(entryId, images);
       setEntries((prev) => prev.map((en) => (en.id === entryId ? updated : en)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(errorMessage(err, "Upload failed"));
     } finally {
       setUploadingFor(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -202,7 +203,7 @@ export default function DesignTab({ projectId }: DesignTabProps) {
       await updateProjectDesignImages(entry.id, images);
     } catch (err) {
       setEntries(prevEntries);
-      setError(err instanceof Error ? err.message : "Error deleting image");
+      setError(errorMessage(err, "Error deleting image"));
     }
   };
 
@@ -219,7 +220,7 @@ export default function DesignTab({ projectId }: DesignTabProps) {
         className="hidden"
       />
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="font-semibold">Design</h2>
         {!showForm && (
           <button
@@ -257,7 +258,7 @@ export default function DesignTab({ projectId }: DesignTabProps) {
           </div>
 
           <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <label className="text-xs text-muted">Photos</label>
               <button
                 onClick={triggerFormUpload}

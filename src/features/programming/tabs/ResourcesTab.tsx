@@ -80,7 +80,7 @@ export default function ResourcesTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-3">
         <h2 className="text-lg font-semibold">Saved Resources</h2>
         <button
           onClick={() => setIsFormOpen(!isFormOpen)}

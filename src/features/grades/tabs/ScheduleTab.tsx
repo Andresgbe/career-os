@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
 import ConfirmDialog from "../../../components/ConfirmDialog";
@@ -56,7 +57,7 @@ export default function ScheduleTab() {
   }, []);
 
   function reportError(err: unknown) {
-    setError(err instanceof Error ? err.message : "Something went wrong");
+    setError(errorMessage(err, "Something went wrong"));
   }
 
   async function submitAddPerson() {
@@ -208,7 +209,7 @@ export default function ScheduleTab() {
         }`}
       >
         <section>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
             <h3 className="font-semibold text-sm">Mi horario</h3>
             <button
               onClick={() => openModal(null)}
@@ -227,7 +228,7 @@ export default function ScheduleTab() {
 
         {selectedPerson && (
           <section>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
               <h3 className="font-semibold text-sm">
                 Horario de {selectedPerson.name}
               </h3>

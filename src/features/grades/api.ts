@@ -25,6 +25,18 @@ async function requireUser() {
 // SUBJECTS
 // ============================================
 
+// Supabase returns jsonb as raw JSON; ensure the array is properly typed
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeSubject(row: any): SubjectRow {
+  return {
+    ...row,
+    eval_plan_text: row.eval_plan_text ?? "",
+    eval_plan_images: Array.isArray(row.eval_plan_images)
+      ? row.eval_plan_images
+      : [],
+  };
+}
+
 export async function getSubjects(): Promise<SubjectRow[]> {
   const { data, error } = await supabase
     .from("grades_subjects")
@@ -32,7 +44,7 @@ export async function getSubjects(): Promise<SubjectRow[]> {
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).map(normalizeSubject);
 }
 
 export async function addSubject(name: string, color: string): Promise<SubjectRow> {
@@ -43,12 +55,18 @@ export async function addSubject(name: string, color: string): Promise<SubjectRo
     .select("*")
     .single();
   if (error) throw error;
-  return data as SubjectRow;
+  return normalizeSubject(data);
 }
 
 export async function updateSubject(
   id: string,
-  fields: { name?: string; color?: string; sort_order?: number }
+  fields: {
+    name?: string;
+    color?: string;
+    sort_order?: number;
+    eval_plan_text?: string;
+    eval_plan_images?: string[];
+  }
 ): Promise<SubjectRow> {
   const { data, error } = await supabase
     .from("grades_subjects")
@@ -57,7 +75,7 @@ export async function updateSubject(
     .select("*")
     .single();
   if (error) throw error;
-  return data as SubjectRow;
+  return normalizeSubject(data);
 }
 
 export async function deleteSubject(id: string): Promise<void> {
@@ -66,6 +84,39 @@ export async function deleteSubject(id: string): Promise<void> {
     .delete()
     .eq("id", id);
   if (error) throw error;
+}
+
+// ============================================
+// EVALUATION PLAN FILES
+// ============================================
+
+const GRADES_BUCKET = "grades-files";
+
+// Public bucket so a photo of the evaluation plan (and any image pasted
+// into the rich-text plan) can be rendered straight from its URL without
+// re-signing on every view — same approach as the project entry images.
+export async function uploadGradesImage(file: File): Promise<string> {
+  const user = await requireUser();
+  const filePath = `${user.id}/${Date.now()}-${file.name}`;
+
+  const { error } = await supabase.storage
+    .from(GRADES_BUCKET)
+    .upload(filePath, file);
+  if (error) throw error;
+
+  return supabase.storage.from(GRADES_BUCKET).getPublicUrl(filePath).data
+    .publicUrl;
+}
+
+// Best-effort cleanup of the stored object when an attached image is
+// removed from a plan. The row update is what actually matters, so a
+// failure here is swallowed rather than blocking the save.
+export async function deleteGradesImage(publicUrl: string): Promise<void> {
+  const marker = `/${GRADES_BUCKET}/`;
+  const idx = publicUrl.indexOf(marker);
+  if (idx === -1) return;
+  const filePath = decodeURIComponent(publicUrl.slice(idx + marker.length));
+  await supabase.storage.from(GRADES_BUCKET).remove([filePath]);
 }
 
 // ============================================

@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useState } from "react";
 import {
   getContentIdeas,
@@ -47,7 +48,7 @@ export default function DoneTab() {
       const updated = await updateContentIdea(id, fields);
       setIdeas((prev) => prev.map((i) => (i.id === id ? updated : i)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error updating idea");
+      setError(errorMessage(err, "Error updating idea"));
     }
   };
 
@@ -60,7 +61,7 @@ export default function DoneTab() {
       const updated = await toggleIdeaStatus(id, field, value);
       setIdeas((prev) => prev.map((i) => (i.id === id ? updated : i)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error updating status");
+      setError(errorMessage(err, "Error updating status"));
     }
   };
 
@@ -69,7 +70,7 @@ export default function DoneTab() {
       await deleteContentIdea(id);
       setIdeas((prev) => prev.filter((i) => i.id !== id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error deleting idea");
+      setError(errorMessage(err, "Error deleting idea"));
     }
   };
 
