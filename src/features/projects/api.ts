@@ -1,7 +1,6 @@
 import { supabase } from "../../lib/supabase";
 import type {
   ProjectRow,
-  PaymentStatus,
   ProjectResource,
   ProjectMilestone,
   ProjectEntryRow,
@@ -51,8 +50,6 @@ export interface ProjectFormFields {
   name: string;
   client: string;
   description: string;
-  budget: number | null;
-  payment_status: PaymentStatus;
   tech_stack: string[];
   // Omitted by the project modal: links, credentials and the rest are
   // edited one at a time in their own tabs, so a modal save must not

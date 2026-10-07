@@ -901,6 +901,121 @@ server.registerTool(
   })
 );
 
+
+server.registerTool(
+  "file_attachment",
+  {
+    description:
+      "Archiva una imagen que llegó adjunta al chat en el módulo que " +
+      "corresponda de NEXUS. Usala cuando te manden una foto: mirá qué es " +
+      "con la herramienta Read y después archivala acá con una descripción " +
+      "útil. El chat_path te lo da el mensaje.",
+    inputSchema: z.object({
+      chat_path: z
+        .string()
+        .describe("Ruta del adjunto en el bucket chat-files, como te la pasaron"),
+      destination: z
+        .enum(["medical_exam", "knowledge"])
+        .describe(
+          "medical_exam: examen o estudio médico. knowledge: documento de contexto"
+        ),
+      description: z
+        .string()
+        .describe("Qué es, en una línea, por ejemplo 'Hematología completa - Lab XYZ'"),
+      date: z
+        .string()
+        .optional()
+        .describe("Fecha del documento, YYYY-MM-DD, si se puede leer en la imagen"),
+      knowledge_doc: z
+        .string()
+        .optional()
+        .describe("Solo para knowledge: título del documento al que se agrega"),
+    }),
+  },
+  tool(async ({ chat_path, destination, description, date, knowledge_doc }) => {
+    const { supabase, userId } = await getSession();
+
+    // Pull the bytes out of the private chat bucket
+    const { data: blob, error: dlErr } = await supabase.storage
+      .from("chat-files")
+      .download(chat_path);
+    if (dlErr) throw new Error(`No pude leer el adjunto: ${dlErr.message}`);
+    const bytes = Buffer.from(await blob.arrayBuffer());
+    const fileName = chat_path.split("/").pop() || "adjunto";
+
+    if (destination === "medical_exam") {
+      // medical-files is private and policies key off the user-id folder
+      const filePath = `${userId}/exams/${Date.now()}-${fileName}`;
+      const { error: upErr } = await supabase.storage
+        .from("medical-files")
+        .upload(filePath, bytes, { contentType: blob.type || "image/jpeg" });
+      if (upErr) throw new Error(`No pude guardar el archivo: ${upErr.message}`);
+
+      const { count } = await supabase
+        .from("medical_exams")
+        .select("id", { count: "exact", head: true });
+
+      const { error } = await supabase.from("medical_exams").insert({
+        user_id: userId,
+        description,
+        exam_date: date ?? null,
+        file_name: fileName,
+        file_path: filePath,
+        sort_order: count ?? 0,
+      });
+      if (error) throw new Error(error.message);
+      return ok(
+        `Archivado en Medical > Exams: "${description}"${date ? ` (${date})` : ""}.`
+      );
+    }
+
+    // knowledge: the bucket is public, so the URL can go straight in the markdown
+    const filePath = `${userId}/${Date.now()}-${fileName}`;
+    const { error: upErr } = await supabase.storage
+      .from("grades-files")
+      .upload(filePath, bytes, { contentType: blob.type || "image/jpeg" });
+    if (upErr) throw new Error(`No pude guardar el archivo: ${upErr.message}`);
+    const url = supabase.storage.from("grades-files").getPublicUrl(filePath).data
+      .publicUrl;
+
+    const title = knowledge_doc || description;
+    const { data: docs } = await supabase
+      .from("knowledge_docs")
+      .select("id,title,content");
+    const existing = (docs ?? []).find(
+      (d) => d.title.toLowerCase() === title.toLowerCase()
+    );
+    const block = `
+
+## ${description}${date ? ` (${date})` : ""}
+
+![${description}](${url})
+`;
+
+    if (existing) {
+      const { error } = await supabase
+        .from("knowledge_docs")
+        .update({
+          content: (existing.content || "") + block,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id);
+      if (error) throw new Error(error.message);
+      return ok(`Imagen agregada al documento "${existing.title}" de Knowledge.`);
+    }
+
+    const { error } = await supabase.from("knowledge_docs").insert({
+      user_id: userId,
+      folder_id: null,
+      title,
+      content: `# ${title}${block}`,
+      sort_order: (docs ?? []).length,
+    });
+    if (error) throw new Error(error.message);
+    return ok(`Documento "${title}" creado en Knowledge con la imagen.`);
+  })
+);
+
 // ============================================
 // START
 // ============================================

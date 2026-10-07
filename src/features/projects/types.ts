@@ -4,14 +4,6 @@
 
 import type { RichTableData } from "../../components/TableBlock";
 
-export type PaymentStatus = "unpaid" | "partial" | "paid";
-
-export const PAYMENT_STATUSES: { value: PaymentStatus; label: string }[] = [
-  { value: "unpaid", label: "Unpaid" },
-  { value: "partial", label: "Partially paid" },
-  { value: "paid", label: "Paid" },
-];
-
 export interface ProjectMilestone {
   id: string;
   title: string;
@@ -52,8 +44,6 @@ export interface ProjectRow {
   name: string;
   client: string;
   description: string;
-  budget: number | null;
-  payment_status: PaymentStatus;
   tech_stack: string[];
   resources: ProjectResource[]; // stored as jsonb in Supabase
   milestones: ProjectMilestone[];

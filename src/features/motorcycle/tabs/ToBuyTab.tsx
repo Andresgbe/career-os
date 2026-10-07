@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useState } from "react";
 import { Plus, ExternalLink, Trash2 } from "lucide-react";
 import {
@@ -18,7 +19,7 @@ export default function ToBuyTab() {
   useEffect(() => {
     getToBuyItems()
       .then(setItems)
-      .catch((e) => setError(e instanceof Error ? e.message : "Error loading"))
+      .catch((e) => setError(errorMessage(e, "Error loading")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -30,7 +31,7 @@ export default function ToBuyTab() {
       setName("");
       setUrl("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error adding item");
+      setError(errorMessage(e, "Error adding item"));
     }
   };
 
@@ -42,7 +43,7 @@ export default function ToBuyTab() {
     try {
       await updateToBuyStatus(item.id, newStatus);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error updating item");
+      setError(errorMessage(e, "Error updating item"));
     }
   };
 
@@ -51,7 +52,7 @@ export default function ToBuyTab() {
     try {
       await deleteToBuyItem(id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error deleting item");
+      setError(errorMessage(e, "Error deleting item"));
     }
   };
 

@@ -1,12 +1,5 @@
-import { CheckSquare, DollarSign, FolderKanban, Paperclip, ListTodo } from "lucide-react";
+import { CheckSquare, FolderKanban, Paperclip, ListTodo } from "lucide-react";
 import type { ProjectRow } from "../types";
-import { PAYMENT_STATUSES } from "../types";
-
-const PAYMENT_STYLE: Record<ProjectRow["payment_status"], string> = {
-  unpaid: "text-red-400 bg-red-400/10",
-  partial: "text-amber-400 bg-amber-400/10",
-  paid: "text-emerald-400 bg-emerald-400/10",
-};
 
 interface ProjectCardProps {
   project: ProjectRow;
@@ -20,9 +13,6 @@ export default function ProjectCard({
   onClick,
 }: ProjectCardProps) {
   const doneMilestones = project.milestones.filter((m) => m.done).length;
-  const paymentLabel = PAYMENT_STATUSES.find(
-    (p) => p.value === project.payment_status
-  )?.label;
 
   return (
     <div
@@ -83,15 +73,6 @@ export default function ProjectCard({
           <span className="flex items-center gap-1">
             <Paperclip className="w-3.5 h-3.5" />
             {project.resources.length}
-          </span>
-        )}
-        {project.budget !== null && (
-          <span
-            className={`ml-auto flex items-center gap-1 px-2 py-0.5 rounded font-medium ${PAYMENT_STYLE[project.payment_status]}`}
-            title={paymentLabel}
-          >
-            <DollarSign className="w-3.5 h-3.5" />
-            {project.budget.toLocaleString()}
           </span>
         )}
       </div>

@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Check, X, Repeat } from "lucide-react";
 import type { MonthlyExpenseRow } from "../types";
@@ -99,7 +100,7 @@ export default function MonthlyBudgetTab() {
       setNewMonth(viewMonth);
       setNewRecurring(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error adding expense");
+      setError(errorMessage(err, "Error adding expense"));
     } finally {
       setAdding(false);
     }
@@ -136,7 +137,7 @@ export default function MonthlyBudgetTab() {
       setExpenses(expenses.map((e) => (e.id === editId ? updated : e)));
       setEditId(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error updating expense");
+      setError(errorMessage(err, "Error updating expense"));
     }
   };
 
@@ -146,7 +147,7 @@ export default function MonthlyBudgetTab() {
       await deleteMonthlyExpense(id);
       setExpenses(expenses.filter((e) => e.id !== id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error deleting expense");
+      setError(errorMessage(err, "Error deleting expense"));
     }
   };
 

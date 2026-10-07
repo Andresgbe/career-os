@@ -1,3 +1,4 @@
+import { errorMessage } from "../../lib/errors";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -57,7 +58,7 @@ export default function ProjectWorkspacePage() {
       await deleteProject(project.id);
       navigate("/projects");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      setError(errorMessage(err, "Delete failed"));
       setConfirmingDelete(false);
     }
   };

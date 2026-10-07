@@ -1,6 +1,6 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { type ReactNode } from "react";
-import { useAuth } from "../hooks/useAuth";
+import { ProtectedRoute, RequireAdmin, RequireModule } from "./RouteGuards";
 import AppLayout from "./layout/AppLayout";
 import DashboardPage from "../features/dashboard/DashboardPage";
 import MotorcyclePage from "../features/motorcycle/MotorcyclePage";
@@ -16,22 +16,11 @@ import FinancePage from "../features/finance/FinancePage";
 import PasswordsPage from "../features/passwords/PasswordsPage";
 import KnowledgePage from "../features/knowledge/KnowledgePage";
 import LoginPage from "../features/auth/LoginPage";
+import AdminPage from "../features/admin/AdminPage";
 
-function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { session, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-        <p className="text-muted">Loading...</p>
-      </div>
-    );
-  }
-
-  if (!session) return <Navigate to="/login" replace />;
-
-  return <>{children}</>;
-}
+const guard = (module: string, element: ReactNode) => (
+  <RequireModule module={module}>{element}</RequireModule>
+);
 
 export const router = createBrowserRouter([
   {
@@ -47,20 +36,33 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <DashboardPage /> },
-      { path: "motorcycle", element: <MotorcyclePage /> },
-      { path: "medical", element: <MedicalPage /> },
-      { path: "content", element: <ContentPage /> },
-      { path: "grades", element: <GradesPage /> },
-      { path: "projects", element: <ProjectsPage /> },
-      { path: "projects/:id", element: <ProjectWorkspacePage /> },
-      { path: "programming", element: <ProgrammingPage /> },
-      { path: "tasks", element: <TasksPage /> },
-      { path: "insurance", element: <InsurancePage /> },
-      { path: "finance", element: <FinancePage /> },
-      { path: "passwords", element: <PasswordsPage /> },
+      { path: "motorcycle", element: guard("motorcycle", <MotorcyclePage />) },
+      { path: "medical", element: guard("medical", <MedicalPage />) },
+      { path: "content", element: guard("content", <ContentPage />) },
+      { path: "grades", element: guard("grades", <GradesPage />) },
+      { path: "projects", element: guard("projects", <ProjectsPage />) },
+      {
+        path: "projects/:id",
+        element: guard("projects", <ProjectWorkspacePage />),
+      },
+      { path: "programming", element: guard("programming", <ProgrammingPage />) },
+      { path: "tasks", element: guard("tasks", <TasksPage />) },
+      { path: "insurance", element: guard("insurance", <InsurancePage />) },
+      { path: "finance", element: guard("finance", <FinancePage />) },
+      { path: "passwords", element: guard("passwords", <PasswordsPage />) },
       // To Buy now lives as a tab inside Pending; keep old links working
       { path: "tobuy", element: <Navigate to="/tasks" replace /> },
-      { path: "knowledge", element: <KnowledgePage /> },
+      { path: "knowledge", element: guard("knowledge", <KnowledgePage />) },
+      {
+        path: "admin",
+        element: (
+          <RequireAdmin>
+            <AdminPage />
+          </RequireAdmin>
+        ),
+      },
+      // El chat ahora es una pestaña del dashboard
+      { path: "chat", element: <Navigate to="/" replace /> },
     ],
   },
 ]);

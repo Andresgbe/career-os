@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Bike, Stethoscope, Video, GraduationCap, Laptop, Terminal, ListTodo, Shield, Landmark, KeyRound, BookMarked } from "lucide-react";
+import { Bike, Stethoscope, Video, GraduationCap, Laptop, Terminal, ListTodo, Shield, Landmark, KeyRound, BookMarked, ShieldCheck } from "lucide-react";
 
 export interface ModuleDef {
   id: string;
@@ -77,3 +77,13 @@ export const MODULES: ModuleDef[] = [
   },
   // Future modules go here
 ];
+
+// El panel de administrador no va en MODULES a propósito: MODULES es la
+// lista de módulos sobre los que se dan permisos, y sobre el panel no se
+// dan permisos — o sos el admin, o no existe para vos.
+export const ADMIN_MODULE: ModuleDef = {
+  id: "admin",
+  name: "Admin",
+  path: "/admin",
+  icon: ShieldCheck,
+};

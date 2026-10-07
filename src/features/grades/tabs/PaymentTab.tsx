@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useState } from "react";
 import {
   Plus,
@@ -57,7 +58,7 @@ export default function PaymentTab() {
       const updated = await updatePaymentPlan(id, fields);
       setPlans((prev) => prev.map((p) => (p.id === id ? updated : p)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error saving plan");
+      setError(errorMessage(err, "Error saving plan"));
     }
   };
 
@@ -103,7 +104,7 @@ export default function PaymentTab() {
       setNewPlanName("");
       setShowNewPlanForm(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error creating plan");
+      setError(errorMessage(err, "Error creating plan"));
     } finally {
       setAdding(false);
     }
@@ -115,7 +116,7 @@ export default function PaymentTab() {
       await deletePaymentPlan(toDelete.id);
       setPlans((prev) => prev.filter((p) => p.id !== toDelete.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error deleting plan");
+      setError(errorMessage(err, "Error deleting plan"));
     } finally {
       setToDelete(null);
     }

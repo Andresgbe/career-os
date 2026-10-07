@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useState } from "react";
 import { Plus, X, ChevronDown, ChevronRight } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
@@ -66,7 +67,7 @@ export default function ContentBoard() {
   }, []);
 
   function reportError(err: unknown) {
-    setError(err instanceof Error ? err.message : "Something went wrong");
+    setError(errorMessage(err, "Something went wrong"));
   }
 
   function toggleCollapsed(col: CategoryRow) {

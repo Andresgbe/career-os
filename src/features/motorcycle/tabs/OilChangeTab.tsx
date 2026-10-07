@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useRef, useState } from "react";
 import { Check, Plus, Camera, Trash2, Eye } from "lucide-react";
 import {
@@ -32,7 +33,7 @@ export default function OilChangeTab() {
       }
       setItems(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error loading");
+      setError(errorMessage(e, "Error loading"));
     } finally {
       setLoading(false);
     }
@@ -54,7 +55,7 @@ export default function OilChangeTab() {
     try {
       await toggleOilChange(item.id, newDone, newDate);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error updating");
+      setError(errorMessage(e, "Error updating"));
       load(); // revert on error
     }
   };
@@ -67,7 +68,7 @@ export default function OilChangeTab() {
       setNewKm("");
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error adding");
+      setError(errorMessage(e, "Error adding"));
     }
   };
 
@@ -76,7 +77,7 @@ export default function OilChangeTab() {
     try {
       await deleteOilChange(id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error deleting");
+      setError(errorMessage(e, "Error deleting"));
       load();
     }
   };
@@ -101,7 +102,7 @@ export default function OilChangeTab() {
         prev.map((i) => (i.id === id ? { ...i, receipt_url: path } : i))
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(errorMessage(err, "Upload failed"));
     } finally {
       setUploadingId(null);
       activeUploadId.current = null;
@@ -114,7 +115,7 @@ export default function OilChangeTab() {
       const url = await getFileUrl(path);
       window.open(url, "_blank");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open receipt");
+      setError(errorMessage(err, "Could not open receipt"));
     }
   };
 

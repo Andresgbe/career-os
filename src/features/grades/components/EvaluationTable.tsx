@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useState } from "react";
 import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import type { EvaluationRow } from "../types";
@@ -55,7 +56,7 @@ export default function EvaluationTable({
       setNewName("");
       setNewWeight("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error adding evaluation");
+      setError(errorMessage(err, "Error adding evaluation"));
     } finally {
       setAdding(false);
     }
@@ -109,7 +110,7 @@ export default function EvaluationTable({
       );
       setEditId(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error updating evaluation");
+      setError(errorMessage(err, "Error updating evaluation"));
     }
   };
 
@@ -119,7 +120,7 @@ export default function EvaluationTable({
       await deleteEvaluation(id);
       onEvaluationsChange(evaluations.filter((ev) => ev.id !== id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error deleting evaluation");
+      setError(errorMessage(err, "Error deleting evaluation"));
     }
   };
 

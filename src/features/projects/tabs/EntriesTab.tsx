@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Save, Copy, Check } from "lucide-react";
 import {
@@ -114,7 +115,7 @@ export default function EntriesTab({ projectId }: EntriesTabProps) {
       );
       cancelForm();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error saving entry");
+      setError(errorMessage(err, "Error saving entry"));
     } finally {
       setSaving(false);
     }
@@ -126,7 +127,7 @@ export default function EntriesTab({ projectId }: EntriesTabProps) {
       await deleteProjectEntry(toDelete.id);
       setEntries((prev) => prev.filter((e) => e.id !== toDelete.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      setError(errorMessage(err, "Delete failed"));
     } finally {
       setToDelete(null);
     }

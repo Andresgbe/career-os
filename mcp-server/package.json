@@ -4,7 +4,8 @@
   "description": "MCP server exposing NEXUS (career-os) data to Claude",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "worker": "node worker.js"
   },
   "type": "module",
   "dependencies": {

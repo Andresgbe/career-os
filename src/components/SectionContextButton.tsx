@@ -1,3 +1,4 @@
+import { errorMessage } from "../lib/errors";
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { StickyNote, X, Copy, Check, Save } from "lucide-react";
@@ -28,7 +29,7 @@ export default function SectionContextButton() {
     try {
       setContent(await getSectionContext(sectionId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error loading context");
+      setError(errorMessage(e, "Error loading context"));
     } finally {
       setLoading(false);
     }
@@ -52,7 +53,7 @@ export default function SectionContextButton() {
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error saving context");
+      setError(errorMessage(err, "Error saving context"));
     } finally {
       setSaving(false);
     }

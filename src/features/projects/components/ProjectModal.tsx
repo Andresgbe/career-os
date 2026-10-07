@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useState } from "react";
 import {
   X,
@@ -14,10 +15,6 @@ import type {
   ProjectMilestone,
   ProjectResource,
   ProjectRow,
-  PaymentStatus,
-} from "../types";
-import {
-  PAYMENT_STATUSES,
 } from "../types";
 import ConfirmDialog from "../../../components/ConfirmDialog";
 
@@ -25,8 +22,6 @@ interface ProjectForm {
   name: string;
   client: string;
   description: string;
-  budget: string;
-  payment_status: PaymentStatus;
   tech_stack: string[];
   resources: ProjectResource[];
   milestones: ProjectMilestone[];
@@ -37,8 +32,6 @@ const emptyForm: ProjectForm = {
   name: "",
   client: "",
   description: "",
-  budget: "",
-  payment_status: "unpaid",
   tech_stack: [],
   resources: [],
   milestones: [],
@@ -49,8 +42,6 @@ function toForm(project: ProjectRow): ProjectForm {
     name: project.name,
     client: project.client,
     description: project.description,
-    budget: project.budget === null ? "" : String(project.budget),
-    payment_status: project.payment_status,
     tech_stack: [...project.tech_stack],
     resources: project.resources.map((r) => ({ ...r })),
     milestones: project.milestones.map((m) => ({ ...m })),
@@ -128,8 +119,6 @@ export default function ProjectModal({
           name: form.name.trim(),
           client: form.client.trim(),
           description: form.description.trim(),
-          budget: form.budget.trim() === "" ? null : Number(form.budget),
-          payment_status: form.payment_status,
           tech_stack: form.tech_stack,
           milestones: form.milestones
             .map((m) => ({ ...m, title: m.title.trim() }))
@@ -140,7 +129,7 @@ export default function ProjectModal({
       );
       onSaved(saved);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error saving project");
+      setError(errorMessage(err, "Error saving project"));
     } finally {
       setSaving(false);
     }
@@ -152,7 +141,7 @@ export default function ProjectModal({
       await deleteProject(project.id);
       onDeleted(project.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      setError(errorMessage(err, "Delete failed"));
       setConfirmingDelete(false);
     }
   };
@@ -214,38 +203,6 @@ export default function ProjectModal({
               }
               className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none resize-y min-h-[100px]"
             />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted">Budget (optional)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={form.budget}
-                onChange={(e) => setForm({ ...form, budget: e.target.value })}
-                className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted">Payment status</label>
-              <select
-                value={form.payment_status}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    payment_status: e.target.value as PaymentStatus,
-                  })
-                }
-                className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
-              >
-                {PAYMENT_STATUSES.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
 
           {/* Tech stack */}

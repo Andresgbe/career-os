@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useRef, useState } from "react";
 import { Plus, FileText, Trash2, UserRound } from "lucide-react";
 import ConfirmDialog from "../../../components/ConfirmDialog";
@@ -42,7 +43,7 @@ export default function TasksTab({ projectId }: TasksTabProps) {
   }, [projectId]);
 
   function report(err: unknown) {
-    setError(err instanceof Error ? err.message : "Algo salió mal");
+    setError(errorMessage(err, "Algo salió mal"));
   }
 
   async function handleAdd() {

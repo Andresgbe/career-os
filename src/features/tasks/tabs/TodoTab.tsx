@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useState } from "react";
 import { Plus, Check, Trash2, X, CalendarPlus } from "lucide-react";
 import ConfirmDialog from "../../../components/ConfirmDialog";
@@ -41,7 +42,7 @@ export default function TodoTab() {
   }, []);
 
   function report(err: unknown) {
-    setError(err instanceof Error ? err.message : "Algo salió mal");
+    setError(errorMessage(err, "Algo salió mal"));
   }
 
   async function handleAdd() {

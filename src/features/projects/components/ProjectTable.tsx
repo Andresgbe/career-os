@@ -1,12 +1,5 @@
-import { DollarSign, Paperclip, CheckSquare, ListTodo } from "lucide-react";
+import { Paperclip, CheckSquare, ListTodo } from "lucide-react";
 import type { ProjectRow } from "../types";
-import { PAYMENT_STATUSES } from "../types";
-
-const PAYMENT_STYLE: Record<ProjectRow["payment_status"], string> = {
-  unpaid: "text-red-400 bg-red-400/10",
-  partial: "text-amber-400 bg-amber-400/10",
-  paid: "text-emerald-400 bg-emerald-400/10",
-};
 
 interface ProjectTableProps {
   projects: ProjectRow[];
@@ -32,16 +25,12 @@ export default function ProjectTable({
             <th className="px-4 py-2.5 font-medium">Tareas</th>
             <th className="px-4 py-2.5 font-medium">Hitos</th>
             <th className="px-4 py-2.5 font-medium">Archivos</th>
-            <th className="px-4 py-2.5 font-medium text-right">Presupuesto</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
           {projects.map((project) => {
             const doneMilestones = project.milestones.filter((m) => m.done).length;
             const openTasks = openTaskCount[project.id] ?? 0;
-            const paymentLabel = PAYMENT_STATUSES.find(
-              (p) => p.value === project.payment_status
-            )?.label;
 
             return (
               <tr
@@ -107,19 +96,6 @@ export default function ProjectTable({
                     </span>
                   ) : (
                     "—"
-                  )}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  {project.budget === null ? (
-                    <span className="text-muted">—</span>
-                  ) : (
-                    <span
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${PAYMENT_STYLE[project.payment_status]}`}
-                      title={paymentLabel}
-                    >
-                      <DollarSign className="w-3.5 h-3.5" />
-                      {project.budget.toLocaleString()}
-                    </span>
                   )}
                 </td>
               </tr>

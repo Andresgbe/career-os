@@ -1,9 +1,11 @@
+import { errorMessage } from "../../../lib/errors";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Plus, X, ChevronDown, ChevronRight } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
 import { MODULES } from "../../../lib/modules";
+import { usePermissions } from "../../../hooks/usePermissions";
 import { addColumn, updateColumn, deleteColumn, reorderModulePositions } from "../api";
 import type { ColumnRow, ModulePositionRow } from "../types";
 import { useBoardContext } from "../BoardContext";
@@ -11,6 +13,7 @@ import { useBoardContext } from "../BoardContext";
 export default function ModuleBoard() {
   const { columns, positions, loading, loadError, setColumns, setPositions } =
     useBoardContext();
+  const { canView } = usePermissions();
   const [error, setError] = useState("");
 
   const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
@@ -19,7 +22,7 @@ export default function ModuleBoard() {
   const [newColumnName, setNewColumnName] = useState("");
 
   function reportError(err: unknown) {
-    setError(err instanceof Error ? err.message : "Something went wrong");
+    setError(errorMessage(err, "Something went wrong"));
   }
 
   function toggleCollapsed(col: ColumnRow) {
@@ -124,7 +127,10 @@ export default function ModuleBoard() {
       items: positions
         .filter((p) => p.column_id === col.id)
         .sort((a, b) => a.sort_order - b.sort_order)
-        .map((p) => ({ position: p, module: MODULES.find((m) => m.id === p.module_id) }))
+        .map((p) => ({
+          position: p,
+          module: MODULES.find((m) => m.id === p.module_id && canView(m.id)),
+        }))
         .filter((x): x is { position: ModulePositionRow; module: (typeof MODULES)[number] } => !!x.module),
     }));
 

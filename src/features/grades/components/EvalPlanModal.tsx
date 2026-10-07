@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useRef, useState } from "react";
 import {
   X,
@@ -56,7 +57,7 @@ export default function EvalPlanModal({
       }
       setImages((prev) => [...prev, ...urls]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error subiendo la imagen");
+      setError(errorMessage(err, "Error subiendo la imagen"));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -84,7 +85,7 @@ export default function EvalPlanModal({
       onSaved(updated);
       setEditing(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error guardando el plan");
+      setError(errorMessage(err, "Error guardando el plan"));
     } finally {
       setSaving(false);
     }

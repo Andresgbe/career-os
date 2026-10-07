@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
 import ConfirmDialog from "../../../components/ConfirmDialog";
@@ -56,7 +57,7 @@ export default function ScheduleTab() {
   }, []);
 
   function reportError(err: unknown) {
-    setError(err instanceof Error ? err.message : "Something went wrong");
+    setError(errorMessage(err, "Something went wrong"));
   }
 
   async function submitAddPerson() {

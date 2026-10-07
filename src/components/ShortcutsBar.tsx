@@ -1,3 +1,4 @@
+import { errorMessage } from "../lib/errors";
 import { useEffect, useRef, useState } from "react";
 import { Plus, X, Save, Upload, Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
@@ -93,7 +94,7 @@ export default function ShortcutsBar<T extends ShortcutItem>({
       const uploaded = await uploadIcon(file);
       setIconUrl(uploaded);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error uploading logo");
+      setError(errorMessage(err, "Error uploading logo"));
     } finally {
       setUploadingIcon(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -112,7 +113,7 @@ export default function ShortcutsBar<T extends ShortcutItem>({
       onAdded(saved);
       closeForm();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error adding shortcut");
+      setError(errorMessage(err, "Error adding shortcut"));
     } finally {
       setSaving(false);
     }
@@ -146,7 +147,7 @@ export default function ShortcutsBar<T extends ShortcutItem>({
         reordered.map((item, i) => ({ id: item.id, sort_order: i }))
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error reordering shortcuts");
+      setError(errorMessage(err, "Error reordering shortcuts"));
     }
   };
 

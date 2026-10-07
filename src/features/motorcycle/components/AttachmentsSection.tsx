@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useRef, useState } from "react";
 import { Upload, FileText, Trash2, Eye, Download } from "lucide-react";
 import {
@@ -38,7 +39,7 @@ export default function AttachmentsSection() {
       await uploadAttachment(file, file.name);
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(errorMessage(err, "Upload failed"));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -50,7 +51,7 @@ export default function AttachmentsSection() {
       const url = await getFileUrl(path);
       window.open(url, "_blank");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open file");
+      setError(errorMessage(err, "Could not open file"));
     }
   };
 
@@ -69,7 +70,7 @@ export default function AttachmentsSection() {
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not download file");
+      setError(errorMessage(err, "Could not download file"));
     }
   };
 
@@ -78,7 +79,7 @@ export default function AttachmentsSection() {
       await deleteAttachment(id, path);
       setFiles(files.filter((f) => f.id !== id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      setError(errorMessage(err, "Delete failed"));
     }
   };
 

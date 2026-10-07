@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useState } from "react";
 import { X, Save, Trash2, Eye, EyeOff, Copy, Check } from "lucide-react";
 import { savePasswordEntry, deletePasswordEntry } from "../api";
@@ -83,7 +84,7 @@ export default function PasswordModal({
       );
       onSaved(saved);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error saving entry");
+      setError(errorMessage(err, "Error saving entry"));
     } finally {
       setSaving(false);
     }
@@ -95,7 +96,7 @@ export default function PasswordModal({
       await deletePasswordEntry(entry.id);
       onDeleted(entry.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      setError(errorMessage(err, "Delete failed"));
       setConfirmingDelete(false);
     }
   };

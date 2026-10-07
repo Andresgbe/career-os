@@ -64,6 +64,11 @@ Design tokens (`--color-background`, `--color-surface`, `--color-primary`, `--co
 There is no `supabase/` migrations directory or CLI setup in this repo — schema changes are applied by hand against the live project via the SQL editor or the Supabase MCP connector (`apply_migration`), not tracked as files. Keep this doc's description of the schema in sync manually when you add/change tables.
 
 - **The app's real project ref is `dmhlbgdakispkgbucgmq`** (read `VITE_SUPABASE_URL` in `.env.local` to confirm). The Supabase MCP connector is authorized per-organization from the claude.ai Connectors settings and may be pointed at a *different* Supabase project/org than this app — always cross-check `list_projects`' project id against `.env.local` before running any migration against it, don't assume the only project it can see is the right one.
-- Every table follows the same per-user shape: `user_id uuid not null references auth.users(id) on delete cascade`, RLS enabled, and four policies (select/insert/update/delete) each gated on `auth.uid() = user_id`. Match this exactly for new tables.
+- Every table has `user_id uuid not null references auth.users(id) on delete cascade` and RLS enabled. Since the admin panel landed, the four policies are **not** plain `auth.uid() = user_id` any more — a new data table gets:
+  - select: `user_id = auth.uid() or nexus_can_view('<module id>')`
+  - insert: `user_id = auth.uid() and (nexus_is_admin() or nexus_can_edit('<module id>'))`
+  - update: `user_id = auth.uid() or nexus_can_edit('<module id>')`
+  - delete: `user_id = auth.uid()` — only the owner ever deletes
+  All four are named `"nexus read" / "nexus insert" / "nexus update" / "nexus delete"`, so BLOQUE 4 of `PENDIENTE.sql` can drop and recreate them idempotently. Add the new table to that block's `(table, module)` list. Tables that are private per account — `dashboard_*`, `pill_tracker_*`, `section_notes`, `chat_messages` — keep the old `auth.uid() = user_id` on all four.
 - Repeatable/array fields (headers, resources, platforms, category_ids, tech_stack, milestones, ...) are stored as `jsonb not null default '[]'::jsonb`, normalized back to typed arrays in `api.ts` (`Array.isArray(...) ? ... : []`) since Supabase returns raw JSON. Optional text fields default to `''`, not `null`.
 - Storage buckets are public (e.g. `work-files`, `shortcut-icons`) so uploaded image/icon URLs can be embedded directly without re-signing on every render.

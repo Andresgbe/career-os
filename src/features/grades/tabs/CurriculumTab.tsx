@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import {
@@ -41,7 +42,7 @@ export default function CurriculumTab() {
       setCurrentUCState(parsed);
       setUcInput(String(parsed));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error saving UC");
+      setError(errorMessage(err, "Error saving UC"));
     } finally {
       setSavingUC(false);
     }
@@ -64,7 +65,7 @@ export default function CurriculumTab() {
       else await clearSubjectStatus(id);
     } catch (err) {
       setStatusMap(prevMap);
-      setError(err instanceof Error ? err.message : "Error saving progress");
+      setError(errorMessage(err, "Error saving progress"));
     }
   };
 

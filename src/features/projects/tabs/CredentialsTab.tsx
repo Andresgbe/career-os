@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useState } from "react";
 import { Plus, Trash2, KeyRound, Eye, EyeOff, Pencil, Check, X } from "lucide-react";
 import ConfirmDialog from "../../../components/ConfirmDialog";
@@ -113,7 +114,7 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
       setUsername("");
       setPassword("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error adding credential");
+      setError(errorMessage(err, "Error adding credential"));
     } finally {
       setSaving(false);
     }

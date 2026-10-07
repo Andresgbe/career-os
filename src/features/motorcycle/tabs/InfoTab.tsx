@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useEffect, useState } from "react";
 import { Save, Check, Pencil } from "lucide-react";
 import { getMotorcycleInfo, saveMotorcycleInfo } from "../api";
@@ -82,7 +83,7 @@ export default function InfoTab() {
       setIsEditing(false); // lock fields again
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error saving");
+      setError(errorMessage(e, "Error saving"));
     } finally {
       setSaving(false);
     }

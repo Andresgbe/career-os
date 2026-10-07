@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../lib/errors";
 import { useState } from "react";
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Check, X } from "lucide-react";
 import type { SubjectRow, EvaluationRow } from "../types";
@@ -72,7 +73,7 @@ export default function SubjectsTab({
       // Auto expand new subject
       toggleExpand(row.id, true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error adding subject");
+      setError(errorMessage(err, "Error adding subject"));
     } finally {
       setAdding(false);
     }
@@ -95,7 +96,7 @@ export default function SubjectsTab({
       onSubjectsChange(subjects.map((s) => (s.id === editId ? updated : s)));
       setEditId(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error updating subject");
+      setError(errorMessage(err, "Error updating subject"));
     }
   };
 
@@ -107,7 +108,7 @@ export default function SubjectsTab({
       // Removing its evaluations locally
       onEvaluationsChange(evaluations.filter((ev) => ev.subject_id !== id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error deleting subject");
+      setError(errorMessage(err, "Error deleting subject"));
     }
   };
 

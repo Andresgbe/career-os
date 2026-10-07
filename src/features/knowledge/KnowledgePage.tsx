@@ -1,3 +1,4 @@
+import { errorMessage } from "../../lib/errors";
 import { useEffect, useMemo, useState } from "react";
 import {
   Plus,
@@ -93,7 +94,7 @@ export default function KnowledgePage() {
   }, []);
 
   function report(err: unknown) {
-    setError(err instanceof Error ? err.message : "Algo salió mal");
+    setError(errorMessage(err, "Algo salió mal"));
   }
 
   const selectedDoc = docs.find((d) => d.id === selectedDocId) ?? null;
