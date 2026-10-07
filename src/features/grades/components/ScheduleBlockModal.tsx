@@ -70,7 +70,7 @@ export default function ScheduleBlockModal({
       onClick={onClose}
     >
       <div
-        className="bg-surface border border-border rounded-xl p-5 w-full max-w-sm"
+        className="bg-surface border border-border rounded-xl p-5 w-full max-w-sm max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
@@ -157,7 +157,7 @@ export default function ScheduleBlockModal({
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-5">
+        <div className="flex items-center justify-between gap-2 flex-wrap mt-5">
           {block && onDelete ? (
             <button
               onClick={() => setConfirmDelete(true)}

@@ -219,7 +219,7 @@ export default function DesignTab({ projectId }: DesignTabProps) {
         className="hidden"
       />
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="font-semibold">Design</h2>
         {!showForm && (
           <button
@@ -257,7 +257,7 @@ export default function DesignTab({ projectId }: DesignTabProps) {
           </div>
 
           <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <label className="text-xs text-muted">Photos</label>
               <button
                 onClick={triggerFormUpload}

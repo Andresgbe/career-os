@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Plus, Trash2, Link2, ExternalLink } from "lucide-react";
+import { Plus, Trash2, Link2, ExternalLink, Pencil, Check, X } from "lucide-react";
+import ConfirmDialog from "../../../components/ConfirmDialog";
 import { updateProjectResources } from "../api";
-import type { ProjectRow } from "../types";
+import type { ProjectRow, ProjectResource } from "../types";
 
 interface LinksTabProps {
   project: ProjectRow;
@@ -14,7 +15,28 @@ export default function LinksTab({ project, onProjectChange }: LinksTabProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // Per-item editing: one link at a time, independent of the project modal
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editUrl, setEditUrl] = useState("");
+  const [toDelete, setToDelete] = useState<ProjectResource | null>(null);
+
   const links = project.resources.filter((r) => r.type === "link");
+
+  // Writes the whole resources array back, but only ever changes one item
+  const persist = async (resources: ProjectResource[], failMsg: string) => {
+    const prev = project;
+    onProjectChange({ ...project, resources });
+    try {
+      const updated = await updateProjectResources(project.id, resources);
+      onProjectChange(updated);
+      return true;
+    } catch (err) {
+      onProjectChange(prev);
+      setError(err instanceof Error ? err.message : failMsg);
+      return false;
+    }
+  };
 
   const handleAdd = async () => {
     if (!url.trim()) {
@@ -23,8 +45,8 @@ export default function LinksTab({ project, onProjectChange }: LinksTabProps) {
     }
     setSaving(true);
     setError("");
-    try {
-      const resources = [
+    const ok = await persist(
+      [
         ...project.resources,
         {
           id: crypto.randomUUID(),
@@ -35,28 +57,47 @@ export default function LinksTab({ project, onProjectChange }: LinksTabProps) {
           password: "",
           file_path: "",
         },
-      ];
-      const updated = await updateProjectResources(project.id, resources);
-      onProjectChange(updated);
+      ],
+      "Error adding link"
+    );
+    if (ok) {
       setLabel("");
       setUrl("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error adding link");
-    } finally {
-      setSaving(false);
     }
+    setSaving(false);
   };
 
-  const handleDelete = async (id: string) => {
-    const prev = project;
-    const resources = project.resources.filter((r) => r.id !== id);
-    onProjectChange({ ...project, resources });
-    try {
-      await updateProjectResources(project.id, resources);
-    } catch (err) {
-      onProjectChange(prev);
-      setError(err instanceof Error ? err.message : "Error deleting link");
+  const startEdit = (resource: ProjectResource) => {
+    setEditId(resource.id);
+    setEditLabel(resource.label);
+    setEditUrl(resource.value);
+    setError("");
+  };
+
+  const saveEdit = async () => {
+    const id = editId;
+    if (!id) return;
+    if (!editUrl.trim()) {
+      setError("Enter a URL.");
+      return;
     }
+    setEditId(null);
+    await persist(
+      project.resources.map((r) =>
+        r.id === id ? { ...r, label: editLabel.trim(), value: editUrl.trim() } : r
+      ),
+      "Error updating link"
+    );
+  };
+
+  const confirmDelete = async () => {
+    const resource = toDelete;
+    setToDelete(null);
+    if (!resource) return;
+    await persist(
+      project.resources.filter((r) => r.id !== resource.id),
+      "Error deleting link"
+    );
   };
 
   return (
@@ -96,48 +137,107 @@ export default function LinksTab({ project, onProjectChange }: LinksTabProps) {
           <p className="text-sm text-muted">No links yet.</p>
         ) : (
           <div className="space-y-2">
-            {links.map((resource) => (
-              <div
-                key={resource.id}
-                className="flex items-center gap-2 bg-background border border-border rounded-lg p-3"
-              >
-                <span className="p-1.5 rounded shrink-0 bg-blue-400/10">
-                  <Link2 className="w-4 h-4 text-blue-400" />
-                </span>
-                <a
-                  href={resource.value}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="min-w-0 flex-1 group"
+            {links.map((resource) =>
+              editId === resource.id ? (
+                <div
+                  key={resource.id}
+                  className="bg-background border border-primary rounded-lg p-3 space-y-2"
                 >
-                  {resource.label && (
-                    <p className="text-sm font-medium truncate group-hover:text-primary">
-                      {resource.label}
-                    </p>
-                  )}
-                  <p className="text-xs text-primary truncate">{resource.value}</p>
-                </a>
-                <a
-                  href={resource.value}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-primary shrink-0"
-                  title="Open"
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Label (optional)"
+                    value={editLabel}
+                    onChange={(e) => setEditLabel(e.target.value)}
+                    className="w-full bg-surface border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
+                  />
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    value={editUrl}
+                    onChange={(e) => setEditUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveEdit();
+                      if (e.key === "Escape") setEditId(null);
+                    }}
+                    className="w-full bg-surface border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setEditId(null)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-surface-hover hover:bg-border text-xs font-medium transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Cancel
+                    </button>
+                    <button
+                      onClick={saveEdit}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-xs font-medium transition-colors"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      Save
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  key={resource.id}
+                  className="flex items-center gap-2 bg-background border border-border rounded-lg p-3"
                 >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-                <button
-                  onClick={() => handleDelete(resource.id)}
-                  className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-red-400 shrink-0"
-                  title="Delete"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
+                  <span className="p-1.5 rounded shrink-0 bg-blue-400/10">
+                    <Link2 className="w-4 h-4 text-blue-400" />
+                  </span>
+                  <a
+                    href={resource.value}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="min-w-0 flex-1 group"
+                  >
+                    {resource.label && (
+                      <p className="text-sm font-medium truncate group-hover:text-primary">
+                        {resource.label}
+                      </p>
+                    )}
+                    <p className="text-xs text-primary truncate">{resource.value}</p>
+                  </a>
+                  <a
+                    href={resource.value}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-primary shrink-0"
+                    title="Open"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                  <button
+                    onClick={() => startEdit(resource)}
+                    className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-primary shrink-0"
+                    title="Edit"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setToDelete(resource)}
+                    className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-red-400 shrink-0"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              )
+            )}
           </div>
         )}
       </section>
+
+      {toDelete && (
+        <ConfirmDialog
+          title="Delete link"
+          message={`Delete "${toDelete.label || toDelete.value}"?`}
+          onConfirm={confirmDelete}
+          onCancel={() => setToDelete(null)}
+        />
+      )}
     </div>
   );
 }

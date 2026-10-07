@@ -25,24 +25,26 @@ export default function AppLayout() {
     <BoardProvider>
       <div className="min-h-screen bg-background text-foreground">
       {/* Topbar */}
-      <header className="flex items-center gap-4 border-b border-border bg-surface px-4 h-14">
+      <header className="flex items-center gap-2 sm:gap-4 border-b border-border bg-surface px-3 sm:px-4 h-14">
         <button
           onClick={() => setDrawerOpen(true)}
-          className="p-2 rounded hover:bg-surface-hover transition-colors"
+          className="p-2 rounded hover:bg-surface-hover transition-colors shrink-0"
           aria-label="Open menu"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <Link to="/" className="text-lg font-bold">
+        <Link to="/" className="text-lg font-bold shrink-0">
           {APP_NAME}
         </Link>
 
-        {/* Horizontal tabs, grouped like the dashboard's module board */}
-        <nav className="hidden sm:flex items-center gap-1 ml-4 flex-wrap">
+        {/* Horizontal tabs, grouped like the dashboard's module board.
+            Scrolls sideways instead of wrapping — the header is a fixed
+            height, so a wrapped second row would be clipped. */}
+        <nav className="hidden sm:flex items-center gap-1 ml-2 min-w-0 overflow-x-auto no-scrollbar">
           <Link
             to="/"
-            className={`px-3 py-1.5 rounded text-sm transition-colors ${
+            className={`px-3 py-1.5 rounded text-sm transition-colors shrink-0 ${
               location.pathname === "/"
                 ? "bg-primary text-white"
                 : "text-muted hover:bg-surface-hover"
@@ -57,7 +59,7 @@ export default function AppLayout() {
           <div className="flex-1" />
 
           {/* User & Logout */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <div
               className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-semibold select-none"
               title={user?.email ?? ""}
@@ -87,7 +89,7 @@ export default function AppLayout() {
             onClick={() => setDrawerOpen(false)}
           />
           {/* Panel */}
-          <aside className="relative w-64 h-full bg-surface border-r border-border p-4 flex flex-col">
+          <aside className="relative w-64 max-w-[85vw] h-full bg-surface border-r border-border p-4 flex flex-col overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <span className="font-bold">{APP_NAME}</span>
               <button
@@ -140,7 +142,7 @@ export default function AppLayout() {
       <SectionContextButton />
 
       {/* Page content */}
-      <main className="px-4 py-8 sm:px-6 lg:px-8">
+      <main className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <div className="mx-auto w-full max-w-5xl">
           <Outlet />
         </div>

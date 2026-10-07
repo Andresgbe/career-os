@@ -1,7 +1,6 @@
 import { supabase } from "../../lib/supabase";
 import type {
   ProjectRow,
-  ProjectStatus,
   PaymentStatus,
   ProjectResource,
   ProjectMilestone,
@@ -52,11 +51,13 @@ export interface ProjectFormFields {
   name: string;
   client: string;
   description: string;
-  status: ProjectStatus;
   budget: number | null;
   payment_status: PaymentStatus;
   tech_stack: string[];
-  resources: ProjectResource[];
+  // Omitted by the project modal: links, credentials and the rest are
+  // edited one at a time in their own tabs, so a modal save must not
+  // overwrite whatever those tabs have changed since it opened.
+  resources?: ProjectResource[];
   milestones: ProjectMilestone[];
 }
 
@@ -80,7 +81,12 @@ export async function saveProject(
   const user = await requireUser();
   const { data, error } = await supabase
     .from("personal_projects")
-    .insert({ user_id: user.id, sort_order: nextSortOrder, ...fields })
+    .insert({
+      user_id: user.id,
+      sort_order: nextSortOrder,
+      resources: [],
+      ...fields,
+    })
     .select("*")
     .single();
   if (error) throw error;

@@ -1,6 +1,6 @@
-import { CheckSquare, DollarSign, FolderKanban, Paperclip } from "lucide-react";
+import { CheckSquare, DollarSign, FolderKanban, Paperclip, ListTodo } from "lucide-react";
 import type { ProjectRow } from "../types";
-import { PAYMENT_STATUSES, PROJECT_STATUSES } from "../types";
+import { PAYMENT_STATUSES } from "../types";
 
 const PAYMENT_STYLE: Record<ProjectRow["payment_status"], string> = {
   unpaid: "text-red-400 bg-red-400/10",
@@ -10,15 +10,19 @@ const PAYMENT_STYLE: Record<ProjectRow["payment_status"], string> = {
 
 interface ProjectCardProps {
   project: ProjectRow;
+  openTasks: number;
   onClick: () => void;
 }
 
-export default function ProjectCard({ project, onClick }: ProjectCardProps) {
+export default function ProjectCard({
+  project,
+  openTasks,
+  onClick,
+}: ProjectCardProps) {
   const doneMilestones = project.milestones.filter((m) => m.done).length;
   const paymentLabel = PAYMENT_STATUSES.find(
     (p) => p.value === project.payment_status
   )?.label;
-  const status = PROJECT_STATUSES.find((s) => s.value === project.status)!;
 
   return (
     <div
@@ -29,11 +33,6 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
         <div className="p-3 rounded-lg bg-primary/10">
           <FolderKanban className="w-6 h-6 text-primary" />
         </div>
-        <span
-          className={`text-xs font-medium px-2.5 py-1 rounded-full ${status.bg} ${status.color}`}
-        >
-          {status.label}
-        </span>
       </div>
 
       <h3 className="font-semibold text-lg mb-1 group-hover:text-primary transition-colors truncate">
@@ -72,6 +71,12 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
           <span className="flex items-center gap-1">
             <CheckSquare className="w-3.5 h-3.5" />
             {doneMilestones}/{project.milestones.length}
+          </span>
+        )}
+        {openTasks > 0 && (
+          <span className="flex items-center gap-1">
+            <ListTodo className="w-3.5 h-3.5" />
+            {openTasks}
           </span>
         )}
         {project.resources.length > 0 && (

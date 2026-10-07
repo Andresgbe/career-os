@@ -146,7 +146,7 @@ export default function EntriesTab({ projectId }: EntriesTabProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="font-semibold">Entries</h2>
         {!showForm && (
           <button

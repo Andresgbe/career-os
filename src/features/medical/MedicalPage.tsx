@@ -18,12 +18,12 @@ export default function MedicalPage() {
     <div className="space-y-6">
 
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-border pb-0">
+      <div className="flex gap-1 border-b border-border pb-0 overflow-x-auto no-scrollbar">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 text-sm font-medium rounded-t transition-colors -mb-px border-b-2 ${
+            className={`px-4 py-2 text-sm font-medium rounded-t transition-colors -mb-px border-b-2 shrink-0 whitespace-nowrap ${
               activeTab === tab.id
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted hover:text-foreground hover:bg-surface-hover"

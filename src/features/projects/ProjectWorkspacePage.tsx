@@ -4,30 +4,29 @@ import {
   ArrowLeft,
   Pencil,
   Trash2,
+  ListTodo,
   LayoutDashboard,
   Link2,
   KeyRound,
-  Image as ImageIcon,
   NotebookText,
   Palette,
 } from "lucide-react";
 import { getProject, deleteProject } from "./api";
 import type { ProjectRow } from "./types";
-import { PROJECT_STATUSES } from "./types";
 import ProjectModal from "./components/ProjectModal";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import OverviewTab from "./tabs/OverviewTab";
 import LinksTab from "./tabs/LinksTab";
 import CredentialsTab from "./tabs/CredentialsTab";
-import ImagesTab from "./tabs/ImagesTab";
 import EntriesTab from "./tabs/EntriesTab";
 import DesignTab from "./tabs/DesignTab";
+import TasksTab from "./tabs/TasksTab";
 
 const TABS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "tasks", label: "Tasks", icon: ListTodo },
   { id: "links", label: "Links", icon: Link2 },
   { id: "credentials", label: "Credentials", icon: KeyRound },
-  { id: "images", label: "Images", icon: ImageIcon },
   { id: "entries", label: "Entries", icon: NotebookText },
   { id: "design", label: "Design", icon: Palette },
 ] as const;
@@ -84,7 +83,6 @@ export default function ProjectWorkspacePage() {
     );
   }
 
-  const status = PROJECT_STATUSES.find((s) => s.value === project.status)!;
 
   return (
     <div className="space-y-6">
@@ -100,11 +98,6 @@ export default function ProjectWorkspacePage() {
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <h1 className="text-2xl font-bold truncate">{project.name}</h1>
-            <span
-              className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${status.bg} ${status.color}`}
-            >
-              {status.label}
-            </span>
           </div>
           {project.client && <p className="text-sm text-muted">{project.client}</p>}
         </div>
@@ -133,7 +126,7 @@ export default function ProjectWorkspacePage() {
       )}
 
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-border pb-0 overflow-x-auto">
+      <div className="flex gap-1 border-b border-border pb-0 overflow-x-auto no-scrollbar">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -141,7 +134,7 @@ export default function ProjectWorkspacePage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t transition-colors -mb-px border-b-2 whitespace-nowrap ${
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t transition-colors -mb-px border-b-2 shrink-0 whitespace-nowrap ${
                 isActive
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted hover:text-foreground hover:bg-surface-hover"
@@ -156,18 +149,17 @@ export default function ProjectWorkspacePage() {
 
       {/* Tab content */}
       {activeTab === "overview" && <OverviewTab project={project} onProjectChange={setProject} />}
+      {activeTab === "tasks" && <TasksTab projectId={project.id} />}
       {activeTab === "links" && <LinksTab project={project} onProjectChange={setProject} />}
       {activeTab === "credentials" && (
         <CredentialsTab project={project} onProjectChange={setProject} />
       )}
-      {activeTab === "images" && <ImagesTab project={project} onProjectChange={setProject} />}
       {activeTab === "entries" && <EntriesTab projectId={project.id} />}
       {activeTab === "design" && <DesignTab projectId={project.id} />}
 
       {showEditModal && (
         <ProjectModal
           project={project}
-          defaultStatus="planning"
           nextSortOrder={0}
           onClose={() => setShowEditModal(false)}
           onSaved={(saved) => {

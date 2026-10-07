@@ -28,7 +28,7 @@ export default function FinancePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold mb-1">Finance</h1>
           <p className="text-sm text-muted">
@@ -51,7 +51,7 @@ export default function FinancePage() {
       ) : (
         <>
           {/* Tab bar */}
-          <div className="flex gap-1 border-b border-border pb-0">
+          <div className="flex gap-1 border-b border-border pb-0 overflow-x-auto no-scrollbar">
             {TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -59,7 +59,7 @@ export default function FinancePage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t transition-colors -mb-px border-b-2 ${
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t transition-colors -mb-px border-b-2 shrink-0 whitespace-nowrap ${
                     isActive
                       ? "border-primary text-foreground"
                       : "border-transparent text-muted hover:text-foreground hover:bg-surface-hover"

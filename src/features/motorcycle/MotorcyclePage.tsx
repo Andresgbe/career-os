@@ -22,7 +22,7 @@ export default function MotorcyclePage() {
       <h1 className="text-2xl font-bold mb-4">Motorcycle</h1>
 
       {/* Sub-navigation */}
-      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto">
+      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto no-scrollbar">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -30,7 +30,7 @@ export default function MotorcyclePage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 text-sm whitespace-nowrap border-b-2 transition-colors ${
+              className={`flex items-center gap-2 px-4 py-2 text-sm shrink-0 whitespace-nowrap border-b-2 transition-colors ${
                 isActive
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted hover:text-foreground"

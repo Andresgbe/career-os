@@ -3,6 +3,8 @@ import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Check, X } from "lucid
 import type { SubjectRow, EvaluationRow } from "../types";
 import { addSubject, updateSubject, deleteSubject } from "../api";
 import EvaluationTable from "../components/EvaluationTable";
+import EvalPlanCard from "../components/EvalPlanCard";
+import EvalPlanModal from "../components/EvalPlanModal";
 
 const DEFAULT_COLORS = [
   "#8b5cf6", // purple
@@ -42,6 +44,17 @@ export default function SubjectsTab({
 
   // Expand state
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  // Evaluation plan previewer: which subject is open, and whether it should
+  // open straight into edit mode (when adding a plan for the first time).
+  const [planSubjectId, setPlanSubjectId] = useState<string | null>(null);
+  const [planStartInEdit, setPlanStartInEdit] = useState(false);
+  const planSubject = subjects.find((s) => s.id === planSubjectId) ?? null;
+
+  const openPlan = (subjectId: string, startInEdit: boolean) => {
+    setPlanSubjectId(subjectId);
+    setPlanStartInEdit(startInEdit);
+  };
 
   const handleAdd = async () => {
     if (!newName.trim()) {
@@ -192,7 +205,7 @@ export default function SubjectsTab({
 
                     {isEditing ? (
                       <div
-                        className="flex items-center gap-3"
+                        className="flex items-center gap-3 flex-wrap"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <input
@@ -273,6 +286,10 @@ export default function SubjectsTab({
                 {/* Expanded Content */}
                 {isExpanded && (
                   <div className="p-4 border-t border-border bg-background">
+                    <EvalPlanCard
+                      subject={sub}
+                      onOpen={(startInEdit) => openPlan(sub.id, startInEdit)}
+                    />
                     <EvaluationTable
                       subjectId={sub.id}
                       evaluations={subjectEvals}
@@ -290,6 +307,19 @@ export default function SubjectsTab({
           })
         )}
       </section>
+
+      {planSubject && (
+        <EvalPlanModal
+          subject={planSubject}
+          startInEdit={planStartInEdit}
+          onClose={() => setPlanSubjectId(null)}
+          onSaved={(updated) =>
+            onSubjectsChange(
+              subjects.map((s) => (s.id === updated.id ? updated : s))
+            )
+          }
+        />
+      )}
     </div>
   );
 }

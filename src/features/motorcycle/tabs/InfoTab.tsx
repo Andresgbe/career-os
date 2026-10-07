@@ -118,7 +118,7 @@ export default function InfoTab() {
   return (
     <div className="space-y-6">
       <section className="bg-surface border border-border rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
           <h2 className="font-semibold">Specifications</h2>
 
           {isEditing ? (

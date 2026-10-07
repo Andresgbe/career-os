@@ -14,7 +14,7 @@ import TasksPage from "../features/tasks/TasksPage";
 import InsurancePage from "../features/insurance/InsurancePage";
 import FinancePage from "../features/finance/FinancePage";
 import PasswordsPage from "../features/passwords/PasswordsPage";
-import ToBuyPage from "../features/tobuy/ToBuyPage";
+import KnowledgePage from "../features/knowledge/KnowledgePage";
 import LoginPage from "../features/auth/LoginPage";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -58,7 +58,9 @@ export const router = createBrowserRouter([
       { path: "insurance", element: <InsurancePage /> },
       { path: "finance", element: <FinancePage /> },
       { path: "passwords", element: <PasswordsPage /> },
-      { path: "tobuy", element: <ToBuyPage /> },
+      // To Buy now lives as a tab inside Pending; keep old links working
+      { path: "tobuy", element: <Navigate to="/tasks" replace /> },
+      { path: "knowledge", element: <KnowledgePage /> },
     ],
   },
 ]);

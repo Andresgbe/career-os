@@ -1,5 +1,5 @@
 import { supabase } from "../../lib/supabase";
-import type { Priority, Subtask, TaskRow, TaskStatusRow } from "./types";
+import type { TaskRow, Priority } from "./types";
 
 async function requireUser() {
   const {
@@ -12,8 +12,9 @@ async function requireUser() {
 function normalizeTask(row: Record<string, unknown>): TaskRow {
   return {
     ...(row as unknown as TaskRow),
-    project: (row.project as string) ?? "",
-    subtasks: Array.isArray(row.subtasks) ? (row.subtasks as Subtask[]) : [],
+    done: row.done === true,
+    assignee: (row.assignee as string) ?? "",
+    project_id: (row.project_id as string | null) ?? null,
   };
 }
 
@@ -28,15 +29,24 @@ export async function getTasks(): Promise<TaskRow[]> {
 
 export async function addTask(fields: {
   title: string;
-  status_id: string;
   priority: Priority;
   due: string | null;
-  project: string;
+  assignee?: string;
+  project_id?: string | null;
 }): Promise<TaskRow> {
   const user = await requireUser();
   const { data, error } = await supabase
     .from("tasks")
-    .insert({ user_id: user.id, ...fields, sort_order: Date.now() })
+    .insert({
+      user_id: user.id,
+      title: fields.title,
+      priority: fields.priority,
+      due: fields.due,
+      assignee: fields.assignee ?? "",
+      project_id: fields.project_id ?? null,
+      done: false,
+      sort_order: Date.now(),
+    })
     .select("*")
     .single();
   if (error) throw error;
@@ -47,11 +57,11 @@ export async function updateTask(
   id: string,
   fields: Partial<{
     title: string;
-    status_id: string;
+    done: boolean;
     priority: Priority;
     due: string | null;
-    project: string;
-    subtasks: Subtask[];
+    assignee: string;
+    project_id: string | null;
   }>
 ): Promise<TaskRow> {
   const { data, error } = await supabase
@@ -78,46 +88,4 @@ export async function reorderTasks(
     )
   );
   for (const { error } of results) if (error) throw error;
-}
-
-// ============================================
-// TASK STATUSES
-// ============================================
-
-export async function getTaskStatuses(): Promise<TaskStatusRow[]> {
-  const { data, error } = await supabase
-    .from("task_statuses")
-    .select("*")
-    .order("sort_order", { ascending: true });
-  if (error) throw error;
-  return data ?? [];
-}
-
-export async function addTaskStatus(fields: {
-  name: string;
-  color: string;
-  is_done: boolean;
-  sort_order: number;
-}): Promise<TaskStatusRow> {
-  const user = await requireUser();
-  const { data, error } = await supabase
-    .from("task_statuses")
-    .insert({ user_id: user.id, ...fields })
-    .select("*")
-    .single();
-  if (error) throw error;
-  return data as TaskStatusRow;
-}
-
-export async function updateTaskStatus(
-  id: string,
-  fields: Partial<{ name: string; color: string; is_done: boolean; sort_order: number }>
-): Promise<void> {
-  const { error } = await supabase.from("task_statuses").update(fields).eq("id", id);
-  if (error) throw error;
-}
-
-export async function deleteTaskStatus(id: string): Promise<void> {
-  const { error } = await supabase.from("task_statuses").delete().eq("id", id);
-  if (error) throw error;
 }

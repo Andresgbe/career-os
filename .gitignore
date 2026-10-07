@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# NEXUS MCP server
+mcp-server/.env
+mcp-server/node_modules

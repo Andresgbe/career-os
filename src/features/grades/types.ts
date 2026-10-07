@@ -5,6 +5,16 @@ export interface SubjectRow {
   color: string;
   sort_order: number;
   created_at: string;
+  // "Plan de evaluación" attached to the subject: free-form rich text
+  // (HTML from RichTextEditor) and/or photos/scans of the handed-out plan.
+  eval_plan_text: string;
+  eval_plan_images: string[]; // public URLs, stored as jsonb
+}
+
+// True when the subject has an evaluation plan worth previewing.
+export function hasEvalPlan(subject: SubjectRow): boolean {
+  const text = subject.eval_plan_text.replace(/<[^>]*>/g, "").trim();
+  return text.length > 0 || subject.eval_plan_images.length > 0;
 }
 
 export interface EvaluationRow {

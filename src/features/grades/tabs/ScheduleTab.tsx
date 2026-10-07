@@ -208,7 +208,7 @@ export default function ScheduleTab() {
         }`}
       >
         <section>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
             <h3 className="font-semibold text-sm">Mi horario</h3>
             <button
               onClick={() => openModal(null)}
@@ -227,7 +227,7 @@ export default function ScheduleTab() {
 
         {selectedPerson && (
           <section>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
               <h3 className="font-semibold text-sm">
                 Horario de {selectedPerson.name}
               </h3>
