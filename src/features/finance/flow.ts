@@ -78,21 +78,39 @@ export function toUsd(amount: number, ratePerUsd: number): number {
   return amount / ratePerUsd;
 }
 
-export const USD = { code: "USD", label: "Dólar", symbol: "$" };
+// La referencia contra la que se mide todo. Su tasa es 1 por definición y no
+// se edita: es la unidad.
+export const USD_BCV = "USD_BCV";
 
-// Lo que se puede elegir al cargar un movimiento: dólares siempre, más las
-// tasas que Andrés tenga cargadas.
+// Con qué se pagó. No es solo la moneda: 50 $ en efectivo o en USDT valen
+// MÁS que 50 $ BCV, porque se cambian a una tasa mejor. Por eso cada forma
+// de pago tiene su propia tasa, incluso las que están en dólares.
+//
+//   per_usd = cuántas unidades de ESA forma de pago equivalen a 1 USD BCV
+//
+//   · Bolívares, BCV en 873,87      → 873.87   (500 Bs = $0,57)
+//   · Dólar efectivo, paralelo 1007 → 0.8672   (50 $ cash = $57,66)
+//   · USDT, igual                   → 0.8672
+//   · Euro a 0,888 € por dólar      → 0.8878   (10 € = $11,26)
+//
+// Menos de 1 significa "vale más que el dólar BCV". Más de 1, menos.
 export interface CurrencyOption {
-  code: string; // identificador de la opción (USD o el code de la tasa)
+  code: string; // USD_BCV, o el code de la tasa guardada
   currency: string; // la moneda real (USD, VES, EUR)
   label: string;
   perUsd: number | null;
-  rateLabel: string;
+  rateLabel: string; // lo que queda registrado en el movimiento
 }
 
 export function currencyOptions(rates: FinanceRateRow[]): CurrencyOption[] {
   return [
-    { code: "USD", currency: "USD", label: "Dólar ($)", perUsd: 1, rateLabel: "" },
+    {
+      code: USD_BCV,
+      currency: "USD",
+      label: "Dólar BCV ($)",
+      perUsd: 1,
+      rateLabel: "BCV",
+    },
     ...rates.map((r) => ({
       code: r.code,
       currency: r.currency,
@@ -101,6 +119,17 @@ export function currencyOptions(rates: FinanceRateRow[]): CurrencyOption[] {
       rateLabel: r.code,
     })),
   ];
+}
+
+// Cómo se llama la forma de pago de un movimiento ya guardado
+export function rateName(tx: TransactionRow): string {
+  return tx.rate_label || "BCV";
+}
+
+// ¿Hubo conversión de verdad? Con tasa 1 el monto original y el equivalente
+// son el mismo número y no vale la pena repetirlo en pantalla.
+export function wasConverted(tx: TransactionRow): boolean {
+  return tx.rate_per_usd !== 1;
 }
 
 // ============================================
@@ -119,7 +148,7 @@ export function amountLabel(tx: TransactionRow): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-  if (tx.currency === "USD") return `$${n}`;
+  if (tx.currency === "USD") return `${n}`;
   if (tx.currency === "VES") return `Bs ${n}`;
   if (tx.currency === "EUR") return `€${n}`;
   return `${n} ${tx.currency}`;

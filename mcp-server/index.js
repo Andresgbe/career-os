@@ -1026,6 +1026,40 @@ server.registerTool(
 // lo que se gastó hace un mes.
 // ============================================
 
+// Tasas del día desde DolarAPI (https://ve.dolarapi.com): pública, sin
+// llave. Devuelve cuántas unidades de cada moneda son 1 dólar BCV, que es
+// como NEXUS guarda las tasas.
+async function fetchDolarApi() {
+  const [dolares, euro] = await Promise.all([
+    fetch("https://ve.dolarapi.com/v1/dolares").then((r) => r.json()),
+    fetch("https://ve.dolarapi.com/v1/euros/oficial")
+      .then((r) => r.json())
+      .catch(() => null),
+  ]);
+
+  const pick = (fuente) =>
+    (Array.isArray(dolares) ? dolares : []).find((q) => q.fuente === fuente)
+      ?.promedio ?? null;
+
+  const bcv = pick("oficial");
+  const paralelo = pick("paralelo");
+  const bsPorEuro = euro?.promedio ?? null;
+
+  const cash = bcv && paralelo ? bcv / paralelo : null;
+
+  return {
+    BCV: bcv,
+    // Bs/$ ÷ Bs/€ = euros por dólar, que es como NEXUS guarda las tasas.
+    // Al revés daría dólares por euro, que es el número que se suele citar
+    // y justo el que NO va acá.
+    EUR: bcv && bsPorEuro ? bcv / bsPorEuro : null,
+    // Efectivo y USDT se cambian a la tasa paralela, así que valen MÁS que
+    // 1 dólar BCV: BCV ÷ paralelo da menos de 1.
+    CASH: cash,
+    USDT: cash,
+  };
+}
+
 function monthRange(month) {
   const [y, m] = month.split("-").map(Number);
   const last = new Date(y, m, 0).getDate();
@@ -1106,7 +1140,8 @@ server.registerTool(
         lugar: t.place || null,
         categoria: catName.get(t.category_id) ?? null,
         monto: `${t.amount} ${t.currency}`,
-        en_dolares: Number(t.amount_usd.toFixed(2)),
+        forma_de_pago: t.rate_label || "BCV",
+        en_dolares_bcv: Number(t.amount_usd.toFixed(2)),
       })),
     });
   })
@@ -1118,24 +1153,32 @@ server.registerTool(
     description:
       'Registra un ingreso o un gasto. Ejemplo: "gasté 5$ en el Gama en ' +
       'supermercado" → kind=expense, amount=5, currency=USD, place="El Gama", ' +
-      'category="Supermercado". Si la categoría no existe, se crea. Para ' +
-      "monedas que no son dólares usa la tasa guardada salvo que te den otra.",
+      'category="Supermercado". IMPORTANTE: 50$ en efectivo o USDT NO valen ' +
+      'lo mismo que 50$ BCV — se cambian a la tasa paralela, que es más ' +
+      'alta. Si el mensaje dice "efectivo", "cash" o "USDT", poné ' +
+      'rate_code="CASH" o "USDT" aunque currency sea USD. Si no dice nada, ' +
+      'currency=USD sin rate_code se trata como dólar BCV (1:1). Si la ' +
+      "categoría no existe, se crea.",
     inputSchema: z.object({
       kind: z.enum(["income", "expense"]).describe("income = ingreso, expense = gasto"),
-      amount: z.number().positive().describe("Monto en la moneda en que se pagó"),
+      amount: z.number().positive().describe("Monto en la moneda/forma de pago en que se pagó"),
       currency: z
         .string()
         .optional()
-        .describe('Moneda: "USD" (por defecto), "VES" para bolívares, "EUR"'),
+        .describe('Moneda real del monto: "USD" (por defecto), "VES" para bolívares, "EUR"'),
       rate_code: z
         .string()
         .optional()
-        .describe('Qué tasa usar para convertir: "BCV", "PARALELO", "EUR". Por defecto BCV si la moneda es VES'),
+        .describe(
+          'Con qué se pagó, cuando no es dólar BCV 1:1: "BCV" (bolívares, por defecto si currency=VES), ' +
+            '"EUR", "CASH" (dólar efectivo) o "USDT". Efectivo y USDT están en dólares pero valen MÁS ' +
+            "que el BCV porque se cambian al paralelo — siempre especificalo si el mensaje lo menciona."
+        ),
       rate_per_usd: z
         .number()
         .positive()
         .optional()
-        .describe("Tasa puntual: cuántas unidades de esa moneda son 1 dólar BCV. Pisa a rate_code"),
+        .describe("Tasa puntual: cuántas unidades de esa forma de pago son 1 dólar BCV. Pisa a rate_code"),
       category: z.string().optional().describe("Nombre de la categoría, ej. Supermercado"),
       place: z.string().optional().describe("Dónde fue, ej. El Gama"),
       description: z.string().optional().describe("Qué fue"),
@@ -1148,9 +1191,14 @@ server.registerTool(
     const currency = (args.currency || "USD").toUpperCase();
 
     // --- tasa
+    // Hace falta tasa si: la moneda no es dólar, O se especificó una forma
+    // de pago (CASH/USDT) aunque el monto esté en dólares — son dólares que
+    // valen más que el BCV, no la referencia.
+    const needsRate = currency !== "USD" || !!args.rate_code;
+
     let ratePerUsd = 1;
     let rateLabel = "";
-    if (currency !== "USD") {
+    if (needsRate) {
       if (args.rate_per_usd) {
         ratePerUsd = args.rate_per_usd;
         rateLabel = args.rate_code || "manual";
@@ -1161,13 +1209,39 @@ server.registerTool(
           .select("*")
           .eq("code", code)
           .maybeSingle();
-        if (!rate || rate.per_usd === null) {
-          return fail(
-            `No hay tasa cargada para "${code}". Andrés la pone en Finance → Ingresos y gastos → Tasas, o pasame rate_per_usd. No la invento.`
-          );
+
+        if (rate && rate.per_usd !== null) {
+          ratePerUsd = Number(rate.per_usd);
+          rateLabel = rate.code;
+        } else {
+          // Sin tasa guardada, se trae la del día en vez de rechazar el
+          // movimiento: Andrés suele decir el monto en bolívares, efectivo
+          // o USDT y espera que el cálculo salga solo. Nunca se inventa.
+          const live = await fetchDolarApi().catch(() => null);
+          const value = live?.[code.toUpperCase()] ?? null;
+          if (!value) {
+            return fail(
+              `No hay tasa cargada para "${code}" y DolarAPI tampoco respondió. Andrés la pone en Finance → Ingresos y gastos → Tasas, o pasame rate_per_usd. No la invento.`
+            );
+          }
+          ratePerUsd = value;
+          rateLabel = code.toUpperCase();
+          // Y se guarda, para que el próximo movimiento ya la tenga
+          if (rate) {
+            await supabase
+              .from("finance_rates")
+              .update({ per_usd: value, updated_at: new Date().toISOString() })
+              .eq("id", rate.id);
+          } else {
+            await supabase.from("finance_rates").insert({
+              user_id: userId,
+              code: code.toUpperCase(),
+              label: code.toUpperCase(),
+              currency,
+              per_usd: value,
+            });
+          }
         }
-        ratePerUsd = Number(rate.per_usd);
-        rateLabel = rate.code;
       }
     }
 
@@ -1218,14 +1292,63 @@ server.registerTool(
     if (error) throw new Error(error.message);
 
     const tipo = args.kind === "income" ? "Ingreso" : "Gasto";
+    // Si no hubo conversión (dólar BCV puro), el monto y el equivalente son
+    // el mismo número y no hace falta repetirlo.
     const equiv =
-      currency === "USD"
+      ratePerUsd === 1
         ? `${args.amount}`
-        : `${args.amount} ${currency} = ${amountUsd.toFixed(2)} (tasa ${ratePerUsd})`;
+        : `${args.amount} ${currency === "USD" ? rateLabel : currency} = ${amountUsd.toFixed(2)} BCV (tasa ${ratePerUsd})`;
     return ok(
       `${tipo} registrado: ${equiv}${args.category ? ` en ${args.category}` : ""}${
         args.place ? `, ${args.place}` : ""
       }.`
+    );
+  })
+);
+
+server.registerTool(
+  "refresh_rates",
+  {
+    description:
+      "Trae las tasas del día (BCV y euro) de DolarAPI y las guarda " +
+      "en NEXUS. No toca los movimientos ya registrados: cada uno guarda la " +
+      "tasa que usó.",
+    inputSchema: z.object({}),
+  },
+  tool(async () => {
+    const { supabase, userId } = await getSession();
+    const live = await fetchDolarApi();
+
+    const saved = [];
+    for (const [code, value] of Object.entries(live)) {
+      if (!value) continue;
+      const { data: existing } = await supabase
+        .from("finance_rates")
+        .select("id,label")
+        .eq("code", code)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from("finance_rates")
+          .update({ per_usd: value, updated_at: new Date().toISOString() })
+          .eq("id", existing.id);
+      } else {
+        await supabase.from("finance_rates").insert({
+          user_id: userId,
+          code,
+          label: code,
+          currency: code === "EUR" ? "EUR" : "VES",
+          per_usd: value,
+        });
+      }
+      saved.push(`${code}: ${Number(value).toFixed(4)} por dólar`);
+    }
+
+    return ok(
+      saved.length
+        ? `Tasas actualizadas — ${saved.join(" · ")}`
+        : "DolarAPI no devolvió ninguna tasa usable."
     );
   })
 );
@@ -1238,7 +1361,7 @@ server.registerTool(
       "es cuántas unidades de esa moneda equivalen a 1 dólar BCV. No cambia " +
       "los movimientos ya registrados.",
     inputSchema: z.object({
-      code: z.string().describe('BCV, PARALELO, EUR...'),
+      code: z.string().describe('BCV o EUR'),
       per_usd: z.number().positive().describe("Cuántas unidades son 1 dólar BCV"),
     }),
   },

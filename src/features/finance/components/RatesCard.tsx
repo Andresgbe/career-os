@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Check, Pencil, RefreshCw, AlertTriangle, Download } from "lucide-react";
 import { errorMessage } from "../../../lib/errors";
-import { saveRate } from "../flowApi";
-import { fetchRates, RATE_CODE_MAP } from "../dolarApi";
+import { saveRate, syncRates } from "../flowApi";
 import type { FinanceRateRow } from "../flow";
 
 interface RatesCardProps {
@@ -20,36 +19,11 @@ export default function RatesCard({ rates, onChange }: RatesCardProps) {
   const [syncing, setSyncing] = useState(false);
   const [syncedAt, setSyncedAt] = useState("");
 
-  // Trae las tasas del día de DolarAPI y guarda las que tengan código
-  // conocido (BCV, PARALELO, EUR). Las que Andrés haya agregado a mano se
-  // quedan como están: no hay de dónde sacarlas.
   async function sync() {
     setSyncing(true);
     setError("");
     try {
-      const fetched = await fetchRates();
-      const updates = rates
-        .map((rate) => {
-          const key = RATE_CODE_MAP[rate.code.toUpperCase()];
-          const value = key ? (fetched[key] as number | null) : null;
-          return value && value > 0 ? { rate, value } : null;
-        })
-        .filter((x): x is { rate: FinanceRateRow; value: number } => x !== null);
-
-      if (updates.length === 0) {
-        setError("DolarAPI respondió, pero sin tasas que pueda usar.");
-        return;
-      }
-
-      await Promise.all(updates.map(({ rate, value }) => saveRate(rate.id, value)));
-
-      const now = new Date().toISOString();
-      const byId = new Map(updates.map(({ rate, value }) => [rate.id, value]));
-      onChange(
-        rates.map((r) =>
-          byId.has(r.id) ? { ...r, per_usd: byId.get(r.id)!, updated_at: now } : r
-        )
-      );
+      onChange(await syncRates(rates));
       setSyncedAt(new Date().toLocaleTimeString("es-VE"));
     } catch (err) {
       setError(errorMessage(err, "No pude traer las tasas de DolarAPI"));

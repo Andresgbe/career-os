@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { X, Save, TrendingDown, TrendingUp, AlertTriangle } from "lucide-react";
 import { errorMessage } from "../../../lib/errors";
 import { addTransaction, updateTransaction } from "../flowApi";
-import { currencyOptions, money, toUsd, todayIso } from "../flow";
+import { currencyOptions, money, toUsd, todayIso, USD_BCV } from "../flow";
 import type {
   FinanceCategoryRow,
   FinanceRateRow,
@@ -33,12 +33,14 @@ export default function TransactionModal({
   );
   // Qué opción de moneda/tasa está elegida (USD, BCV, PARALELO, EUR...)
   const [option, setOption] = useState(() => {
-    if (!transaction) return "USD";
-    if (transaction.currency === "USD") return "USD";
-    return transaction.rate_label || transaction.currency;
+    if (!transaction) return USD_BCV;
+    // Lo guardado apunta a su forma de pago por la etiqueta; si era un
+    // dólar BCV viejo (sin etiqueta y tasa 1), cae en la referencia.
+    if (transaction.rate_per_usd === 1 && !transaction.rate_label) return USD_BCV;
+    return transaction.rate_label || USD_BCV;
   });
   const [rateOverride, setRateOverride] = useState(
-    transaction && transaction.currency !== "USD"
+    transaction && transaction.rate_per_usd !== 1
       ? String(transaction.rate_per_usd)
       : ""
   );
@@ -51,6 +53,8 @@ export default function TransactionModal({
   const [error, setError] = useState("");
 
   const selected = options.find((o) => o.code === option) ?? options[0];
+  // El dólar BCV es la unidad de medida: su tasa es 1 y no se toca.
+  const isReference = selected.code === USD_BCV;
 
   // La tasa efectiva: la que escribió a mano para este movimiento, o la
   // guardada para esa moneda.
@@ -66,8 +70,7 @@ export default function TransactionModal({
       : 0;
 
   const missingRate =
-    selected.currency !== "USD" &&
-    (!Number.isFinite(effectiveRate) || effectiveRate <= 0);
+    !isReference && (!Number.isFinite(effectiveRate) || effectiveRate <= 0);
 
   const visibleCategories = categories.filter(
     (c) => c.kind === kind || c.kind === "both"
@@ -96,7 +99,7 @@ export default function TransactionModal({
         category_id: categoryId || null,
         amount: parsedAmount,
         currency: selected.currency,
-        rate_per_usd: selected.currency === "USD" ? 1 : effectiveRate,
+        rate_per_usd: isReference ? 1 : effectiveRate,
         rate_label: selected.rateLabel,
         note: note.trim(),
       };
@@ -178,7 +181,7 @@ export default function TransactionModal({
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted">Moneda</label>
+              <label className="text-xs text-muted">Cómo se pagó</label>
               <select
                 value={option}
                 onChange={(e) => {
@@ -197,11 +200,18 @@ export default function TransactionModal({
             </div>
           </div>
 
-          {/* Tasa, solo cuando no es en dólares */}
-          {selected.currency !== "USD" && (
+          {/* Tasa: va para todo lo que no sea el dólar BCV, incluido el
+              efectivo y el USDT, que están en dólares pero valen más. */}
+          {!isReference && (
             <div className="flex flex-col gap-1">
               <label className="text-xs text-muted">
-                Tasa — cuántos {selected.currency === "VES" ? "Bs" : selected.currency} por 1 $
+                Tasa — cuántos{" "}
+                {selected.currency === "VES"
+                  ? "Bs"
+                  : selected.currency === "EUR"
+                    ? "€"
+                    : selected.label.replace(/\s*\(.*\)$/, "")}{" "}
+                equivalen a 1 $ BCV
               </label>
               <input
                 inputMode="decimal"
@@ -243,7 +253,10 @@ export default function TransactionModal({
                 >
                   {kind === "income" ? "+" : "-"}${money(usd)}
                 </strong>
-                <span className="text-xs text-muted">USD BCV</span>
+                <span className="text-xs text-muted">
+                  USD BCV
+                  {!isReference && ` · tasa ${selected.label} ${effectiveRate}`}
+                </span>
               </>
             )}
           </div>

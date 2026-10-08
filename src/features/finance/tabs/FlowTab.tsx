@@ -9,10 +9,13 @@ import {
   Pencil,
   Trash2,
   SlidersHorizontal,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { errorMessage } from "../../../lib/errors";
 import ConfirmDialog from "../../../components/ConfirmDialog";
 import MonthChart from "../components/MonthChart";
+import MissingRatesBanner from "../components/MissingRatesBanner";
 import RatesCard from "../components/RatesCard";
 import CategoryManager from "../components/CategoryManager";
 import TransactionModal from "../components/TransactionModal";
@@ -21,6 +24,7 @@ import {
   getRates,
   getTransactions,
   deleteTransaction,
+  syncRates,
 } from "../flowApi";
 import {
   amountLabel,
@@ -30,8 +34,10 @@ import {
   dayLabel,
   money,
   monthLabel,
+  rateName,
   shiftMonth,
   totals,
+  wasConverted,
 } from "../flow";
 import type {
   FinanceCategoryRow,
@@ -51,6 +57,7 @@ export default function FlowTab() {
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<TransactionRow | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showList, setShowList] = useState(true);
 
   // Categorías y tasas se cargan una vez; las transacciones, por mes.
   useEffect(() => {
@@ -193,6 +200,22 @@ export default function FlowTab() {
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
+      {/* Si falta alguna tasa, nada de lo que esté en bolívares se puede
+          convertir. Va arriba de todo porque bloquea el uso del módulo. */}
+      <MissingRatesBanner
+        rates={rates}
+        onSync={async () => setRates(await syncRates(rates))}
+      />
+
+      {/* Tasas y categorías van acá arriba, apenas se abren: al final de la
+          página quedaban debajo de la gráfica y no se encontraban. */}
+      {showSettings && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <RatesCard rates={rates} onChange={setRates} />
+          <CategoryManager categories={categories} onChange={setCategories} />
+        </div>
+      )}
+
       {/* Totales */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <SummaryCard
@@ -232,20 +255,23 @@ export default function FlowTab() {
         />
       </div>
 
-      {showSettings && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <RatesCard rates={rates} onChange={setRates} />
-          <CategoryManager categories={categories} onChange={setCategories} />
-        </div>
-      )}
-
       {/* Movimientos */}
       <section className="bg-surface border border-border rounded-xl overflow-hidden">
-        <h3 className="text-sm font-semibold px-4 sm:px-5 py-3 border-b border-border">
-          Movimientos ({transactions.length})
-        </h3>
+        <button
+          onClick={() => setShowList((v) => !v)}
+          className="w-full flex items-center justify-between gap-2 px-4 sm:px-5 py-3 border-b border-border hover:bg-surface-hover/50 transition-colors"
+        >
+          <h3 className="text-sm font-semibold">
+            Movimientos ({transactions.length})
+          </h3>
+          {showList ? (
+            <ChevronUp className="w-4 h-4 text-muted" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-muted" />
+          )}
+        </button>
 
-        {loading ? (
+        {!showList ? null : loading ? (
           <p className="text-sm text-muted p-5">Cargando...</p>
         ) : transactions.length === 0 ? (
           <div className="p-8 text-center space-y-3">
@@ -311,12 +337,14 @@ export default function FlowTab() {
                           >
                             {income ? "+" : "-"}${money(tx.amount_usd)}
                           </p>
-                          {tx.currency !== "USD" && (
-                            <p className="text-xs text-muted tabular-nums">
-                              {amountLabel(tx)}
-                              {tx.rate_label ? ` · ${tx.rate_label}` : ""}
-                            </p>
-                          )}
+                          {/* Con qué se pagó y a qué tasa. Si fue en dólares
+                              BCV el monto original es el mismo número, así
+                              que solo se nombra la forma de pago. */}
+                          <p className="text-xs text-muted tabular-nums">
+                            {wasConverted(tx)
+                              ? `${amountLabel(tx)} · ${rateName(tx)} ${tx.rate_per_usd}`
+                              : rateName(tx)}
+                          </p>
                         </div>
 
                         <div className="flex items-center gap-0.5 shrink-0">

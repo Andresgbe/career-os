@@ -1799,3 +1799,30 @@ create policy "nexus delete" on tasks for delete
 -- where schemaname = 'public' and policyname like 'nexus %'
 -- group by tablename
 -- order by politicas, tablename;
+
+
+-- ============================================
+-- BLOQUE 8 — FORMAS DE PAGO (efectivo, USDT) EN FINANZAS
+--
+-- No es solo la moneda: 50 $ en efectivo o en USDT valen MÁS que 50 $ BCV,
+-- porque se cambian a otra tasa. finance_rates ya servía para esto —
+-- "cuántas unidades de X equivalen a 1 USD BCV"—, solo le faltaban filas
+-- para el efectivo y el USDT. Para dólares, per_usd queda bajo 1 (valen
+-- más que el BCV, hace falta menos para llegar a 1 dólar BCV).
+--
+-- Se quita además "paralelo": Andrés no la usa, todo se registra a BCV.
+-- ============================================
+
+delete from finance_rates where code = 'PARALELO';
+
+update finance_rates set label = 'Bolívares (Bs)' where code = 'BCV';
+
+insert into finance_rates (user_id, code, label, currency, per_usd)
+select u.id, r.code, r.label, r.currency, null
+from auth.users u
+cross join (values
+  ('CASH', 'Dólar efectivo', 'USD'),
+  ('USDT', 'USDT',           'USD')
+) as r(code, label, currency)
+where u.email = 'andresgilbe2021@gmail.com'
+on conflict (user_id, code) do nothing;
