@@ -12,7 +12,7 @@ async function requireUser() {
   if (!user) throw new Error("Not authenticated");
   return user;
 }
-
+ 
 // ============================================
 // CATEGORIES (board columns)
 // ============================================
