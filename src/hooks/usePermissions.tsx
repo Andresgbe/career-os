@@ -93,26 +93,30 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
 
   const isAdmin = profile?.role === "admin" && profile.active;
   // Antes de instalar los permisos no hay a quién limitar: la única cuenta
-  // es la de Andrés.
-  const unmanaged = !!session && !installed;
+  // es la de Andrés. Mientras TODAVÍA se está cargando no se sabe quién es,
+  // y ahí la respuesta es "nadie": si no, un invitado vería por un instante
+  // el Dashboard y los links de admin antes de que llegue su perfil.
+  const unmanaged = !!session && !loading && !installed;
 
   const canView = useCallback(
     (moduleId: string) =>
-      unmanaged || isAdmin || modules[moduleId]?.can_view === true,
-    [unmanaged, isAdmin, modules]
+      !loading && (unmanaged || isAdmin || modules[moduleId]?.can_view === true),
+    [loading, unmanaged, isAdmin, modules]
   );
 
   const canEdit = useCallback(
     (moduleId: string) =>
-      unmanaged || isAdmin || modules[moduleId]?.can_edit === true,
-    [unmanaged, isAdmin, modules]
+      !loading && (unmanaged || isAdmin || modules[moduleId]?.can_edit === true),
+    [loading, unmanaged, isAdmin, modules]
   );
 
   return (
     <PermissionsContext.Provider
       value={{
         profile,
-        isAdmin: isAdmin || unmanaged,
+        // Hasta saber quién es, no es admin. Se abre cuando se confirma,
+        // no mientras se averigua.
+        isAdmin: !loading && (isAdmin || unmanaged),
         loading,
         canView,
         canEdit,

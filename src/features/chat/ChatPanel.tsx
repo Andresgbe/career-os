@@ -2,16 +2,23 @@ import { errorMessage } from "../../lib/errors";
 import { useEffect, useRef, useState } from "react";
 import {
   Send, Loader2, Trash2, Bot, User, AlertCircle, Clock, Paperclip, X as XIcon,
+  Square, History, Plus,
 } from "lucide-react";
 import ConfirmDialog from "../../components/ConfirmDialog";
+import ConversationList from "./ConversationList";
 import {
+  getConversations,
+  createConversation,
+  renameConversation,
+  deleteConversation,
   getMessages,
   sendMessage,
   clearMessages,
+  cancelMessage,
   uploadChatImage,
   getChatImageUrl,
 } from "./api";
-import type { ChatMessageRow } from "./types";
+import type { ChatMessageRow, ConversationRow } from "./types";
 import { isWaiting } from "./types";
 
 const POLL_MS = 2000;
@@ -24,9 +31,16 @@ const SUGGESTIONS = [
 ];
 
 export default function ChatPanel() {
+  const [conversations, setConversations] = useState<ConversationRow[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessageRow[]>([]);
   const [draft, setDraft] = useState("");
-  const [loading, setLoading] = useState(true);
+  // Última conversación cuyos mensajes ya llegaron
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  // Si ni siquiera se pudo traer la lista de chats, no tiene sentido seguir
+  // diciendo "Cargando...": ya se mostró el error y no va a llegar nada.
+  const [bootFailed, setBootFailed] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
@@ -39,27 +53,119 @@ export default function ChatPanel() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const waiting = messages.some(isWaiting);
+  // El mensaje que estamos esperando, para poder cancelarlo
+  const pendingMessage = messages.find(isWaiting) ?? null;
+
+  async function handleCancel() {
+    if (!pendingMessage) return;
+    // Se marca local primero: el botón tiene que responder al toque, no
+    // esperar el viaje de ida y vuelta.
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === pendingMessage.id ? { ...m, status: "error" as const } : m
+      )
+    );
+    try {
+      await cancelMessage(pendingMessage.id);
+    } catch (err) {
+      report(err);
+      if (activeId) getMessages(activeId).then(setMessages).catch(report);
+    }
+  }
+
+  async function handleNewConversation() {
+    setHistoryOpen(false);
+    try {
+      const created = await createConversation();
+      setConversations((prev) => [created, ...prev]);
+      setMessages([]);
+      setActiveId(created.id);
+    } catch (err) {
+      report(err);
+    }
+  }
+
+  async function handleRename(id: string, title: string) {
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, title } : c))
+    );
+    try {
+      await renameConversation(id, title);
+    } catch (err) {
+      report(err);
+    }
+  }
+
+  async function handleDeleteConversation(conversation: ConversationRow) {
+    const remaining = conversations.filter((c) => c.id !== conversation.id);
+    setConversations(remaining);
+    try {
+      await deleteConversation(conversation.id);
+    } catch (err) {
+      report(err);
+      return;
+    }
+    if (activeId !== conversation.id) return;
+    // Se borró la que estaba abierta: se pasa a la siguiente, o se crea una
+    if (remaining.length > 0) {
+      setActiveId(remaining[0].id);
+    } else {
+      await handleNewConversation();
+    }
+  }
   // "running" means the worker claimed it, so the PC is on and Claude is
   // working. "pending" means nothing has picked it up yet — most likely the
   // PC is off, and it'll be answered whenever the worker next starts.
   const queuedOnly =
     waiting && !messages.some((m) => m.role === "user" && m.status === "running");
 
+  // Al abrir: la lista de chats, y se entra al más reciente. Si no hay
+  // ninguno todavía, se crea uno para poder empezar a escribir.
   useEffect(() => {
-    getMessages()
-      .then(setMessages)
-      .catch(report)
-      .finally(() => setLoading(false));
+    getConversations()
+      .then(async (rows) => {
+        if (rows.length > 0) {
+          setConversations(rows);
+          setActiveId(rows[0].id);
+          return;
+        }
+        const created = await createConversation();
+        setConversations([created]);
+        setActiveId(created.id);
+      })
+      .catch((err) => {
+        report(err);
+        setBootFailed(true);
+      });
   }, []);
+
+  // "Cargando" se deriva de qué conversación tiene ya sus mensajes, en vez
+  // de encenderse a mano dentro del efecto.
+  useEffect(() => {
+    if (!activeId) return;
+    let cancelled = false;
+    getMessages(activeId)
+      .then((rows) => {
+        if (cancelled) return;
+        setMessages(rows);
+      })
+      .catch(report)
+      .finally(() => {
+        if (!cancelled) setLoadedFor(activeId);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeId]);
 
   // While the worker owes us an answer, keep checking for it
   useEffect(() => {
-    if (!waiting) return;
+    if (!waiting || !activeId) return;
     const timer = setInterval(() => {
-      getMessages().then(setMessages).catch(report);
+      getMessages(activeId).then(setMessages).catch(report);
     }, POLL_MS);
     return () => clearInterval(timer);
-  }, [waiting]);
+  }, [waiting, activeId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -103,13 +209,14 @@ export default function ChatPanel() {
     setSending(true);
     setError("");
     try {
-      const row = await sendMessage(
-        content || "Archivá esta foto donde corresponda en NEXUS.",
-        pendingImage?.path ?? null
-      );
+      if (!activeId) return;
+      const text = content || "Archivá esta foto donde corresponda en NEXUS.";
+      const row = await sendMessage(activeId, text, pendingImage?.path ?? null);
       setMessages((prev) => [...prev, row]);
       setDraft("");
       setPendingImage(null);
+      // El título lo pone sendMessage si la conversación seguía sin nombre
+      getConversations().then(setConversations).catch(() => {});
     } catch (err) {
       report(err);
     } finally {
@@ -119,25 +226,79 @@ export default function ChatPanel() {
 
   async function handleClear() {
     setConfirmClear(false);
+    if (!activeId) return;
     setMessages([]);
     try {
-      await clearMessages();
+      await clearMessages(activeId);
     } catch (err) {
       report(err);
     }
   }
 
+  const activeConversation =
+    conversations.find((c) => c.id === activeId) ?? null;
+  const loading = !bootFailed && (!activeId || loadedFor !== activeId);
+
   return (
-    <div className="flex flex-col w-full h-[calc(100dvh-15rem)] min-h-[420px]">
-      {messages.length > 0 && (
-        <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+    <div className="flex gap-4 w-full h-[calc(100dvh-15rem)] min-h-[420px]">
+      {/* Historial fijo, solo en pantallas anchas */}
+      <aside className="hidden lg:block w-56 shrink-0">
+        <ConversationList
+          conversations={conversations}
+          activeId={activeId}
+          onSelect={setActiveId}
+          onCreate={handleNewConversation}
+          onRename={handleRename}
+          onDelete={handleDeleteConversation}
+        />
+      </aside>
+
+      <div className="relative flex flex-col flex-1 min-w-0">
+      {/* Barra del chat: qué conversación es, historial y nueva */}
+      <div className="flex items-center gap-2 mb-3">
+        <button
+          onClick={() => setHistoryOpen((v) => !v)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm text-muted hover:bg-surface-hover transition-colors lg:hidden shrink-0"
+          aria-label="Historial de chats"
+        >
+          <History className="w-4 h-4" />
+        </button>
+        <span className="flex-1 min-w-0 truncate text-sm font-medium">
+          {activeConversation?.title ?? "Chat"}
+        </span>
+        <button
+          onClick={handleNewConversation}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-muted hover:text-primary hover:bg-surface-hover transition-colors shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Nuevo
+        </button>
+        {messages.length > 0 && (
           <button
             onClick={() => setConfirmClear(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs text-muted hover:text-red-400 hover:bg-surface-hover transition-colors shrink-0"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-muted hover:text-red-400 hover:bg-surface-hover transition-colors shrink-0"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            Limpiar
+            <span className="hidden sm:inline">Limpiar</span>
           </button>
+        )}
+      </div>
+
+      {/* En el teléfono el historial tapa el chat; en desktop va al costado */}
+      {historyOpen && (
+        <div className="absolute inset-0 z-20 lg:hidden">
+          <ConversationList
+            conversations={conversations}
+            activeId={activeId}
+            onSelect={(id) => {
+              setActiveId(id);
+              setHistoryOpen(false);
+            }}
+            onCreate={handleNewConversation}
+            onRename={handleRename}
+            onDelete={handleDeleteConversation}
+            onClose={() => setHistoryOpen(false)}
+          />
         </div>
       )}
 
@@ -245,15 +406,20 @@ export default function ChatPanel() {
                   <div>
                     <p className="text-sm">En cola</p>
                     <p className="text-xs text-muted mt-0.5">
-                      Se responde sola cuando tu PC esté encendida. Podés
-                      cerrar esto, el mensaje no se pierde.
+                      Se responde sola en cuanto se pueda: cuando tu PC esté
+                      encendida y Claude esté disponible. Si está topado el
+                      uso, reintenta solo. Podés cerrar esto, no se pierde.
                     </p>
+                    <CancelButton onClick={handleCancel} />
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-muted" />
-                  <span className="text-sm text-muted">Pensando...</span>
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-muted" />
+                    <span className="text-sm text-muted">Pensando...</span>
+                  </span>
+                  <CancelButton onClick={handleCancel} />
                 </div>
               )}
             </div>
@@ -323,11 +489,27 @@ export default function ChatPanel() {
       {confirmClear && (
         <ConfirmDialog
           title="Limpiar el chat"
-          message="Se borran todos los mensajes. Las tareas y cambios que ya hizo en NEXUS se quedan."
+          confirmLabel="Limpiar"
+          message="Se borran los mensajes de esta conversación y Claude empieza de cero en ella. Las tareas y cambios que ya hizo en NEXUS se quedan."
           onConfirm={handleClear}
           onCancel={() => setConfirmClear(false)}
         />
       )}
+      </div>
     </div>
+  );
+}
+
+// Botón para cortar un mensaje que está en cola o corriendo. Se muestra
+// dentro de la burbuja de espera, que es donde el ojo ya está mirando.
+function CancelButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="mt-1.5 flex items-center gap-1.5 px-2 py-1 rounded text-xs text-muted hover:text-red-400 hover:bg-surface-hover transition-colors"
+    >
+      <Square className="w-3 h-3 fill-current" />
+      Detener
+    </button>
   );
 }

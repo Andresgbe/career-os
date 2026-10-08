@@ -6,12 +6,26 @@
 export type ChatRole = "user" | "assistant";
 
 // pending = waiting for the worker, running = the worker took it,
-// done = answered, error = the run failed (content holds the reason)
+// done = answered, error = the run failed (content holds the reason) or
+// Andrés lo detuvo desde el chat
 export type ChatStatus = "pending" | "running" | "done" | "error";
+
+// Una conversación del historial. Cada una tiene su propia sesión de Claude
+// Code, que es lo que hace que empezar una nueva arranque de cero en vez de
+// arrastrar todo lo anterior.
+export interface ConversationRow {
+  id: string;
+  user_id: string;
+  title: string;
+  session_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface ChatMessageRow {
   id: string;
   user_id: string;
+  conversation_id: string | null;
   role: ChatRole;
   content: string;
   status: ChatStatus;
@@ -26,4 +40,13 @@ export function isWaiting(message: ChatMessageRow): boolean {
     message.role === "user" &&
     (message.status === "pending" || message.status === "running")
   );
+}
+
+export const NEW_CONVERSATION_TITLE = "Nueva conversación";
+
+// Título a partir del primer mensaje, para no dejar todo llamándose igual
+export function titleFrom(content: string): string {
+  const clean = content.trim().replace(/\s+/g, " ");
+  if (!clean) return NEW_CONVERSATION_TITLE;
+  return clean.length > 40 ? `${clean.slice(0, 40)}…` : clean;
 }

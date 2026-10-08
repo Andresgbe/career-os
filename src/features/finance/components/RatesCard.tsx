@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Check, Pencil, RefreshCw, AlertTriangle } from "lucide-react";
+import { Check, Pencil, RefreshCw, AlertTriangle, Download } from "lucide-react";
 import { errorMessage } from "../../../lib/errors";
 import { saveRate } from "../flowApi";
+import { fetchRates, RATE_CODE_MAP } from "../dolarApi";
 import type { FinanceRateRow } from "../flow";
 
 interface RatesCardProps {
@@ -16,6 +17,46 @@ export default function RatesCard({ rates, onChange }: RatesCardProps) {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncedAt, setSyncedAt] = useState("");
+
+  // Trae las tasas del día de DolarAPI y guarda las que tengan código
+  // conocido (BCV, PARALELO, EUR). Las que Andrés haya agregado a mano se
+  // quedan como están: no hay de dónde sacarlas.
+  async function sync() {
+    setSyncing(true);
+    setError("");
+    try {
+      const fetched = await fetchRates();
+      const updates = rates
+        .map((rate) => {
+          const key = RATE_CODE_MAP[rate.code.toUpperCase()];
+          const value = key ? (fetched[key] as number | null) : null;
+          return value && value > 0 ? { rate, value } : null;
+        })
+        .filter((x): x is { rate: FinanceRateRow; value: number } => x !== null);
+
+      if (updates.length === 0) {
+        setError("DolarAPI respondió, pero sin tasas que pueda usar.");
+        return;
+      }
+
+      await Promise.all(updates.map(({ rate, value }) => saveRate(rate.id, value)));
+
+      const now = new Date().toISOString();
+      const byId = new Map(updates.map(({ rate, value }) => [rate.id, value]));
+      onChange(
+        rates.map((r) =>
+          byId.has(r.id) ? { ...r, per_usd: byId.get(r.id)!, updated_at: now } : r
+        )
+      );
+      setSyncedAt(new Date().toLocaleTimeString("es-VE"));
+    } catch (err) {
+      setError(errorMessage(err, "No pude traer las tasas de DolarAPI"));
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function commit(rate: FinanceRateRow) {
     const raw = draft.trim().replace(",", ".");
@@ -48,10 +89,24 @@ export default function RatesCard({ rates, onChange }: RatesCardProps) {
 
   return (
     <div className="bg-surface border border-border rounded-xl p-4 sm:p-5 space-y-3">
-      <h3 className="text-sm font-semibold flex items-center gap-2">
-        <RefreshCw className="w-4 h-4 text-primary" />
-        Tasas
-      </h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <RefreshCw className="w-4 h-4 text-primary" />
+          Tasas
+        </h3>
+        <button
+          onClick={sync}
+          disabled={syncing}
+          className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-muted hover:text-primary hover:bg-surface-hover transition-colors disabled:opacity-50"
+        >
+          <Download className={`w-3.5 h-3.5 ${syncing ? "animate-pulse" : ""}`} />
+          {syncing ? "Trayendo..." : "Actualizar del BCV"}
+        </button>
+      </div>
+
+      {syncedAt && (
+        <p className="text-xs text-emerald-400">Actualizadas a las {syncedAt}.</p>
+      )}
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
@@ -129,7 +184,16 @@ export default function RatesCard({ rates, onChange }: RatesCardProps) {
       <p className="text-xs text-muted leading-relaxed">
         Cuántas unidades de esa moneda equivalen a <strong>1 dólar BCV</strong>.
         Cambiarla no toca lo ya registrado: cada movimiento se guarda con la
-        tasa que usaste ese día.
+        tasa que usaste ese día. "Actualizar del BCV" las trae de{" "}
+        <a
+          href="https://ve.dolarapi.com"
+          target="_blank"
+          rel="noreferrer"
+          className="text-primary hover:underline"
+        >
+          DolarAPI
+        </a>
+        .
       </p>
     </div>
   );

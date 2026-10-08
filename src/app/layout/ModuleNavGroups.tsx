@@ -67,7 +67,10 @@ export default function ModuleNavGroups({
     ...visibleModules.filter((m) => !groupedIds.has(m.id)),
     ...(isAdmin ? [ADMIN_MODULE] : []),
   ];
-  const useFlatNav = loading || columns.length === 0;
+  // Las columnas son el tablero del dashboard, y el dashboard es del
+  // administrador. Un invitado ve una lista plana de lo que le asignaron,
+  // aunque su cuenta tenga columnas sueltas guardadas de antes.
+  const useFlatNav = loading || !isAdmin || columns.length === 0;
 
   // Until the user makes a manual choice, keep whichever group contains
   // the current page open so navigating there doesn't hide where you are.
