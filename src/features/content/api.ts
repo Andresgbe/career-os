@@ -15,7 +15,7 @@ async function requireUser() {
  
 // ============================================
 // CATEGORIES (board columns)
-// ============================================
+// ============================================ 
 
 export async function getCategories(): Promise<CategoryRow[]> {
   const { data, error } = await supabase
