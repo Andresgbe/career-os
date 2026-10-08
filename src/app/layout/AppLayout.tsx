@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X, LogOut } from "lucide-react";
 import { APP_NAME } from "../../lib/constants";
 import { useAuth } from "../../hooks/useAuth";
+import { usePermissions } from "../../hooks/usePermissions";
 import { supabase } from "../../lib/supabase";
 import SectionContextButton from "../../components/SectionContextButton";
 import ModuleNavGroups from "./ModuleNavGroups";
@@ -13,6 +14,7 @@ export default function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isAdmin } = usePermissions();
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -42,16 +44,18 @@ export default function AppLayout() {
             Scrolls sideways instead of wrapping — the header is a fixed
             height, so a wrapped second row would be clipped. */}
         <nav className="hidden sm:flex items-center gap-1 ml-2 min-w-0 overflow-x-auto no-scrollbar">
-          <Link
-            to="/"
-            className={`px-3 py-1.5 rounded text-sm transition-colors shrink-0 ${
-              location.pathname === "/"
-                ? "bg-primary text-white"
-                : "text-muted hover:bg-surface-hover"
-            }`}
-          >
-            Dashboard
-          </Link>
+          {isAdmin && (
+            <Link
+              to="/"
+              className={`px-3 py-1.5 rounded text-sm transition-colors shrink-0 ${
+                location.pathname === "/"
+                  ? "bg-primary text-white"
+                  : "text-muted hover:bg-surface-hover"
+              }`}
+            >
+              Dashboard
+            </Link>
+          )}
           <ModuleNavGroups variant="topbar" />
         </nav>
 
@@ -101,13 +105,15 @@ export default function AppLayout() {
               </button>
             </div>
             <nav className="flex flex-col gap-1">
-              <Link
-                to="/"
-                onClick={() => setDrawerOpen(false)}
-                className="px-3 py-2 rounded text-sm text-muted hover:bg-surface-hover transition-colors"
-              >
-                Dashboard
-              </Link>
+              {isAdmin && (
+                <Link
+                  to="/"
+                  onClick={() => setDrawerOpen(false)}
+                  className="px-3 py-2 rounded text-sm text-muted hover:bg-surface-hover transition-colors"
+                >
+                  Dashboard
+                </Link>
+              )}
               <ModuleNavGroups
                 variant="drawer"
                 onNavigate={() => setDrawerOpen(false)}

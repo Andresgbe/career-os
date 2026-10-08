@@ -1017,6 +1017,261 @@ server.registerTool(
 );
 
 // ============================================
+// FINANZAS — INGRESOS Y GASTOS
+//
+// Regla de conversión, una sola para todas las monedas:
+//   rate_per_usd = cuántas unidades de esa moneda equivalen a 1 USD BCV
+//   amount_usd   = amount / rate_per_usd
+// El equivalente se guarda con la transacción: la tasa de hoy no cambia
+// lo que se gastó hace un mes.
+// ============================================
+
+function monthRange(month) {
+  const [y, m] = month.split("-").map(Number);
+  const last = new Date(y, m, 0).getDate();
+  return [`${month}-01`, `${month}-${String(last).padStart(2, "0")}`];
+}
+
+server.registerTool(
+  "finance_summary",
+  {
+    description:
+      "Ingresos, gastos y balance de un mes, en dólares BCV, con el desglose " +
+      "por categoría y los últimos movimientos. Úsalo antes de responder " +
+      "cualquier cosa de plata.",
+    inputSchema: z.object({
+      month: z
+        .string()
+        .optional()
+        .describe("Mes en formato yyyy-mm. Por defecto, el mes actual"),
+    }),
+  },
+  tool(async ({ month }) => {
+    const { supabase } = await getSession();
+    const target = month || caracasToday().date.slice(0, 7);
+    const [from, to] = monthRange(target);
+
+    const [txs, cats, rates] = await Promise.all([
+      soft(
+        "finance_transactions",
+        supabase
+          .from("finance_transactions")
+          .select("*")
+          .gte("occurred_on", from)
+          .lte("occurred_on", to)
+          .order("occurred_on", { ascending: false })
+      ),
+      soft("finance_categories", supabase.from("finance_categories").select("*")),
+      soft("finance_rates", supabase.from("finance_rates").select("*")),
+    ]);
+
+    if (txs.error) throw new Error(txs.error);
+
+    const catName = new Map((cats.data ?? []).map((c) => [c.id, c.name]));
+    const rows = (txs.data ?? []).map((t) => ({
+      ...t,
+      amount: Number(t.amount),
+      amount_usd: Number(t.amount_usd),
+    }));
+
+    const sum = (kind) =>
+      rows.filter((t) => t.kind === kind).reduce((a, t) => a + t.amount_usd, 0);
+    const income = sum("income");
+    const expense = sum("expense");
+
+    const porCategoria = {};
+    for (const t of rows) {
+      if (t.kind !== "expense") continue;
+      const key = catName.get(t.category_id) ?? "Sin categoría";
+      porCategoria[key] = Number(((porCategoria[key] ?? 0) + t.amount_usd).toFixed(2));
+    }
+
+    return ok({
+      mes: target,
+      moneda: "USD BCV",
+      ingresos: Number(income.toFixed(2)),
+      gastos: Number(expense.toFixed(2)),
+      balance: Number((income - expense).toFixed(2)),
+      gastos_por_categoria: porCategoria,
+      tasas_cargadas: (rates.data ?? []).map((r) => ({
+        code: r.code,
+        label: r.label,
+        por_dolar: r.per_usd === null ? null : Number(r.per_usd),
+      })),
+      movimientos: rows.slice(0, 25).map((t) => ({
+        id: t.id,
+        fecha: t.occurred_on,
+        tipo: t.kind === "income" ? "ingreso" : "gasto",
+        descripcion: t.description || null,
+        lugar: t.place || null,
+        categoria: catName.get(t.category_id) ?? null,
+        monto: `${t.amount} ${t.currency}`,
+        en_dolares: Number(t.amount_usd.toFixed(2)),
+      })),
+    });
+  })
+);
+
+server.registerTool(
+  "add_transaction",
+  {
+    description:
+      'Registra un ingreso o un gasto. Ejemplo: "gasté 5$ en el Gama en ' +
+      'supermercado" → kind=expense, amount=5, currency=USD, place="El Gama", ' +
+      'category="Supermercado". Si la categoría no existe, se crea. Para ' +
+      "monedas que no son dólares usa la tasa guardada salvo que te den otra.",
+    inputSchema: z.object({
+      kind: z.enum(["income", "expense"]).describe("income = ingreso, expense = gasto"),
+      amount: z.number().positive().describe("Monto en la moneda en que se pagó"),
+      currency: z
+        .string()
+        .optional()
+        .describe('Moneda: "USD" (por defecto), "VES" para bolívares, "EUR"'),
+      rate_code: z
+        .string()
+        .optional()
+        .describe('Qué tasa usar para convertir: "BCV", "PARALELO", "EUR". Por defecto BCV si la moneda es VES'),
+      rate_per_usd: z
+        .number()
+        .positive()
+        .optional()
+        .describe("Tasa puntual: cuántas unidades de esa moneda son 1 dólar BCV. Pisa a rate_code"),
+      category: z.string().optional().describe("Nombre de la categoría, ej. Supermercado"),
+      place: z.string().optional().describe("Dónde fue, ej. El Gama"),
+      description: z.string().optional().describe("Qué fue"),
+      date: z.string().optional().describe("Fecha yyyy-mm-dd. Por defecto hoy"),
+      note: z.string().optional(),
+    }),
+  },
+  tool(async (args) => {
+    const { supabase, userId } = await getSession();
+    const currency = (args.currency || "USD").toUpperCase();
+
+    // --- tasa
+    let ratePerUsd = 1;
+    let rateLabel = "";
+    if (currency !== "USD") {
+      if (args.rate_per_usd) {
+        ratePerUsd = args.rate_per_usd;
+        rateLabel = args.rate_code || "manual";
+      } else {
+        const code = args.rate_code || (currency === "VES" ? "BCV" : currency);
+        const { data: rate } = await supabase
+          .from("finance_rates")
+          .select("*")
+          .eq("code", code)
+          .maybeSingle();
+        if (!rate || rate.per_usd === null) {
+          return fail(
+            `No hay tasa cargada para "${code}". Andrés la pone en Finance → Ingresos y gastos → Tasas, o pasame rate_per_usd. No la invento.`
+          );
+        }
+        ratePerUsd = Number(rate.per_usd);
+        rateLabel = rate.code;
+      }
+    }
+
+    // --- categoría (se crea si no existe)
+    let categoryId = null;
+    if (args.category) {
+      const wanted = args.category.trim();
+      const { data: cats } = await supabase
+        .from("finance_categories")
+        .select("id,name");
+      const found = (cats ?? []).find(
+        (c) => c.name.toLowerCase() === wanted.toLowerCase()
+      );
+      if (found) {
+        categoryId = found.id;
+      } else {
+        const { data: created, error } = await supabase
+          .from("finance_categories")
+          .insert({
+            user_id: userId,
+            name: wanted,
+            kind: args.kind,
+            sort_order: (cats ?? []).length,
+          })
+          .select("id")
+          .single();
+        if (error) throw new Error(error.message);
+        categoryId = created.id;
+      }
+    }
+
+    const amountUsd = args.amount / ratePerUsd;
+
+    const { error } = await supabase.from("finance_transactions").insert({
+      user_id: userId,
+      kind: args.kind,
+      occurred_on: args.date || caracasToday().date,
+      description: args.description || "",
+      place: args.place || "",
+      category_id: categoryId,
+      amount: args.amount,
+      currency,
+      rate_per_usd: ratePerUsd,
+      rate_label: rateLabel,
+      amount_usd: amountUsd,
+      note: args.note || "",
+    });
+    if (error) throw new Error(error.message);
+
+    const tipo = args.kind === "income" ? "Ingreso" : "Gasto";
+    const equiv =
+      currency === "USD"
+        ? `${args.amount}`
+        : `${args.amount} ${currency} = ${amountUsd.toFixed(2)} (tasa ${ratePerUsd})`;
+    return ok(
+      `${tipo} registrado: ${equiv}${args.category ? ` en ${args.category}` : ""}${
+        args.place ? `, ${args.place}` : ""
+      }.`
+    );
+  })
+);
+
+server.registerTool(
+  "set_finance_rate",
+  {
+    description:
+      "Actualiza una tasa de cambio guardada (BCV, PARALELO, EUR). El valor " +
+      "es cuántas unidades de esa moneda equivalen a 1 dólar BCV. No cambia " +
+      "los movimientos ya registrados.",
+    inputSchema: z.object({
+      code: z.string().describe('BCV, PARALELO, EUR...'),
+      per_usd: z.number().positive().describe("Cuántas unidades son 1 dólar BCV"),
+    }),
+  },
+  tool(async ({ code, per_usd }) => {
+    const { supabase, userId } = await getSession();
+    const { data: existing } = await supabase
+      .from("finance_rates")
+      .select("id,label")
+      .eq("code", code.toUpperCase())
+      .maybeSingle();
+
+    if (existing) {
+      const { error } = await supabase
+        .from("finance_rates")
+        .update({ per_usd, updated_at: new Date().toISOString() })
+        .eq("id", existing.id);
+      if (error) throw new Error(error.message);
+      return ok(`Tasa ${existing.label || code} actualizada a ${per_usd} por dólar.`);
+    }
+
+    const { error } = await supabase.from("finance_rates").insert({
+      user_id: userId,
+      code: code.toUpperCase(),
+      label: code.toUpperCase(),
+      currency: code.toUpperCase() === "EUR" ? "EUR" : "VES",
+      per_usd,
+    });
+    if (error) throw new Error(error.message);
+    return ok(`Tasa ${code.toUpperCase()} creada en ${per_usd} por dólar.`);
+  })
+);
+
+// ============================================
 // START
 // ============================================
 

@@ -3,6 +3,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type Dispatch,
   type ReactNode,
@@ -38,14 +39,25 @@ const BoardContext = createContext<BoardContextValue | null>(null);
 // other — they're reading and writing the same React state, not two
 // independent fetches.
 export function BoardProvider({ children }: { children: ReactNode }) {
-  const { canView, loading: permissionsLoading } = usePermissions();
+  const { canView, isAdmin, loading: permissionsLoading } = usePermissions();
   const [columns, setColumns] = useState<ColumnRow[]>([]);
   const [positions, setPositions] = useState<ModulePositionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  // El sembrado inserta filas. En StrictMode el efecto corre dos veces, y
+  // dos pasadas sobre un tablero vacío chocan contra la clave única
+  // (user_id, module_id). Se siembra una sola vez por montaje.
+  const seeded = useRef(false);
 
   useEffect(() => {
     if (permissionsLoading) return;
+    // El tablero es del administrador: un invitado no tiene board, ni
+    // columnas que crear. Se queda vacío y la nav le muestra una lista
+    // plana de lo que le asignaron.
+    if (!isAdmin) return;
+    if (seeded.current) return;
+    seeded.current = true;
+
     // Sembrar el tablero con módulos que la cuenta no puede abrir le
     // dejaría tarjetas muertas en el dashboard.
     const allowed = MODULES.filter((m) => canView(m.id));
@@ -80,11 +92,19 @@ export function BoardProvider({ children }: { children: ReactNode }) {
       })
       .catch((err) => setLoadError(errorMessage(err, "Error loading board")))
       .finally(() => setLoading(false));
-  }, [permissionsLoading, canView]);
+  }, [permissionsLoading, isAdmin, canView]);
 
   return (
     <BoardContext.Provider
-      value={{ columns, positions, loading, loadError, setColumns, setPositions }}
+      value={{
+        columns,
+        positions,
+        // Un invitado no carga tablero, así que nunca está esperando por uno
+        loading: isAdmin ? loading : false,
+        loadError,
+        setColumns,
+        setPositions,
+      }}
     >
       {children}
     </BoardContext.Provider>

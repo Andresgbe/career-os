@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { LayoutGrid, MessageSquare } from "lucide-react";
+import { Navigate } from "react-router-dom";
+import { LayoutGrid, MessageSquare, Lock } from "lucide-react";
 import {
   getShortcuts,
   addShortcut,
@@ -13,6 +14,7 @@ import PillTrackerButton from "./components/PillTrackerButton";
 import ModuleBoard from "./components/ModuleBoard";
 import ChatPanel from "../chat/ChatPanel";
 import { usePermissions } from "../../hooks/usePermissions";
+import { MODULES } from "../../lib/modules";
 
 // Two views of the dashboard: the module board, and the assistant. The chat
 // lives here rather than as its own module so it's one tap away from the
@@ -24,18 +26,47 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
+// El dashboard entero (tablero de módulos, accesos directos, pastillas y
+// chat) es del administrador. Un invitado solo ve los módulos que le
+// asignaron, así que ni siquiera pasa por acá.
 export default function DashboardPage() {
-  const { isAdmin } = usePermissions();
-  // El chat corre con la cuenta de Claude de Andrés a través del worker de
-  // su PC, así que solo existe para él. Un invitado escribiría mensajes que
-  // nadie va a procesar.
-  const tabs = isAdmin ? TABS : TABS.filter((t) => t.id !== "chat");
+  const { isAdmin, canView, loading } = usePermissions();
+
+  if (loading) return null;
+  if (!isAdmin) return <GuestLanding canView={canView} />;
+  return <AdminDashboard />;
+}
+
+// ============================================
+// INVITADO
+// ============================================
+
+function GuestLanding({ canView }: { canView: (id: string) => boolean }) {
+  const allowed = MODULES.filter((m) => canView(m.id));
+
+  // Con acceso a algo, entra directo ahí: no hay "inicio" que mostrarle.
+  if (allowed.length > 0) return <Navigate to={allowed[0].path} replace />;
+
+  return (
+    <div className="max-w-md mx-auto text-center py-16 space-y-3">
+      <Lock className="w-8 h-8 text-muted mx-auto" />
+      <h1 className="text-lg font-semibold">Todavía no tenés acceso</h1>
+      <p className="text-sm text-muted">
+        Tu cuenta está creada, pero no tiene ningún módulo habilitado. Pedile a
+        Andrés que te dé acceso desde el panel de administrador.
+      </p>
+    </div>
+  );
+}
+
+// ============================================
+// ADMINISTRADOR
+// ============================================
+
+function AdminDashboard() {
   // Chat is what you land on: it's the fastest way to drop something into
   // NEXUS from the phone.
   const [activeTab, setActiveTab] = useState<TabId>("chat");
-  const currentTab = tabs.some((t) => t.id === activeTab)
-    ? activeTab
-    : tabs[0].id;
   const [shortcuts, setShortcuts] = useState<ShortcutRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -50,11 +81,11 @@ export default function DashboardPage() {
   return (
     // El chat se lee mejor en una columna más angosta y centrada; el
     // tablero de módulos usa todo el ancho que haya.
-    <div className={currentTab === "chat" ? "mx-auto w-full max-w-4xl" : ""}>
+    <div className={activeTab === "chat" ? "mx-auto w-full max-w-4xl" : ""}>
       <div className="flex gap-1 border-b border-border pb-0 mb-5 overflow-x-auto no-scrollbar">
-        {tabs.map((tab) => {
+        {TABS.map((tab) => {
           const Icon = tab.icon;
-          const isActive = currentTab === tab.id;
+          const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
@@ -72,7 +103,7 @@ export default function DashboardPage() {
         })}
       </div>
 
-      {currentTab === "chat" ? (
+      {activeTab === "chat" ? (
         <ChatPanel />
       ) : (
         <>

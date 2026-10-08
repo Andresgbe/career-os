@@ -46,8 +46,19 @@ export async function buildContext(supabase, includeKnowledge) {
   const today = caracasToday();
   const out = [`Hoy es ${today.legible}. Zona horaria: America/Caracas.`];
 
-  const [tasks, blocks, subjects, evals, projects, tobuy, folders, docs] =
-    await Promise.all([
+  const [
+    tasks,
+    blocks,
+    subjects,
+    evals,
+    projects,
+    tobuy,
+    finance,
+    finCats,
+    finRates,
+    folders,
+    docs,
+  ] = await Promise.all([
       rows(supabase.from("tasks").select("title,priority,due,done,project_id")),
       rows(
         supabase
@@ -64,6 +75,14 @@ export async function buildContext(supabase, includeKnowledge) {
       ),
       rows(supabase.from("personal_projects").select("*")),
       rows(supabase.from("tobuy_items").select("title").eq("checked", false)),
+    rows(
+      supabase
+        .from("finance_transactions")
+        .select("kind,amount_usd,occurred_on,category_id")
+        .gte("occurred_on", `${today.date.slice(0, 7)}-01`)
+    ),
+    rows(supabase.from("finance_categories").select("id,name")),
+    rows(supabase.from("finance_rates").select("code,label,per_usd")),
       includeKnowledge
         ? rows(supabase.from("knowledge_folders").select("id,name").order("sort_order"))
         : [],
@@ -127,6 +146,47 @@ export async function buildContext(supabase, includeKnowledge) {
         .slice(0, 30)
         .map((i) => i.title)
         .join(", ")}`
+    );
+  }
+
+  if (finance.length || finRates.length) {
+    const catName = new Map(finCats.map((c) => [c.id, c.name]));
+    const sum = (kind) =>
+      finance
+        .filter((t) => t.kind === kind)
+        .reduce((a, t) => a + Number(t.amount_usd), 0);
+    const income = sum("income");
+    const expense = sum("expense");
+
+    const porCat = {};
+    for (const t of finance) {
+      if (t.kind !== "expense") continue;
+      const key = catName.get(t.category_id) ?? "Sin categoría";
+      porCat[key] = (porCat[key] ?? 0) + Number(t.amount_usd);
+    }
+    const top = Object.entries(porCat)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([name, total]) => `    ${name}: ${total.toFixed(2)}`);
+
+    const tasas = finRates.map(
+      (r) =>
+        `    ${r.label || r.code}: ${
+          r.per_usd === null ? "SIN CARGAR" : `${r.per_usd} por dólar`
+        }`
+    );
+
+    out.push(
+      [
+        `FINANZAS DEL MES (todo en dólares BCV):`,
+        `  Ingresos: ${income.toFixed(2)}`,
+        `  Gastos: ${expense.toFixed(2)}`,
+        `  Balance: ${(income - expense).toFixed(2)}`,
+        top.length ? `  Mayores gastos por categoría:\n${top.join("\n")}` : "",
+        tasas.length ? `  Tasas guardadas:\n${tasas.join("\n")}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
     );
   }
 
