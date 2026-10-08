@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabase";
+import { compressImage } from "../../lib/compressImage";
 import type {
   SubjectRow,
   EvaluationRow,
@@ -7,7 +8,10 @@ import type {
   SchedulePersonRow,
   ScheduleBlockRow,
   ScheduleDay,
+  WeekRow,
+  WeekResource,
 } from "./types";
+import { TOTAL_WEEKS } from "./types";
 
 // ============================================
 // SHARED HELPERS
@@ -97,11 +101,12 @@ const GRADES_BUCKET = "grades-files";
 // re-signing on every view — same approach as the project entry images.
 export async function uploadGradesImage(file: File): Promise<string> {
   const user = await requireUser();
-  const filePath = `${user.id}/${Date.now()}-${file.name}`;
+  const compressed = await compressImage(file);
+  const filePath = `${user.id}/${Date.now()}-${compressed.name}`;
 
   const { error } = await supabase.storage
     .from(GRADES_BUCKET)
-    .upload(filePath, file);
+    .upload(filePath, compressed);
   if (error) throw error;
 
   return supabase.storage.from(GRADES_BUCKET).getPublicUrl(filePath).data
@@ -449,4 +454,99 @@ export async function deleteScheduleBlock(id: string): Promise<void> {
     .delete()
     .eq("id", id);
   if (error) throw error;
+}
+
+// ============================================
+// WEEKS (per-subject "Semanas" folders)
+// ============================================
+
+function normalizeWeek(row: WeekRow): WeekRow {
+  return {
+    ...row,
+    topics: Array.isArray(row.topics) ? row.topics : [],
+    resources: Array.isArray(row.resources) ? row.resources : [],
+  };
+}
+
+export async function getWeeks(subjectId: string): Promise<WeekRow[]> {
+  const { data, error } = await supabase
+    .from("grades_weeks")
+    .select("*")
+    .eq("subject_id", subjectId)
+    .order("week_number", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(normalizeWeek);
+}
+
+// First time anyone opens a subject's weeks, the 16 slots don't exist yet —
+// seed them once, empty. Safe to call every time: it's a no-op once they
+// exist.
+export async function ensureWeeksSeeded(subjectId: string): Promise<WeekRow[]> {
+  const existing = await getWeeks(subjectId);
+  if (existing.length > 0) return existing;
+
+  const user = await requireUser();
+  const rows = Array.from({ length: TOTAL_WEEKS }, (_, i) => ({
+    user_id: user.id,
+    subject_id: subjectId,
+    week_number: i + 1,
+  }));
+  // Upsert ignorando duplicados: una segunda siembra concurrente (el efecto
+  // de React corriendo dos veces en desarrollo, o dos pestañas abiertas en
+  // la misma materia) no debe chocar contra la clave única
+  // (subject_id, week_number). Se vuelve a consultar después en vez de
+  // confiar en lo que devuelve el insert, para traer siempre el set real.
+  const { error } = await supabase
+    .from("grades_weeks")
+    .upsert(rows, { onConflict: "subject_id,week_number", ignoreDuplicates: true });
+  if (error) throw error;
+
+  return getWeeks(subjectId);
+}
+
+export interface WeekFields {
+  start_date: string | null;
+  end_date: string | null;
+  topics: string[];
+  notes: string;
+  code: string;
+  resources: WeekResource[];
+}
+
+export async function updateWeek(
+  id: string,
+  fields: Partial<WeekFields>
+): Promise<WeekRow> {
+  const { data, error } = await supabase
+    .from("grades_weeks")
+    .update({ ...fields, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return normalizeWeek(data);
+}
+
+// A week's resource files share the eval-plan bucket; photos get compressed
+// client-side first (see src/lib/compressImage.ts), PDFs pass through as-is.
+export async function uploadWeekFile(file: File): Promise<{ name: string; url: string }> {
+  const user = await requireUser();
+  const compressed = await compressImage(file);
+  const filePath = `${user.id}/weeks/${Date.now()}-${compressed.name}`;
+
+  const { error } = await supabase.storage
+    .from(GRADES_BUCKET)
+    .upload(filePath, compressed);
+  if (error) throw error;
+
+  const url = supabase.storage.from(GRADES_BUCKET).getPublicUrl(filePath).data.publicUrl;
+  return { name: file.name, url };
+}
+
+export async function deleteWeekFile(publicUrl: string): Promise<void> {
+  const marker = `/${GRADES_BUCKET}/`;
+  const idx = publicUrl.indexOf(marker);
+  if (idx === -1) return;
+  const filePath = publicUrl.slice(idx + marker.length);
+  await supabase.storage.from(GRADES_BUCKET).remove([filePath]);
 }

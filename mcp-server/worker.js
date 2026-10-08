@@ -87,7 +87,28 @@ const SYSTEM = [
   "confirmáselo en una línea. No muestres JSON ni nombres de herramientas.",
   "Si el mensaje trae una imagen adjunta, mirala con Read, deducí qué es y",
   "archivala con mcp__nexus__file_attachment usando el chat_path que te den.",
+  "También tenés acceso a su Google Calendar real (mcp__claude_ai_Google_Calendar__*):",
+  "podés revisar su agenda, crear eventos y sugerir horarios cuando te lo pida.",
+  "Nunca borres un evento del calendario, aunque te lo pidan de pasada: no tenés",
+  "esa herramienta a propósito. Si hay que borrar algo, decile que lo borre él",
+  "mismo desde Google Calendar.",
 ].join(" ");
+
+// Herramientas de Google Calendar que puede usar el chat. delete_event queda
+// afuera a propósito, con el mismo criterio que mcp__nexus__* (que tampoco
+// tiene borrado): lo que se borra, lo borra Andrés.
+const CALENDAR_TOOLS = [
+  "list_calendars",
+  "list_events",
+  "search_events",
+  "get_event",
+  "create_event",
+  "update_event",
+  "respond_to_event",
+  "suggest_time",
+]
+  .map((t) => `mcp__claude_ai_Google_Calendar__${t}`)
+  .join(",");
 
 // Runs one turn of Claude Code. Without --bare it loads the user's MCP
 // servers and CLAUDE.md, and signs in with their subscription.
@@ -106,7 +127,7 @@ function runClaude(prompt, sessionId, withImage = false, onAbort = null) {
       "--allowedTools",
       // Read is added only when there's an image to look at. It's read-only
       // and confined to the working directory either way.
-      withImage ? "mcp__nexus__*,Read" : "mcp__nexus__*",
+      `mcp__nexus__*,${CALENDAR_TOOLS}${withImage ? ",Read" : ""}`,
       "--permission-mode",
       "dontAsk",
     ];

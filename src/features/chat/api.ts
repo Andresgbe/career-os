@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabase";
+import { compressImage } from "../../lib/compressImage";
 import { NEW_CONVERSATION_TITLE, titleFrom } from "./types";
 import type { ChatMessageRow, ConversationRow } from "./types";
 
@@ -79,8 +80,9 @@ const BUCKET = "chat-files";
 // The folder is the user's id, which is what the storage policies check.
 export async function uploadChatImage(file: File): Promise<string> {
   const user = await requireUser();
-  const path = `${user.id}/${Date.now()}-${file.name}`;
-  const { error } = await supabase.storage.from(BUCKET).upload(path, file);
+  const compressed = await compressImage(file);
+  const path = `${user.id}/${Date.now()}-${compressed.name}`;
+  const { error } = await supabase.storage.from(BUCKET).upload(path, compressed);
   if (error) throw error;
   return path;
 }

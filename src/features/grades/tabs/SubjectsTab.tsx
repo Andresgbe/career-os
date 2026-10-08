@@ -1,6 +1,7 @@
 import { errorMessage } from "../../../lib/errors";
 import { useState } from "react";
-import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Check, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Check, X, CalendarDays } from "lucide-react";
 import type { SubjectRow, EvaluationRow } from "../types";
 import { addSubject, updateSubject, deleteSubject } from "../api";
 import EvaluationTable from "../components/EvaluationTable";
@@ -31,6 +32,7 @@ export default function SubjectsTab({
   onSubjectsChange,
   onEvaluationsChange,
 }: SubjectsTabProps) {
+  const navigate = useNavigate();
   const [error, setError] = useState("");
   
   // New subject
@@ -265,6 +267,13 @@ export default function SubjectsTab({
                       </>
                     ) : (
                       <>
+                        <button
+                          onClick={() => navigate(`/grades/${sub.id}/weeks`)}
+                          className="p-2 rounded text-muted hover:text-primary hover:bg-surface-hover transition-colors"
+                          title="Semanas"
+                        >
+                          <CalendarDays className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => startEdit(sub)}
                           className="p-2 rounded text-muted hover:text-primary hover:bg-surface-hover transition-colors"

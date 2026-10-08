@@ -7,6 +7,8 @@ import MotorcyclePage from "../features/motorcycle/MotorcyclePage";
 import MedicalPage from "../features/medical/MedicalPage";
 import ContentPage from "../features/content/ContentPage";
 import GradesPage from "../features/grades/GradesPage";
+import SubjectWeeksPage from "../features/grades/SubjectWeeksPage";
+import WeekDetailPage from "../features/grades/WeekDetailPage";
 import ProjectsPage from "../features/projects/ProjectsPage";
 import ProjectWorkspacePage from "../features/projects/ProjectWorkspacePage";
 import ProgrammingPage from "../features/programming/ProgrammingPage";
@@ -40,6 +42,14 @@ export const router = createBrowserRouter([
       { path: "medical", element: guard("medical", <MedicalPage />) },
       { path: "content", element: guard("content", <ContentPage />) },
       { path: "grades", element: guard("grades", <GradesPage />) },
+      {
+        path: "grades/:subjectId/weeks",
+        element: guard("grades", <SubjectWeeksPage />),
+      },
+      {
+        path: "grades/:subjectId/weeks/:weekNumber",
+        element: guard("grades", <WeekDetailPage />),
+      },
       { path: "projects", element: guard("projects", <ProjectsPage />) },
       {
         path: "projects/:id",

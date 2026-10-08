@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabase";
+import { compressImage } from "../../lib/compressImage";
 import type { MotorcycleInfo } from "./types";
 
 // The DB uses snake_case; our app uses camelCase.
@@ -104,20 +105,21 @@ export async function uploadAttachment(file: File, label: string) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
+  const compressed = await compressImage(file);
 
   // Store under a folder named after the user's ID (required by our policies)
-  const filePath = `${user.id}/${Date.now()}-${file.name}`;
+  const filePath = `${user.id}/${Date.now()}-${compressed.name}`;
 
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
-    .upload(filePath, file);
+    .upload(filePath, compressed);
   if (uploadError) throw uploadError;
 
   const { error: dbError } = await supabase
     .from("motorcycle_attachments")
     .insert({
       user_id: user.id,
-      label: label || file.name,
+      label: label || compressed.name,
       file_name: file.name,
       file_path: filePath,
     });
@@ -216,12 +218,13 @@ export async function uploadOilReceipt(id: string, file: File) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
+  const compressed = await compressImage(file);
 
-  const filePath = `${user.id}/oil-receipts/${id}-${Date.now()}-${file.name}`;
+  const filePath = `${user.id}/oil-receipts/${id}-${Date.now()}-${compressed.name}`;
 
   const { error: uploadError } = await supabase.storage
     .from("motorcycle-files")
-    .upload(filePath, file);
+    .upload(filePath, compressed);
   if (uploadError) throw uploadError;
 
   const { error: dbError } = await supabase

@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabase";
+import { compressImage } from "../../lib/compressImage";
 import type {
   ExamRow,
   HistoryRow,
@@ -45,20 +46,22 @@ export async function getExams(): Promise<ExamRow[]> {
 // Upload the exam file and register it in the table
 export async function uploadExam(file: File, nextOrder: number) {
   const user = await requireUser();
+  // Many exams are scans (PDFs), never touched; a photographed one shrinks.
+  const compressed = await compressImage(file);
 
   // Store under a folder named after the user's ID (required by our policies)
-  const filePath = `${user.id}/exams/${Date.now()}-${file.name}`;
+  const filePath = `${user.id}/exams/${Date.now()}-${compressed.name}`;
 
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
-    .upload(filePath, file);
+    .upload(filePath, compressed);
   if (uploadError) throw uploadError;
 
   const { data, error: dbError } = await supabase
     .from("medical_exams")
     .insert({
       user_id: user.id,
-      file_name: file.name,
+      file_name: compressed.name,
       file_path: filePath,
       sort_order: nextOrder,
     })
@@ -166,12 +169,13 @@ export async function updateHistoryEntry(
 // Attach a file (invoice, prescription...) to a history entry
 export async function uploadHistoryFile(historyId: string, file: File) {
   const user = await requireUser();
+  const compressed = await compressImage(file);
 
-  const filePath = `${user.id}/history/${historyId}-${Date.now()}-${file.name}`;
+  const filePath = `${user.id}/history/${historyId}-${Date.now()}-${compressed.name}`;
 
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
-    .upload(filePath, file);
+    .upload(filePath, compressed);
   if (uploadError) throw uploadError;
 
   const { data, error: dbError } = await supabase
@@ -179,7 +183,7 @@ export async function uploadHistoryFile(historyId: string, file: File) {
     .insert({
       user_id: user.id,
       history_id: historyId,
-      file_name: file.name,
+      file_name: compressed.name,
       file_path: filePath,
     })
     .select("*")
