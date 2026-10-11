@@ -2,7 +2,7 @@ import { errorMessage } from "../../lib/errors";
 import { useEffect, useRef, useState } from "react";
 import {
   Send, Loader2, Trash2, Bot, User, AlertCircle, Clock, Paperclip, X as XIcon,
-  Square, History, Plus,
+  Square, History, Plus, RefreshCw, WifiOff, Wifi,
 } from "lucide-react";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import ConversationList from "./ConversationList";
@@ -17,11 +17,25 @@ import {
   cancelMessage,
   uploadChatImage,
   getChatImageUrl,
+  getWorkerLastSeen,
 } from "./api";
 import type { ChatMessageRow, ConversationRow } from "./types";
 import { isWaiting } from "./types";
 
 const POLL_MS = 2000;
+// El worker da una vuelta cada ~3s (incluso en pausa) y escribe su latido en
+// cada una. Más de 4 vueltas sin noticias y es más probable que esté apagado
+// que una demora de red — ahí se deja de contarlo como "escuchando".
+const WORKER_ONLINE_MS = 12000;
+
+function formatAgo(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return "hace unos segundos";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `hace ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  return `hace ${hours} h`;
+}
 
 const SUGGESTIONS = [
   "¿Qué tengo pendiente hoy?",
@@ -51,6 +65,10 @@ export default function ChatPanel() {
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  // Milisegundos desde el último latido del worker; null = todavía no se
+  // comprobó, o nunca escribió uno (jamás lo corriste, o falta el BLOQUE 10).
+  const [workerMs, setWorkerMs] = useState<number | null>(null);
+  const [checkingWorker, setCheckingWorker] = useState(false);
 
   const waiting = messages.some(isWaiting);
   // El mensaje que estamos esperando, para poder cancelarlo
@@ -71,6 +89,27 @@ export default function ChatPanel() {
       report(err);
       if (activeId) getMessages(activeId).then(setMessages).catch(report);
     }
+  }
+
+  // El botón "Reintentar": revisa el latido del worker y, de paso, si la
+  // cola ya se resolvió, en vez de esperar al próximo tick automático.
+  async function checkWorker() {
+    setCheckingWorker(true);
+    try {
+      const ms = await getWorkerLastSeen();
+      setWorkerMs(ms);
+    } catch {
+      // sin la tabla todavía, se queda como "no se sabe" — no es un error
+      // que haya que mostrarle
+    }
+    if (activeId) {
+      try {
+        setMessages(await getMessages(activeId));
+      } catch (err) {
+        report(err);
+      }
+    }
+    setCheckingWorker(false);
   }
 
   async function handleNewConversation() {
@@ -158,11 +197,14 @@ export default function ChatPanel() {
     };
   }, [activeId]);
 
-  // While the worker owes us an answer, keep checking for it
+  // While the worker owes us an answer, keep checking for it — y de paso,
+  // si sigue escuchando, para que el aviso de conexión no quede viejo.
   useEffect(() => {
     if (!waiting || !activeId) return;
+    getWorkerLastSeen().then(setWorkerMs).catch(() => {});
     const timer = setInterval(() => {
       getMessages(activeId).then(setMessages).catch(report);
+      getWorkerLastSeen().then(setWorkerMs).catch(() => {});
     }, POLL_MS);
     return () => clearInterval(timer);
   }, [waiting, activeId]);
@@ -410,7 +452,37 @@ export default function ChatPanel() {
                       encendida y Claude esté disponible. Si está topado el
                       uso, reintenta solo. Podés cerrar esto, no se pierde.
                     </p>
-                    <CancelButton onClick={handleCancel} />
+
+                    {workerMs !== null && workerMs < WORKER_ONLINE_MS ? (
+                      <p className="flex items-center gap-1.5 text-xs text-emerald-400 mt-2">
+                        <Wifi className="w-3.5 h-3.5 shrink-0" />
+                        Tu PC está escuchando — se responde en cualquier momento.
+                      </p>
+                    ) : (
+                      <p className="flex items-center gap-1.5 text-xs text-amber-400 mt-2">
+                        <WifiOff className="w-3.5 h-3.5 shrink-0" />
+                        {workerMs === null
+                          ? "No detecto tu PC escuchando."
+                          : `Tu PC no responde (última señal ${formatAgo(workerMs)}).`}{" "}
+                        Corré{" "}
+                        <code className="bg-surface-hover px-1 py-0.5 rounded">
+                          npm run worker
+                        </code>{" "}
+                        ahí.
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-3 mt-1.5">
+                      <button
+                        onClick={checkWorker}
+                        disabled={checkingWorker}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-muted hover:text-primary hover:bg-surface-hover transition-colors disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${checkingWorker ? "animate-spin" : ""}`} />
+                        {checkingWorker ? "Revisando..." : "Reintentar conexión"}
+                      </button>
+                      <CancelButton onClick={handleCancel} />
+                    </div>
                   </div>
                 </div>
               ) : (

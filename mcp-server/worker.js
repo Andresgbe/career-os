@@ -493,6 +493,21 @@ ${prompt}`;
   log(`← ${failed ? "ERROR: " : ""}${reply.slice(0, 80).replace(/\n/g, " ")}`);
 }
 
+// Avisa que el proceso sigue vivo, incluso en pausa: así el chat sabe que
+// la PC está encendida y escuchando, aunque esté esperando un límite de uso.
+let heartbeatWarned = false;
+async function beat(userId) {
+  const { error } = await supabase
+    .from("worker_heartbeat")
+    .upsert({ user_id: userId, last_seen: new Date().toISOString() });
+  // Sin el BLOQUE 10 corrido, esto fallaría en cada vuelta (cada ~3s): se
+  // avisa una sola vez en vez de llenar la terminal de la misma línea.
+  if (error && !heartbeatWarned) {
+    heartbeatWarned = true;
+    log("  no se pudo escribir el latido (no vuelvo a avisar):", error.message);
+  }
+}
+
 async function tick(userId) {
   // Durante la pausa no se consulta nada: el reintento llega solo cuando toca
   if (Date.now() < pausedUntil) return;
@@ -538,6 +553,7 @@ setInterval(async () => {
   if (running) return; // never overlap two runs
   running = true;
   try {
+    await beat(userId); // antes de tick(): el latido vale incluso en pausa
     await tick(userId);
   } catch (err) {
     log("fallo en el ciclo:", err instanceof Error ? err.message : err);

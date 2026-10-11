@@ -1879,3 +1879,38 @@ create policy "nexus delete" on grades_weeks for delete
 -- ------------------------------------------------------------
 -- select policyname from pg_policies
 -- where schemaname = 'public' and tablename = 'grades_weeks';
+
+
+-- ============================================================
+-- BLOQUE 10 — LATIDO DEL WORKER (saber si está escuchando)
+--
+-- Hasta ahora el chat no tenía forma de saber si el worker de tu PC
+-- estaba corriendo: "En cola" se mostraba igual estuviera prendido o no.
+-- El worker ahora escribe la hora cada vez que da una vuelta (cada ~3s),
+-- y el chat la lee para avisarte si no hay nadie escuchando, con un botón
+-- para revisar de nuevo en el momento.
+--
+-- Privada de cada cuenta, como dashboard_* o chat_messages: no se comparte
+-- con los invitados.
+-- ============================================================
+
+create table if not exists worker_heartbeat (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  last_seen timestamptz not null default now()
+);
+
+alter table worker_heartbeat enable row level security;
+
+drop policy if exists "select own worker_heartbeat" on worker_heartbeat;
+drop policy if exists "insert own worker_heartbeat" on worker_heartbeat;
+drop policy if exists "update own worker_heartbeat" on worker_heartbeat;
+drop policy if exists "delete own worker_heartbeat" on worker_heartbeat;
+
+create policy "select own worker_heartbeat" on worker_heartbeat
+  for select using (auth.uid() = user_id);
+create policy "insert own worker_heartbeat" on worker_heartbeat
+  for insert with check (auth.uid() = user_id);
+create policy "update own worker_heartbeat" on worker_heartbeat
+  for update using (auth.uid() = user_id);
+create policy "delete own worker_heartbeat" on worker_heartbeat
+  for delete using (auth.uid() = user_id);

@@ -153,6 +153,25 @@ export async function cancelMessage(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// ============================================
+// LATIDO DEL WORKER
+// ============================================
+
+// Hace cuántos milisegundos dio señal de vida el worker de tu PC, o null si
+// nunca escribió nada (todavía no lo corriste ni una vez).
+export async function getWorkerLastSeen(): Promise<number | null> {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("worker_heartbeat")
+    .select("last_seen")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  // Sin la tabla (BLOQUE 10 sin correr todavía), no hay forma de saber el
+  // estado: mejor no decir nada que decir "desconectado" de mentira.
+  if (error) return null;
+  return data ? Date.now() - new Date(data.last_seen).getTime() : null;
+}
+
 // Vacía una conversación sin borrarla. La sesión de Claude también se
 // suelta: si no, la conversación seguiría acordándose de lo que ya no se ve.
 export async function clearMessages(conversationId: string): Promise<void> {
