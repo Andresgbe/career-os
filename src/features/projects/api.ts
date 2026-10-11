@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabase";
+import { compressImage } from "../../lib/compressImage";
 import type {
   ProjectRow,
   ProjectResource,
@@ -137,9 +138,10 @@ const BUCKET = "project-files";
 // Upload an image and return its storage path (to be saved on a resource entry)
 export async function uploadProjectImage(file: File): Promise<string> {
   const user = await requireUser();
-  const filePath = `${user.id}/${Date.now()}-${file.name}`;
+  const compressed = await compressImage(file);
+  const filePath = `${user.id}/${Date.now()}-${compressed.name}`;
 
-  const { error } = await supabase.storage.from(BUCKET).upload(filePath, file);
+  const { error } = await supabase.storage.from(BUCKET).upload(filePath, compressed);
   if (error) throw error;
   return filePath;
 }
@@ -214,11 +216,12 @@ const ENTRY_FILES_BUCKET = "project-entry-files";
 // it every render — same reasoning as the Work module's inline images.
 export async function uploadProjectEntryImage(file: File): Promise<string> {
   const user = await requireUser();
-  const filePath = `${user.id}/${Date.now()}-${file.name}`;
+  const compressed = await compressImage(file);
+  const filePath = `${user.id}/${Date.now()}-${compressed.name}`;
 
   const { error } = await supabase.storage
     .from(ENTRY_FILES_BUCKET)
-    .upload(filePath, file);
+    .upload(filePath, compressed);
   if (error) throw error;
 
   return supabase.storage.from(ENTRY_FILES_BUCKET).getPublicUrl(filePath).data

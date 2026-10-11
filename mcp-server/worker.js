@@ -87,7 +87,28 @@ const SYSTEM = [
   "confirmáselo en una línea. No muestres JSON ni nombres de herramientas.",
   "Si el mensaje trae una imagen adjunta, mirala con Read, deducí qué es y",
   "archivala con mcp__nexus__file_attachment usando el chat_path que te den.",
+  "También tenés acceso a su Google Calendar real (mcp__claude_ai_Google_Calendar__*):",
+  "podés revisar su agenda, crear eventos y sugerir horarios cuando te lo pida.",
+  "Nunca borres un evento del calendario, aunque te lo pidan de pasada: no tenés",
+  "esa herramienta a propósito. Si hay que borrar algo, decile que lo borre él",
+  "mismo desde Google Calendar.",
 ].join(" ");
+
+// Herramientas de Google Calendar que puede usar el chat. delete_event queda
+// afuera a propósito, con el mismo criterio que mcp__nexus__* (que tampoco
+// tiene borrado): lo que se borra, lo borra Andrés.
+const CALENDAR_TOOLS = [
+  "list_calendars",
+  "list_events",
+  "search_events",
+  "get_event",
+  "create_event",
+  "update_event",
+  "respond_to_event",
+  "suggest_time",
+]
+  .map((t) => `mcp__claude_ai_Google_Calendar__${t}`)
+  .join(",");
 
 // Runs one turn of Claude Code. Without --bare it loads the user's MCP
 // servers and CLAUDE.md, and signs in with their subscription.
@@ -106,7 +127,7 @@ function runClaude(prompt, sessionId, withImage = false, onAbort = null) {
       "--allowedTools",
       // Read is added only when there's an image to look at. It's read-only
       // and confined to the working directory either way.
-      withImage ? "mcp__nexus__*,Read" : "mcp__nexus__*",
+      `mcp__nexus__*,${CALENDAR_TOOLS}${withImage ? ",Read" : ""}`,
       "--permission-mode",
       "dontAsk",
     ];
@@ -472,6 +493,21 @@ ${prompt}`;
   log(`← ${failed ? "ERROR: " : ""}${reply.slice(0, 80).replace(/\n/g, " ")}`);
 }
 
+// Avisa que el proceso sigue vivo, incluso en pausa: así el chat sabe que
+// la PC está encendida y escuchando, aunque esté esperando un límite de uso.
+let heartbeatWarned = false;
+async function beat(userId) {
+  const { error } = await supabase
+    .from("worker_heartbeat")
+    .upsert({ user_id: userId, last_seen: new Date().toISOString() });
+  // Sin el BLOQUE 10 corrido, esto fallaría en cada vuelta (cada ~3s): se
+  // avisa una sola vez en vez de llenar la terminal de la misma línea.
+  if (error && !heartbeatWarned) {
+    heartbeatWarned = true;
+    log("  no se pudo escribir el latido (no vuelvo a avisar):", error.message);
+  }
+}
+
 async function tick(userId) {
   // Durante la pausa no se consulta nada: el reintento llega solo cuando toca
   if (Date.now() < pausedUntil) return;
@@ -517,6 +553,7 @@ setInterval(async () => {
   if (running) return; // never overlap two runs
   running = true;
   try {
+    await beat(userId); // antes de tick(): el latido vale incluso en pausa
     await tick(userId);
   } catch (err) {
     log("fallo en el ciclo:", err instanceof Error ? err.message : err);

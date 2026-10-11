@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabase";
+import { compressImage } from "../../lib/compressImage";
 import { NEW_CONVERSATION_TITLE, titleFrom } from "./types";
 import type { ChatMessageRow, ConversationRow } from "./types";
 
@@ -79,8 +80,9 @@ const BUCKET = "chat-files";
 // The folder is the user's id, which is what the storage policies check.
 export async function uploadChatImage(file: File): Promise<string> {
   const user = await requireUser();
-  const path = `${user.id}/${Date.now()}-${file.name}`;
-  const { error } = await supabase.storage.from(BUCKET).upload(path, file);
+  const compressed = await compressImage(file);
+  const path = `${user.id}/${Date.now()}-${compressed.name}`;
+  const { error } = await supabase.storage.from(BUCKET).upload(path, compressed);
   if (error) throw error;
   return path;
 }
@@ -149,6 +151,25 @@ export async function cancelMessage(id: string): Promise<void> {
     .eq("id", id)
     .in("status", ["pending", "running"]);
   if (error) throw error;
+}
+
+// ============================================
+// LATIDO DEL WORKER
+// ============================================
+
+// Hace cuántos milisegundos dio señal de vida el worker de tu PC, o null si
+// nunca escribió nada (todavía no lo corriste ni una vez).
+export async function getWorkerLastSeen(): Promise<number | null> {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("worker_heartbeat")
+    .select("last_seen")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  // Sin la tabla (BLOQUE 10 sin correr todavía), no hay forma de saber el
+  // estado: mejor no decir nada que decir "desconectado" de mentira.
+  if (error) return null;
+  return data ? Date.now() - new Date(data.last_seen).getTime() : null;
 }
 
 // Vacía una conversación sin borrarla. La sesión de Claude también se

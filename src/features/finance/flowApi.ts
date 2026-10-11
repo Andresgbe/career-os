@@ -1,5 +1,6 @@
 import { supabase } from "../../lib/supabase";
 import { toUsd } from "./flow";
+import { fetchRates, RATE_CODE_MAP } from "./dolarApi";
 import type {
   FinanceCategoryRow,
   FinanceRateRow,
@@ -180,4 +181,40 @@ export async function deleteTransaction(id: string): Promise<void> {
     .delete()
     .eq("id", id);
   if (error) throw error;
+}
+
+// ============================================
+// SINCRONIZAR TASAS
+// ============================================
+
+// Trae las tasas del día de DolarAPI y guarda las que tengan código
+// conocido (BCV, PARALELO, EUR). Las que Andrés haya agregado a mano se
+// quedan como están: no hay de dónde sacarlas.
+//
+// Vive acá y no en el componente porque la usan dos lugares: el panel de
+// tasas y el aviso de "faltan tasas" que sale arriba.
+export async function syncRates(
+  rates: FinanceRateRow[]
+): Promise<FinanceRateRow[]> {
+  const fetched = await fetchRates();
+
+  const updates = rates
+    .map((rate) => {
+      const key = RATE_CODE_MAP[rate.code.toUpperCase()];
+      const value = key ? (fetched[key] as number | null) : null;
+      return value && value > 0 ? { rate, value } : null;
+    })
+    .filter((x): x is { rate: FinanceRateRow; value: number } => x !== null);
+
+  if (updates.length === 0) {
+    throw new Error("DolarAPI respondió, pero sin tasas que pueda usar.");
+  }
+
+  await Promise.all(updates.map(({ rate, value }) => saveRate(rate.id, value)));
+
+  const now = new Date().toISOString();
+  const byId = new Map(updates.map(({ rate, value }) => [rate.id, value]));
+  return rates.map((r) =>
+    byId.has(r.id) ? { ...r, per_usd: byId.get(r.id)!, updated_at: now } : r
+  );
 }

@@ -13,7 +13,7 @@ export default function BillsTab() {
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newAmount, setNewAmount] = useState("");
-  const [newRate, setNewRate] = useState("");
+
   const [newDueDate, setNewDueDate] = useState("");
   const [adding, setAdding] = useState(false);
 
@@ -22,7 +22,7 @@ export default function BillsTab() {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editAmount, setEditAmount] = useState("");
-  const [editRate, setEditRate] = useState("");
+
   const [editDueDate, setEditDueDate] = useState("");
 
   useEffect(() => {
@@ -47,15 +47,6 @@ export default function BillsTab() {
       setError("Amount must be a positive number.");
       return;
     }
-    let rateNum: number | null = null;
-    if (newRate.trim() !== "") {
-      rateNum = parseFloat(newRate);
-      if (isNaN(rateNum) || rateNum < 0) {
-        setError("Rate must be a positive number.");
-        return;
-      }
-    }
-
     setAdding(true);
     setError("");
     try {
@@ -63,14 +54,13 @@ export default function BillsTab() {
         name: newName.trim(),
         description: newDescription.trim(),
         amount: amountNum,
-        interest_rate: rateNum,
+        interest_rate: null,
         due_date: newDueDate || null,
       });
       setBills([...bills, row]);
       setNewName("");
       setNewDescription("");
       setNewAmount("");
-      setNewRate("");
       setNewDueDate("");
     } catch (err) {
       setError(errorMessage(err, "Error adding bill"));
@@ -84,7 +74,7 @@ export default function BillsTab() {
     setEditName(bill.name);
     setEditDescription(bill.description);
     setEditAmount(bill.amount.toString());
-    setEditRate(bill.interest_rate !== null ? bill.interest_rate.toString() : "");
+
     setEditDueDate(bill.due_date || "");
     setError("");
   };
@@ -97,22 +87,13 @@ export default function BillsTab() {
       setError("Amount must be a positive number.");
       return;
     }
-    let rateNum: number | null = null;
-    if (editRate.trim() !== "") {
-      rateNum = parseFloat(editRate);
-      if (isNaN(rateNum) || rateNum < 0) {
-        setError("Rate must be a positive number.");
-        return;
-      }
-    }
-
     setError("");
     try {
       const updated = await updateBill(editId, {
         name: editName.trim(),
         description: editDescription.trim(),
         amount: amountNum,
-        interest_rate: rateNum,
+        interest_rate: null,
         due_date: editDueDate || null,
       });
       setBills(bills.map((b) => (b.id === editId ? updated : b)));
@@ -168,7 +149,7 @@ export default function BillsTab() {
               <th className="px-4 py-3 rounded-tl-lg">Name</th>
               <th className="px-4 py-3">Description</th>
               <th className="px-4 py-3">Amount</th>
-              <th className="px-4 py-3">Rate (%)</th>
+
               <th className="px-4 py-3">Due date</th>
               <th className="px-4 py-3">Paid</th>
               <th className="px-4 py-3 rounded-tr-lg text-right">Actions</th>
@@ -218,21 +199,7 @@ export default function BillsTab() {
                       bill.amount.toFixed(2)
                     )}
                   </td>
-                  <td className="px-4 py-3">
-                    {isEditing ? (
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={editRate}
-                        onChange={(e) => setEditRate(e.target.value)}
-                        className="bg-background border border-border rounded px-2 py-1 w-20"
-                      />
-                    ) : bill.interest_rate !== null ? (
-                      `${bill.interest_rate}%`
-                    ) : (
-                      <span className="text-muted">-</span>
-                    )}
-                  </td>
+
                   <td className="px-4 py-3">
                     {isEditing ? (
                       <input
@@ -320,16 +287,7 @@ export default function BillsTab() {
                   className="bg-background border border-border rounded px-2 py-1 w-24 text-sm"
                 />
               </td>
-              <td className="px-4 py-2">
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="Rate"
-                  value={newRate}
-                  onChange={(e) => setNewRate(e.target.value)}
-                  className="bg-background border border-border rounded px-2 py-1 w-20 text-sm"
-                />
-              </td>
+
               <td className="px-4 py-2">
                 <input
                   type="date"

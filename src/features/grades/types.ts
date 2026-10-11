@@ -137,3 +137,71 @@ export interface ScheduleBlockRow {
 
 export const SCHEDULE_GRID_START_HOUR = 6;
 export const SCHEDULE_GRID_END_HOUR = 18;
+
+// ============================================
+// WEEKS (per-subject "Semanas" folders)
+// ============================================
+
+export interface WeekResource {
+  id: string;
+  name: string;
+  file_path: string; // public URL in the "grades-files" bucket
+}
+
+export interface WeekRow {
+  id: string;
+  user_id: string;
+  subject_id: string;
+  week_number: number;
+  start_date: string | null; // yyyy-mm-dd
+  end_date: string | null;
+  topics: string[];
+  notes: string; // RichTextEditor HTML
+  code: string;
+  resources: WeekResource[];
+  created_at: string;
+  updated_at: string;
+}
+
+export const TOTAL_WEEKS = 16;
+
+export type WeekStatus = "empty" | "current" | "filled";
+
+// A week "has content" once there's something for the chat to actually
+// repasar — an empty curriculum topic alone doesn't count.
+export function hasWeekContent(week: WeekRow): boolean {
+  const text = week.notes.replace(/<[^>]*>/g, "").trim();
+  return text.length > 0 || week.code.trim().length > 0 || week.resources.length > 0;
+}
+
+export function isCurrentWeek(week: WeekRow, todayIso: string): boolean {
+  if (!week.start_date || !week.end_date) return false;
+  return todayIso >= week.start_date && todayIso <= week.end_date;
+}
+
+export function weekStatus(week: WeekRow, todayIso: string): WeekStatus {
+  if (isCurrentWeek(week, todayIso)) return "current";
+  return hasWeekContent(week) ? "filled" : "empty";
+}
+
+export function weekDateLabel(week: WeekRow): string {
+  if (!week.start_date || !week.end_date) return "Sin fecha";
+  const fmt = (iso: string) =>
+    new Date(`${iso}T00:00:00`).toLocaleDateString("es-VE", {
+      day: "numeric",
+      month: "short",
+    });
+  return `${fmt(week.start_date)} – ${fmt(week.end_date)}`;
+}
+
+// A short caption under the week's topic line, matching what the design
+// showed: what kind of content is already saved.
+export function weekMetaLabel(week: WeekRow): string {
+  const text = week.notes.replace(/<[^>]*>/g, "").trim();
+  const parts: string[] = [];
+  if (text) parts.push("Apuntes");
+  if (week.code.trim()) parts.push("código");
+  if (week.resources.length === 1) parts.push("1 archivo");
+  else if (week.resources.length > 1) parts.push(`${week.resources.length} archivos`);
+  return parts.length ? parts.join(" + ") : "Sin apuntes todavía";
+}

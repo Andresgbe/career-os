@@ -1799,3 +1799,118 @@ create policy "nexus delete" on tasks for delete
 -- where schemaname = 'public' and policyname like 'nexus %'
 -- group by tablename
 -- order by politicas, tablename;
+
+
+-- ============================================
+-- BLOQUE 8 — FORMAS DE PAGO (efectivo, USDT) EN FINANZAS
+--
+-- No es solo la moneda: 50 $ en efectivo o en USDT valen MÁS que 50 $ BCV,
+-- porque se cambian a otra tasa. finance_rates ya servía para esto —
+-- "cuántas unidades de X equivalen a 1 USD BCV"—, solo le faltaban filas
+-- para el efectivo y el USDT. Para dólares, per_usd queda bajo 1 (valen
+-- más que el BCV, hace falta menos para llegar a 1 dólar BCV).
+--
+-- Se quita además "paralelo": Andrés no la usa, todo se registra a BCV.
+-- ============================================
+
+delete from finance_rates where code = 'PARALELO';
+
+update finance_rates set label = 'Bolívares (Bs)' where code = 'BCV';
+
+insert into finance_rates (user_id, code, label, currency, per_usd)
+select u.id, r.code, r.label, r.currency, null
+from auth.users u
+cross join (values
+  ('CASH', 'Dólar efectivo', 'USD'),
+  ('USDT', 'USDT',           'USD')
+) as r(code, label, currency)
+where u.email = 'andresgilbe2021@gmail.com'
+on conflict (user_id, code) do nothing;
+
+
+-- ============================================================
+-- BLOQUE 9 — SEMANAS POR MATERIA (University)
+--
+-- Carpetas de las 16 semanas de clase de cada materia: temas, apuntes,
+-- código y archivos. Reusa el bucket "grades-files" que ya existe (las
+-- fotos pasan por compresión del lado del navegador antes de subir).
+--
+-- Sin bloques DO: en este editor no se ejecutan (ya pasó dos veces con
+-- BLOQUE 4). Todo queda escrito en sentencias sueltas.
+-- ============================================================
+
+create table if not exists grades_weeks (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  subject_id uuid not null references grades_subjects(id) on delete cascade,
+  week_number integer not null,
+  start_date date,
+  end_date date,
+  topics jsonb not null default '[]'::jsonb,
+  notes text not null default '',
+  code text not null default '',
+  resources jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (subject_id, week_number)
+);
+
+create index if not exists grades_weeks_subject_idx
+  on grades_weeks (subject_id, week_number);
+
+alter table grades_weeks enable row level security;
+
+drop policy if exists "nexus read" on grades_weeks;
+drop policy if exists "nexus insert" on grades_weeks;
+drop policy if exists "nexus update" on grades_weeks;
+drop policy if exists "nexus delete" on grades_weeks;
+
+create policy "nexus read" on grades_weeks for select
+  using (user_id = auth.uid() or public.nexus_can_view('grades'));
+create policy "nexus insert" on grades_weeks for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('grades')));
+create policy "nexus update" on grades_weeks for update
+  using (user_id = auth.uid() or public.nexus_can_edit('grades'));
+create policy "nexus delete" on grades_weeks for delete
+  using (user_id = auth.uid());
+
+-- ------------------------------------------------------------
+-- Comprobación: tiene que devolver 4 filas.
+-- ------------------------------------------------------------
+-- select policyname from pg_policies
+-- where schemaname = 'public' and tablename = 'grades_weeks';
+
+
+-- ============================================================
+-- BLOQUE 10 — LATIDO DEL WORKER (saber si está escuchando)
+--
+-- Hasta ahora el chat no tenía forma de saber si el worker de tu PC
+-- estaba corriendo: "En cola" se mostraba igual estuviera prendido o no.
+-- El worker ahora escribe la hora cada vez que da una vuelta (cada ~3s),
+-- y el chat la lee para avisarte si no hay nadie escuchando, con un botón
+-- para revisar de nuevo en el momento.
+--
+-- Privada de cada cuenta, como dashboard_* o chat_messages: no se comparte
+-- con los invitados.
+-- ============================================================
+
+create table if not exists worker_heartbeat (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  last_seen timestamptz not null default now()
+);
+
+alter table worker_heartbeat enable row level security;
+
+drop policy if exists "select own worker_heartbeat" on worker_heartbeat;
+drop policy if exists "insert own worker_heartbeat" on worker_heartbeat;
+drop policy if exists "update own worker_heartbeat" on worker_heartbeat;
+drop policy if exists "delete own worker_heartbeat" on worker_heartbeat;
+
+create policy "select own worker_heartbeat" on worker_heartbeat
+  for select using (auth.uid() = user_id);
+create policy "insert own worker_heartbeat" on worker_heartbeat
+  for insert with check (auth.uid() = user_id);
+create policy "update own worker_heartbeat" on worker_heartbeat
+  for update using (auth.uid() = user_id);
+create policy "delete own worker_heartbeat" on worker_heartbeat
+  for delete using (auth.uid() = user_id);
