@@ -1,6 +1,14 @@
 import { errorMessage } from "../../../lib/errors";
 import { useEffect, useRef, useState } from "react";
-import { Plus, FileText, Trash2, UserRound } from "lucide-react";
+import {
+  Plus,
+  FileText,
+  Trash2,
+  UserRound,
+  Check,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import ConfirmDialog from "../../../components/ConfirmDialog";
 import { getTasks, addTask, updateTask, deleteTask } from "../../tasks/api";
 import type { TaskRow, Priority } from "../../tasks/types";
@@ -33,6 +41,7 @@ export default function TasksTab({ projectId }: TasksTabProps) {
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [assigneeDraft, setAssigneeDraft] = useState("");
   const [toDelete, setToDelete] = useState<TaskRow | null>(null);
+  const [showDone, setShowDone] = useState(false);
   const addInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -123,6 +132,9 @@ export default function TasksTab({ projectId }: TasksTabProps) {
     return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
   });
   const pendingCount = tasks.filter((t) => !t.done).length;
+  const doneCount = tasks.length - pendingCount;
+  // completed tasks stay hidden until "Ver completadas" is toggled on
+  const visible = showDone ? ordered : ordered.filter((t) => !t.done);
 
   return (
     <div className="space-y-3">
@@ -132,6 +144,21 @@ export default function TasksTab({ projectId }: TasksTabProps) {
         <span className="text-xs text-muted">
           {pendingCount} pendientes · {tasks.length} en total
         </span>
+        {doneCount > 0 && (
+          <button
+            onClick={() => setShowDone((v) => !v)}
+            className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+          >
+            {showDone ? (
+              <EyeOff className="w-3.5 h-3.5" />
+            ) : (
+              <Eye className="w-3.5 h-3.5" />
+            )}
+            {showDone
+              ? "Ocultar completadas"
+              : `Ver completadas (${doneCount})`}
+          </button>
+        )}
       </div>
 
       <div className="bg-surface border border-border rounded-xl overflow-x-auto">
@@ -147,41 +174,60 @@ export default function TasksTab({ projectId }: TasksTabProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {ordered.map((task) => {
+            {visible.map((task) => {
               const overdue = !task.done && task.due !== null && task.due < today;
               return (
                 <tr key={task.id} className="group hover:bg-surface-hover/40">
                   <td className="px-4 py-2.5">
-                    {editId === task.id ? (
-                      <input
-                        autoFocus
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
-                        onBlur={saveEdit}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") saveEdit();
-                          if (e.key === "Escape") setEditId(null);
-                        }}
-                        className="w-full bg-background border border-primary rounded px-2 py-1 text-sm outline-none"
-                      />
-                    ) : (
+                    <div className="flex items-center gap-2.5">
                       <button
-                        onClick={() => {
-                          setEditId(task.id);
-                          setEditTitle(task.title);
-                        }}
-                        className="flex items-center gap-2 text-left w-full group/title"
+                        onClick={() => toggleDone(task)}
+                        className={`w-4 h-4 shrink-0 rounded border flex items-center justify-center transition-colors ${
+                          task.done
+                            ? "bg-emerald-400 border-emerald-400 text-background"
+                            : "border-muted hover:border-foreground"
+                        }`}
+                        aria-label={
+                          task.done
+                            ? "Marcar como pendiente"
+                            : "Marcar como hecha"
+                        }
                       >
-                        <FileText className="w-3.5 h-3.5 text-muted shrink-0" />
-                        <span
-                          className={`font-medium group-hover/title:underline ${
-                            task.done ? "line-through text-muted" : ""
-                          }`}
-                        >
-                          {task.title}
-                        </span>
+                        {task.done && (
+                          <Check className="w-3 h-3" strokeWidth={3} />
+                        )}
                       </button>
-                    )}
+                      {editId === task.id ? (
+                        <input
+                          autoFocus
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          onBlur={saveEdit}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveEdit();
+                            if (e.key === "Escape") setEditId(null);
+                          }}
+                          className="w-full bg-background border border-primary rounded px-2 py-1 text-sm outline-none"
+                        />
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditId(task.id);
+                            setEditTitle(task.title);
+                          }}
+                          className="flex items-center gap-2 text-left w-full group/title"
+                        >
+                          <FileText className="w-3.5 h-3.5 text-muted shrink-0" />
+                          <span
+                            className={`font-medium group-hover/title:underline ${
+                              task.done ? "line-through text-muted" : ""
+                            }`}
+                          >
+                            {task.title}
+                          </span>
+                        </button>
+                      )}
+                    </div>
                   </td>
 
                   <td className="px-4 py-2.5">
