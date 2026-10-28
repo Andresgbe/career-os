@@ -23,7 +23,7 @@ import {
   deleteWeekFile,
 } from "./api";
 import { weekStatus, type SubjectRow, type WeekRow, type WeekResource } from "./types";
-import { todayIso } from "../tasks/types";
+import { todayIso } from "../../lib/dates";
 
 const EXAMPLE_PROMPTS = [
   "¿Qué vimos esta semana?",

@@ -1,15 +1,13 @@
-import { CheckSquare, FolderKanban, Paperclip, ListTodo } from "lucide-react";
+import { CheckSquare, FolderKanban, Paperclip } from "lucide-react";
 import type { ProjectRow } from "../types";
 
 interface ProjectCardProps {
   project: ProjectRow;
-  openTasks: number;
   onClick: () => void;
 }
 
 export default function ProjectCard({
   project,
-  openTasks,
   onClick,
 }: ProjectCardProps) {
   const doneMilestones = project.milestones.filter((m) => m.done).length;
@@ -61,12 +59,6 @@ export default function ProjectCard({
           <span className="flex items-center gap-1">
             <CheckSquare className="w-3.5 h-3.5" />
             {doneMilestones}/{project.milestones.length}
-          </span>
-        )}
-        {openTasks > 0 && (
-          <span className="flex items-center gap-1">
-            <ListTodo className="w-3.5 h-3.5" />
-            {openTasks}
           </span>
         )}
         {project.resources.length > 0 && (

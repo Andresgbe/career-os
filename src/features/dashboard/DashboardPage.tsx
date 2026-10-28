@@ -18,7 +18,7 @@ import { MODULES } from "../../lib/modules";
 
 // Two views of the dashboard: the module board, and the assistant. The chat
 // lives here rather than as its own module so it's one tap away from the
-// first screen, the same way To Buy sits inside Pending.
+// first screen.
 const TABS = [
   { id: "chat", label: "Chat", icon: MessageSquare },
   { id: "modules", label: "Módulos", icon: LayoutGrid },

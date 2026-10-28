@@ -135,7 +135,7 @@ export default function ConversationList({
       {confirmDelete && (
         <ConfirmDialog
           title="Eliminar chat"
-          message={`Se elimina "${confirmDelete.title}" con todos sus mensajes. Lo que Claude ya hizo en NEXUS (tareas, gastos, notas) se queda.`}
+          message={`Se elimina "${confirmDelete.title}" con todos sus mensajes. Lo que Claude ya hizo en NEXUS (gastos, notas) se queda.`}
           confirmLabel="Eliminar"
           onCancel={() => setConfirmDelete(null)}
           onConfirm={() => {

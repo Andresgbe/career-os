@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // NEXUS MCP server — exposes the career-os Supabase data to Claude so it can
-// read context (tasks, schedule, ideas, shopping list, subjects, projects,
-// per-section notes) and act on it (create tasks, ideas, items, save notes).
+// read context (schedule, ideas, subjects, projects, finance, per-section
+// notes) and act on it (create ideas, log transactions, save notes).
 //
 // Runs locally over stdio. Register it with:
 //   claude mcp add --scope user nexus -- node C:/career-os/mcp-server/index.js
@@ -117,7 +117,6 @@ function caracasToday() {
 
 const SECTIONS = [
   "dashboard",
-  "tasks",
   "motorcycle",
   "medical",
   "content",
@@ -127,7 +126,6 @@ const SECTIONS = [
   "insurance",
   "finance",
   "passwords",
-  "tobuy",
 ];
 
 // ============================================
@@ -140,8 +138,8 @@ server.registerTool(
   "overview",
   {
     description:
-      "Snapshot completo del estado actual de NEXUS: tareas pendientes, " +
-      "clases de hoy, lista de compras, ideas de contenido en progreso, " +
+      "Snapshot completo del estado actual de NEXUS: clases de hoy, " +
+      "ideas de contenido en progreso, " +
       "evaluaciones próximas y proyectos. Úsalo primero para tener contexto " +
       "antes de hacer cualquier tarea.",
     inputSchema: z.object({}),
@@ -150,14 +148,12 @@ server.registerTool(
     const { supabase } = await getSession();
     const today = caracasToday();
 
-    const [tasks, schedule, tobuy, ideas, evals, subjects, projects] =
+    const [schedule, ideas, evals, subjects, projects] =
       await Promise.all([
-        soft("tasks", supabase.from("tasks").select("*").order("sort_order")),
         soft(
           "schedule",
           supabase.from("grades_schedule_blocks").select("*").is("person_id", null)
         ),
-        soft("tobuy", supabase.from("tobuy_items").select("*").eq("checked", false)),
         soft("content_ideas", supabase.from("content_ideas").select("*")),
         soft(
           "evaluations",
@@ -178,21 +174,11 @@ server.registerTool(
       supabase.from("knowledge_docs").select("title,folder_id")
     );
 
-    const notes = [tasks, schedule, tobuy, ideas, evals, subjects, projects]
+    const notes = [schedule, ideas, evals, subjects, projects]
       .filter((r) => r.error)
       .map((r) => `${r.label}: ${r.error}`);
 
     const subjectName = new Map((subjects.data ?? []).map((s) => [s.id, s.name]));
-
-    const pendingTasks = (tasks.data ?? [])
-      .filter((t) => !t.done)
-      .map((t) => ({
-        id: t.id,
-        title: t.title,
-        priority: t.priority,
-        due: t.due,
-        overdue: t.due ? t.due < today.date : false,
-      }));
 
     const todaysClasses =
       today.dayIndex === null
@@ -238,15 +224,9 @@ server.registerTool(
             nota: 'Usa la herramienta "knowledge" para leer el contenido completo.',
           }
         : "vacía",
-      tareas_pendientes: {
-        total: pendingTasks.length,
-        atrasadas: pendingTasks.filter((t) => t.overdue).length,
-        items: pendingTasks.slice(0, 25),
-      },
       clases_de_hoy: todaysClasses,
       evaluaciones_proximas: upcomingEvals,
       ideas_de_contenido_abiertas: openIdeas.slice(0, 15),
-      compras_pendientes: (tobuy.data ?? []).map((i) => i.title).slice(0, 30),
       proyectos: (projects.data ?? []).map((p) => ({
         id: p.id,
         name: p.name,
@@ -307,178 +287,6 @@ server.registerTool(
     );
     if (error) throw new Error(error.message);
     return ok(`Contexto de "${section}" guardado (${content.length} caracteres).`);
-  })
-);
-
-server.registerTool(
-  "list_tasks",
-  {
-    description:
-      "Lista sus tareas. Por defecto solo las pendientes de su lista " +
-      "personal; con project trae las de un proyecto.",
-    inputSchema: z.object({
-      include_done: z.boolean().optional().describe("Incluir las ya hechas"),
-      project: z
-        .string()
-        .optional()
-        .describe('Nombre de un proyecto, o "todos" para no filtrar'),
-    }),
-  },
-  tool(async ({ include_done, project }) => {
-    const { supabase } = await getSession();
-    const [{ data: tasks, error }, { data: projects }] = await Promise.all([
-      supabase.from("tasks").select("*").order("sort_order"),
-      supabase.from("personal_projects").select("id,name"),
-    ]);
-    if (error) throw new Error(error.message);
-    const projectById = new Map((projects ?? []).map((p) => [p.id, p.name]));
-
-    let rows = tasks ?? [];
-    if (!project) {
-      rows = rows.filter((t) => !t.project_id);
-    } else if (project.toLowerCase() !== "todos") {
-      const match = (projects ?? []).find(
-        (p) => p.name.toLowerCase() === project.toLowerCase()
-      );
-      if (!match)
-        throw new Error(
-          `No existe el proyecto "${project}". Proyectos: ${
-            (projects ?? []).map((p) => p.name).join(", ") || "ninguno"
-          }`
-        );
-      rows = rows.filter((t) => t.project_id === match.id);
-    }
-
-    const rank = { alta: 0, media: 1, baja: 2 };
-    return ok(
-      rows
-        .filter((t) => include_done || !t.done)
-        .sort((a, b) => rank[a.priority] - rank[b.priority])
-        .map((t) => ({
-          id: t.id,
-          title: t.title,
-          hecha: !!t.done,
-          prioridad: t.priority,
-          fecha: t.due,
-          responsable: t.assignee || null,
-          proyecto: t.project_id ? projectById.get(t.project_id) ?? null : null,
-        }))
-    );
-  })
-);
-
-server.registerTool(
-  "create_task",
-  {
-    description:
-      "Crea una tarea. Sin project va a su lista personal; con project " +
-      "queda dentro de ese proyecto.",
-    inputSchema: z.object({
-      title: z.string(),
-      priority: z.enum(["alta", "media", "baja"]).optional(),
-      due: z.string().optional().describe("Fecha YYYY-MM-DD"),
-      assignee: z.string().optional().describe("Quién es responsable"),
-      project: z
-        .string()
-        .optional()
-        .describe("Nombre de un proyecto existente de Project Management"),
-    }),
-  },
-  tool(async ({ title, priority, due, assignee, project }) => {
-    const { supabase, userId } = await getSession();
-
-    let projectId = null;
-    if (project) {
-      const { data: rows } = await supabase
-        .from("personal_projects")
-        .select("id,name");
-      const match = (rows ?? []).find(
-        (p) => p.name.toLowerCase() === project.toLowerCase()
-      );
-      if (!match)
-        throw new Error(
-          `No existe el proyecto "${project}". Proyectos: ${
-            (rows ?? []).map((p) => p.name).join(", ") || "ninguno"
-          }`
-        );
-      projectId = match.id;
-    }
-
-    const { data, error } = await supabase
-      .from("tasks")
-      .insert({
-        user_id: userId,
-        title,
-        priority: priority ?? "media",
-        due: due ?? null,
-        assignee: assignee ?? "",
-        project_id: projectId,
-        done: false,
-        sort_order: Date.now(),
-      })
-      .select("*")
-      .single();
-    if (error) throw new Error(error.message);
-    return ok({ creada: { id: data.id, title: data.title, due: data.due } });
-  })
-);
-
-server.registerTool(
-  "update_task",
-  {
-    description:
-      "Actualiza una tarea: marcarla hecha o pendiente, cambiar título, " +
-      "prioridad, fecha o el proyecto al que pertenece.",
-    inputSchema: z.object({
-      id: z.string(),
-      title: z.string().optional(),
-      done: z.boolean().optional().describe("true la marca hecha"),
-      priority: z.enum(["alta", "media", "baja"]).optional(),
-      due: z.string().nullable().optional(),
-      assignee: z.string().optional().describe("Quién es responsable"),
-      project: z
-        .string()
-        .nullable()
-        .optional()
-        .describe("Nombre del proyecto al que moverla; null la vuelve personal"),
-    }),
-  },
-  tool(async ({ id, project, ...fields }) => {
-    const { supabase } = await getSession();
-    const patch = Object.fromEntries(
-      Object.entries(fields).filter(([, v]) => v !== undefined)
-    );
-
-    if (project !== undefined) {
-      if (project === null) {
-        patch.project_id = null;
-      } else {
-        const { data: rows } = await supabase
-          .from("personal_projects")
-          .select("id,name");
-        const match = (rows ?? []).find(
-          (p) => p.name.toLowerCase() === project.toLowerCase()
-        );
-        if (!match)
-          throw new Error(
-            `No existe el proyecto "${project}". Proyectos: ${
-              (rows ?? []).map((p) => p.name).join(", ") || "ninguno"
-            }`
-          );
-        patch.project_id = match.id;
-      }
-    }
-
-    if (Object.keys(patch).length === 0) throw new Error("Nada que actualizar.");
-
-    const { data, error } = await supabase
-      .from("tasks")
-      .update(patch)
-      .eq("id", id)
-      .select("*")
-      .single();
-    if (error) throw new Error(error.message);
-    return ok({ actualizada: { id: data.id, title: data.title, hecha: !!data.done } });
   })
 );
 
@@ -564,72 +372,6 @@ server.registerTool(
       .single();
     if (error) throw new Error(error.message);
     return ok({ creada: { id: data.id, title: data.title } });
-  })
-);
-
-server.registerTool(
-  "list_tobuy",
-  {
-    description: "Lista la lista de compras (To Buy) agrupada por categoría.",
-    inputSchema: z.object({
-      include_checked: z.boolean().optional().describe("Incluir lo ya comprado"),
-    }),
-  },
-  tool(async ({ include_checked }) => {
-    const { supabase } = await getSession();
-    const [{ data: cats }, { data: items, error }] = await Promise.all([
-      supabase.from("tobuy_categories").select("*").order("sort_order"),
-      supabase.from("tobuy_items").select("*").order("sort_order"),
-    ]);
-    if (error) throw new Error(error.message);
-    const catName = new Map((cats ?? []).map((c) => [c.id, c.name]));
-    const grouped = {};
-    for (const item of items ?? []) {
-      if (!include_checked && item.checked) continue;
-      const key = item.category_id ? catName.get(item.category_id) ?? "?" : "Sin categoría";
-      (grouped[key] ??= []).push(item.checked ? `${item.title} (comprado)` : item.title);
-    }
-    return ok(grouped);
-  })
-);
-
-server.registerTool(
-  "add_tobuy_item",
-  {
-    description: "Agrega un artículo a la lista de compras de NEXUS.",
-    inputSchema: z.object({
-      title: z.string(),
-      category: z
-        .string()
-        .optional()
-        .describe("Nombre de una categoría existente, por ejemplo Mercado"),
-    }),
-  },
-  tool(async ({ title, category }) => {
-    const { supabase, userId } = await getSession();
-
-    let categoryId = null;
-    if (category) {
-      const { data: cats } = await supabase.from("tobuy_categories").select("id,name");
-      const match = (cats ?? []).find(
-        (c) => c.name.toLowerCase() === category.toLowerCase()
-      );
-      categoryId = match?.id ?? null;
-    }
-
-    const { data, error } = await supabase
-      .from("tobuy_items")
-      .insert({
-        user_id: userId,
-        title,
-        category_id: categoryId,
-        checked: false,
-        sort_order: Date.now() % 100000,
-      })
-      .select("*")
-      .single();
-    if (error) throw new Error(error.message);
-    return ok({ agregado: { id: data.id, title: data.title } });
   })
 );
 

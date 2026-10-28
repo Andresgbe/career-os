@@ -30,7 +30,7 @@ The **block pattern** — a title plus optional `RichTextEditor` + `CodeBlock` +
 
 ### Module system
 
-The app is organized as a fixed set of "modules" (Motorcycle, Medical, Content, Grades, Project Management, Programming, Tasks, Insurance, Finance, Work Tracker), each a self-contained vertical slice under `src/features/<name>/`. A module typically contains:
+The app is organized as a fixed set of "modules" (Motorcycle, Medical, Content, Grades, Project Management, Programming, Insurance, Finance, Work Tracker), each a self-contained vertical slice under `src/features/<name>/`. A module typically contains:
 - `<Name>Page.tsx` — top-level page with its own tab state, fetches data in `useEffect` and passes it down
 - `api.ts` — direct Supabase queries (no shared data-fetching layer/React Query; each module calls `supabase.from(...)` itself and throws on `error`)
 - `types.ts` — row types matching Supabase tables, plus any pure helper functions for that domain (e.g. grade-point math in `grades/types.ts`)

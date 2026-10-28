@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Bike, Stethoscope, Video, GraduationCap, Laptop, Terminal, ListTodo, Shield, Landmark, KeyRound, BookMarked, ShieldCheck } from "lucide-react";
+import { Bike, Stethoscope, Video, GraduationCap, Laptop, Terminal, Shield, Landmark, KeyRound, BookMarked, ShieldCheck } from "lucide-react";
 
 export interface ModuleDef {
   id: string;
@@ -9,12 +9,6 @@ export interface ModuleDef {
 }
 
 export const MODULES: ModuleDef[] = [
-  {
-    id: "tasks",
-    name: "Pending",
-    path: "/tasks",
-    icon: ListTodo,
-  },
   {
     id: "motorcycle",
     name: "Motorcycle",

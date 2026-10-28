@@ -1,9 +1,8 @@
-import { Paperclip, CheckSquare, ListTodo } from "lucide-react";
+import { Paperclip, CheckSquare } from "lucide-react";
 import type { ProjectRow } from "../types";
 
 interface ProjectTableProps {
   projects: ProjectRow[];
-  openTaskCount: Record<string, number>;
   onOpen: (project: ProjectRow) => void;
 }
 
@@ -11,7 +10,6 @@ interface ProjectTableProps {
 // columns, denser than the card grid and easier to scan across projects.
 export default function ProjectTable({
   projects,
-  openTaskCount,
   onOpen,
 }: ProjectTableProps) {
   return (
@@ -22,7 +20,6 @@ export default function ProjectTable({
             <th className="px-4 py-2.5 font-medium">Proyecto</th>
             <th className="px-4 py-2.5 font-medium">Cliente</th>
             <th className="px-4 py-2.5 font-medium">Stack</th>
-            <th className="px-4 py-2.5 font-medium">Tareas</th>
             <th className="px-4 py-2.5 font-medium">Hitos</th>
             <th className="px-4 py-2.5 font-medium">Archivos</th>
           </tr>
@@ -30,7 +27,6 @@ export default function ProjectTable({
         <tbody className="divide-y divide-border">
           {projects.map((project) => {
             const doneMilestones = project.milestones.filter((m) => m.done).length;
-            const openTasks = openTaskCount[project.id] ?? 0;
 
             return (
               <tr
@@ -66,16 +62,6 @@ export default function ProjectTable({
                         </span>
                       )}
                     </span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  {openTasks > 0 ? (
-                    <span className="flex items-center gap-1 text-muted">
-                      <ListTodo className="w-3.5 h-3.5" />
-                      {openTasks}
-                    </span>
-                  ) : (
-                    <span className="text-muted">—</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-muted">

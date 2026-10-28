@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   Pencil,
   Trash2,
-  ListTodo,
   LayoutDashboard,
   Link2,
   KeyRound,
@@ -21,11 +20,9 @@ import LinksTab from "./tabs/LinksTab";
 import CredentialsTab from "./tabs/CredentialsTab";
 import EntriesTab from "./tabs/EntriesTab";
 import DesignTab from "./tabs/DesignTab";
-import TasksTab from "./tabs/TasksTab";
 
 const TABS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "tasks", label: "Tasks", icon: ListTodo },
   { id: "links", label: "Links", icon: Link2 },
   { id: "credentials", label: "Credentials", icon: KeyRound },
   { id: "entries", label: "Entries", icon: NotebookText },
@@ -150,7 +147,6 @@ export default function ProjectWorkspacePage() {
 
       {/* Tab content */}
       {activeTab === "overview" && <OverviewTab project={project} onProjectChange={setProject} />}
-      {activeTab === "tasks" && <TasksTab projectId={project.id} />}
       {activeTab === "links" && <LinksTab project={project} onProjectChange={setProject} />}
       {activeTab === "credentials" && (
         <CredentialsTab project={project} onProjectChange={setProject} />

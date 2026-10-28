@@ -10,7 +10,7 @@ import {
   type SubjectRow,
   type WeekRow,
 } from "./types";
-import { todayIso } from "../tasks/types";
+import { todayIso } from "../../lib/dates";
 
 // La vista de carpetas: las 16 semanas de una materia, cada una como una
 // tarjeta. Sigue el patrón de taller aprobado en la propuesta de diseño.

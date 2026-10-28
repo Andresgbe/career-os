@@ -12,7 +12,6 @@ import WeekDetailPage from "../features/grades/WeekDetailPage";
 import ProjectsPage from "../features/projects/ProjectsPage";
 import ProjectWorkspacePage from "../features/projects/ProjectWorkspacePage";
 import ProgrammingPage from "../features/programming/ProgrammingPage";
-import TasksPage from "../features/tasks/TasksPage";
 import InsurancePage from "../features/insurance/InsurancePage";
 import FinancePage from "../features/finance/FinancePage";
 import PasswordsPage from "../features/passwords/PasswordsPage";
@@ -56,12 +55,9 @@ export const router = createBrowserRouter([
         element: guard("projects", <ProjectWorkspacePage />),
       },
       { path: "programming", element: guard("programming", <ProgrammingPage />) },
-      { path: "tasks", element: guard("tasks", <TasksPage />) },
       { path: "insurance", element: guard("insurance", <InsurancePage />) },
       { path: "finance", element: guard("finance", <FinancePage />) },
       { path: "passwords", element: guard("passwords", <PasswordsPage />) },
-      // To Buy now lives as a tab inside Pending; keep old links working
-      { path: "tobuy", element: <Navigate to="/tasks" replace /> },
       { path: "knowledge", element: guard("knowledge", <KnowledgePage />) },
       {
         path: "admin",

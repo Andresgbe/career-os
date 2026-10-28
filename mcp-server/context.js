@@ -47,19 +47,16 @@ export async function buildContext(supabase, includeKnowledge) {
   const out = [`Hoy es ${today.legible}. Zona horaria: America/Caracas.`];
 
   const [
-    tasks,
     blocks,
     subjects,
     evals,
     projects,
-    tobuy,
     finance,
     finCats,
     finRates,
     folders,
     docs,
   ] = await Promise.all([
-      rows(supabase.from("tasks").select("title,priority,due,done,project_id")),
       rows(
         supabase
           .from("grades_schedule_blocks")
@@ -74,7 +71,6 @@ export async function buildContext(supabase, includeKnowledge) {
           .not("eval_date", "is", null)
       ),
       rows(supabase.from("personal_projects").select("*")),
-      rows(supabase.from("tobuy_items").select("title").eq("checked", false)),
     rows(
       supabase
         .from("finance_transactions")
@@ -106,16 +102,6 @@ export async function buildContext(supabase, includeKnowledge) {
       : "CLASES DE HOY: ninguna."
   );
 
-  const pending = tasks.filter((t) => !t.done);
-  const label = (t) =>
-    `  [${t.priority ?? "sin prioridad"}] ${t.title}` +
-    (t.due ? ` — vence ${t.due}${t.due < today.date ? " (ATRASADA)" : ""}` : "");
-  out.push(
-    pending.length
-      ? `TAREAS PENDIENTES (${pending.length}):\n${pending.slice(0, 40).map(label).join("\n")}`
-      : "TAREAS PENDIENTES: ninguna."
-  );
-
   const subjectName = new Map(subjects.map((s) => [s.id, s.name]));
   const upcoming = evals
     .filter((e) => e.grade == null && e.eval_date >= today.date)
@@ -137,15 +123,6 @@ export async function buildContext(supabase, includeKnowledge) {
             (p.payment_status ? ` — pago: ${p.payment_status}` : "")
         )
         .join("\n")}`
-    );
-  }
-
-  if (tobuy.length) {
-    out.push(
-      `LISTA DE COMPRAS (${tobuy.length} sin marcar):\n  ${tobuy
-        .slice(0, 30)
-        .map((i) => i.title)
-        .join(", ")}`
     );
   }
 

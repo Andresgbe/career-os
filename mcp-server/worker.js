@@ -82,7 +82,7 @@ const SYSTEM = [
   "reales de este momento. Respondé con eso, sin volver a consultar lo que ya",
   "esté ahí y sin preguntarle nada que el bloque ya conteste.",
   "Si necesitás algo más, usá las herramientas mcp__nexus__*, que leen y escriben sus datos reales:",
-  "no inventes tareas, notas ni datos, y no le preguntes lo que podés consultar.",
+  "no inventes notas ni datos, y no le preguntes lo que podés consultar.",
   "Cuando te pida anotar o cambiar algo, hacelo con la herramienta y después",
   "confirmáselo en una línea. No muestres JSON ni nombres de herramientas.",
   "Si el mensaje trae una imagen adjunta, mirala con Read, deducí qué es y",

@@ -38,9 +38,8 @@ function formatAgo(ms: number): string {
 }
 
 const SUGGESTIONS = [
-  "¿Qué tengo pendiente hoy?",
-  "Anota una tarea: llamar al cliente el viernes",
-  "Agrega café y papel a la lista de compras",
+  "¿Qué clases tengo hoy?",
+  "Gasté 5$ en el Gama en supermercado",
   "¿Cuánto llevo acumulado en Álgebra Lineal?",
 ];
 
@@ -353,8 +352,7 @@ export default function ChatPanel() {
           <div className="h-full flex flex-col items-center justify-center text-center gap-4">
             <Bot className="w-8 h-8 text-muted" />
             <p className="text-sm text-muted max-w-sm">
-              Escribe lo que necesites. Tiene acceso a tus tareas, compras,
-              horario, materias, proyectos y tu perfil.
+              Escribe lo que necesites. Tiene acceso a tu horario, materias, proyectos y tu perfil.
             </p>
             <div className="flex flex-wrap gap-2 justify-center">
               {SUGGESTIONS.map((s) => (
@@ -545,7 +543,7 @@ export default function ChatPanel() {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          placeholder="Anota una tarea, pregunta algo..."
+          placeholder="Pregunta algo..."
           className="flex-1 min-w-0 bg-surface border border-border rounded-xl px-4 py-3 text-sm outline-none focus:border-primary"
         />
         <button
@@ -562,7 +560,7 @@ export default function ChatPanel() {
         <ConfirmDialog
           title="Limpiar el chat"
           confirmLabel="Limpiar"
-          message="Se borran los mensajes de esta conversación y Claude empieza de cero en ella. Las tareas y cambios que ya hizo en NEXUS se quedan."
+          message="Se borran los mensajes de esta conversación y Claude empieza de cero en ella. Los cambios que ya hizo en NEXUS se quedan."
           onConfirm={handleClear}
           onCancel={() => setConfirmClear(false)}
         />

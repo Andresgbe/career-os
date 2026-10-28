@@ -5,7 +5,6 @@ import ProjectCard from "./components/ProjectCard";
 import ProjectTable from "./components/ProjectTable";
 import ProjectModal from "./components/ProjectModal";
 import { getProjects } from "./api";
-import { getTasks } from "../tasks/api";
 import type { ProjectRow } from "./types";
 
 type ViewMode = "table" | "cards";
@@ -14,7 +13,6 @@ const VIEW_KEY = "projects-view";
 export default function ProjectsPage() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
-  const [openTaskCount, setOpenTaskCount] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -40,20 +38,6 @@ export default function ProjectsPage() {
       .then(setProjects)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-
-    // Open task count per project, shown as a property on each row
-    getTasks()
-      .then((tasks) => {
-        const counts: Record<string, number> = {};
-        for (const t of tasks) {
-          if (!t.project_id || t.done) continue;
-          counts[t.project_id] = (counts[t.project_id] ?? 0) + 1;
-        }
-        setOpenTaskCount(counts);
-      })
-      .catch(() => {
-        // tasks are a nice-to-have here; the project list still works
-      });
   }, []);
 
   const openProject = (project: ProjectRow) => navigate(`/projects/${project.id}`);
@@ -161,7 +145,6 @@ export default function ProjectsPage() {
       ) : view === "table" ? (
         <ProjectTable
           projects={visibleProjects}
-          openTaskCount={openTaskCount}
           onOpen={openProject}
         />
       ) : (
@@ -170,7 +153,6 @@ export default function ProjectsPage() {
             <ProjectCard
               key={project.id}
               project={project}
-              openTasks={openTaskCount[project.id] ?? 0}
               onClick={() => openProject(project)}
             />
           ))}
