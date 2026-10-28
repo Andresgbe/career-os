@@ -127,31 +127,35 @@ export default function ProjectsPage() {
       </div>
 
       {isAdmin && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <Stat label="Proyectos" value={projects.length} />
           <Stat label="Tareas en tableros" value={totalTasks} />
           <Stat label="Compartidos con clientes" value={sharedCount} />
         </div>
       )}
 
-      <PendingTasksPanel projects={projects} columns={boardColumns} tasks={boardTasks} />
+      {isAdmin && (
+        <PendingTasksPanel projects={projects} columns={boardColumns} tasks={boardTasks} />
+      )}
 
       {error && (
         <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-xl">{error}</div>
       )}
 
       <div className="flex items-center gap-2.5 flex-wrap">
-        <label className="flex-1 min-w-[220px] flex items-center gap-2 h-[42px] px-3.5 rounded-xl bg-surface border border-border focus-within:border-primary transition-colors">
-          <Search className="w-4 h-4 text-muted shrink-0" />
-          <span className="sr-only">Buscar proyectos</span>
-          <input
-            type="search"
-            placeholder="Buscar por nombre o stack"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 min-w-0 bg-transparent outline-none text-sm"
-          />
-        </label>
+        {isAdmin && (
+          <label className="flex-1 min-w-0 flex items-center gap-2 h-[42px] px-3.5 rounded-xl bg-surface border border-border focus-within:border-primary transition-colors">
+            <Search className="w-4 h-4 text-muted shrink-0" />
+            <span className="sr-only">Buscar proyectos</span>
+            <input
+              type="search"
+              placeholder="Buscar por nombre o stack"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="flex-1 min-w-0 bg-transparent outline-none text-sm"
+            />
+          </label>
+        )}
         <div className="flex gap-1 p-1 rounded-xl bg-surface border border-border">
           {(["cards", "table"] as const).map((mode) => (
             <button
@@ -207,9 +211,9 @@ export default function ProjectsPage() {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="px-4 sm:px-[18px] py-4 rounded-2xl bg-surface border border-border">
-      <p className="text-[13px] text-muted">{label}</p>
-      <p className="text-[26px] font-bold mt-1.5 leading-none">{value}</p>
+    <div className="px-3 sm:px-[18px] py-3 sm:py-4 rounded-2xl bg-surface border border-border min-w-0">
+      <p className="text-[11px] sm:text-[13px] text-muted leading-tight">{label}</p>
+      <p className="text-xl sm:text-[26px] font-bold mt-1.5 leading-none">{value}</p>
     </div>
   );
 }

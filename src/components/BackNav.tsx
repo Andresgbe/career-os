@@ -15,14 +15,16 @@ interface BackNavProps {
 
 // The "‹  PARENT / CURRENT" header used on every nested page (a project, a
 // subject's weeks, a single week). Square back button plus an uppercase
-// breadcrumb; the last crumb is the current page.
+// breadcrumb; the last crumb is the current page. On wide screens the
+// button hangs out in the left margin so the breadcrumb lines up with the
+// page content.
 export default function BackNav({ to, crumbs, className = "" }: BackNavProps) {
   return (
-    <nav className={`flex items-center gap-4 min-w-0 ${className}`}>
+    <nav className={`relative flex items-center gap-4 min-h-11 min-w-0 ${className}`}>
       <Link
         to={to}
         aria-label="Volver"
-        className="w-11 h-11 shrink-0 flex items-center justify-center rounded-xl bg-surface-hover border border-border text-foreground hover:border-primary/60 hover:bg-border transition-colors"
+        className="xl:absolute xl:right-full xl:mr-5 w-11 h-11 shrink-0 flex items-center justify-center rounded-xl bg-surface-hover border border-border text-foreground hover:border-primary/60 hover:bg-border transition-colors"
       >
         <ChevronLeft className="w-5 h-5" />
       </Link>

@@ -20,6 +20,7 @@ import {
   GripVertical,
   FolderPlus,
   Lock,
+  Copy,
 } from "lucide-react";
 import ConfirmDialog from "../../../components/ConfirmDialog";
 import {
@@ -62,6 +63,8 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [visible, setVisible] = useState<Set<string>>(new Set());
+  // "<id>:user" / "<id>:pass" of the value just copied, for the check mark
+  const [copied, setCopied] = useState<string | null>(null);
   // Which blocks are minimized. Remembered per project in this browser.
   const collapsedKey = `nexus:credentials-collapsed:${project.id}`;
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
@@ -456,6 +459,27 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
 
   // ---------- Render ----------
 
+  const copyButton = (key: string, value: string, label: string) => (
+    <button
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(value);
+          setCopied(key);
+          setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
+        } catch {
+          setError("No se pudo copiar al portapapeles");
+        }
+      }}
+      className={`p-1 rounded shrink-0 transition-colors ${
+        copied === key ? "text-emerald-400" : "text-muted hover:text-primary hover:bg-surface-hover"
+      }`}
+      title={copied === key ? "Copiado" : `Copiar ${label}`}
+      aria-label={`Copiar ${label}`}
+    >
+      {copied === key ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+    </button>
+  );
+
   const collapseButton = (id: string) => {
     const isCollapsed = collapsed.has(id);
     return (
@@ -563,16 +587,17 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="text-sm space-y-1 pl-9">
+                <div className="text-sm space-y-1 pl-1 sm:pl-9">
                   {resource.username && (
-                    <p className="break-all">
-                      <span className="text-muted">Usuario: </span>
-                      {resource.username}
+                    <p className="flex items-center gap-2">
+                      <span className="text-muted shrink-0">Usuario: </span>
+                      <span className="break-all">{resource.username}</span>
+                      {copyButton(`${resource.id}:user`, resource.username, "usuario")}
                     </p>
                   )}
                   {resource.password && (
                     <p className="flex items-center gap-2">
-                      <span className="text-muted">Contraseña: </span>
+                      <span className="text-muted shrink-0">Contraseña: </span>
                       <span className="font-mono break-all">
                         {visible.has(resource.id)
                           ? resource.password
@@ -589,6 +614,7 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
                           <Eye className="w-3.5 h-3.5" />
                         )}
                       </button>
+                      {copyButton(`${resource.id}:pass`, resource.password, "contraseña")}
                     </p>
                   )}
                 </div>
@@ -715,7 +741,7 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
 
   return (
     <div className="space-y-4">
-      <section className="bg-surface border border-border rounded-xl p-5 space-y-3">
+      <section className="bg-surface border border-border rounded-xl p-4 sm:p-5 space-y-3">
         <h2 className="font-semibold">Nueva credencial</h2>
         {error && <p className="text-sm text-red-400">{error}</p>}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
@@ -766,7 +792,7 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
       </section>
 
       <DragDropContext onDragEnd={onDragEnd}>
-        <section className="bg-surface border border-border border-l-4 border-l-amber-400 rounded-xl p-5">
+        <section className="bg-surface border border-border border-l-4 border-l-amber-400 rounded-xl p-4 sm:p-5">
           <div className={`flex items-center gap-2 ${collapsed.has(PRIVATE) ? "" : "mb-3"}`}>
             <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span className="font-semibold text-sm uppercase tracking-wide">Privada</span>
@@ -780,7 +806,7 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
         {/* Sin categoría: only shown while something is in it, or when
             there are no categories yet. */}
         {(current[NONE].length > 0 || groups.length === 0) && (
-          <section className="bg-surface border border-border rounded-xl p-5">
+          <section className="bg-surface border border-border rounded-xl p-4 sm:p-5">
             <div className={`flex items-center gap-2 ${collapsed.has(NONE) ? "" : "mb-3"}`}>
               <span className="w-3 h-3 rounded-full bg-border shrink-0" />
               <span className="font-semibold text-sm uppercase tracking-wide text-muted">
@@ -807,7 +833,7 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
                     <section
                       ref={dragProvided.innerRef}
                       {...dragProvided.draggableProps}
-                      className={`bg-surface border rounded-xl p-5 border-l-4 ${
+                      className={`bg-surface border rounded-xl p-4 sm:p-5 border-l-4 ${
                         snapshot.isDragging ? "border-primary/60 shadow-lg shadow-black/40" : "border-border"
                       }`}
                       style={{

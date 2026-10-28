@@ -338,7 +338,7 @@ export default function ContentBoard({ newIdeaSignal = 0 }: ContentBoardProps) {
       </div>
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex items-start gap-3.5 overflow-x-auto pb-2">
+        <div className="flex items-start gap-3 sm:gap-3.5 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
           {columns.map((column) => {
             const items = ideas
               .filter((i) => (column.id === UNASSIGNED ? !i.category_id : i.category_id === column.id))
@@ -371,7 +371,7 @@ export default function ContentBoard({ newIdeaSignal = 0 }: ContentBoardProps) {
             return (
               <div
                 key={column.id}
-                className="bg-[#131317] border border-border rounded-2xl w-[290px] flex-shrink-0 flex flex-col p-3 gap-2.5"
+                className="bg-[#131317] border border-border rounded-2xl w-[82vw] max-w-[290px] sm:w-[290px] flex-shrink-0 flex flex-col p-3 gap-2.5"
               >
                 <div className="flex items-center gap-2 px-1 py-0.5">
                   <span

@@ -195,7 +195,7 @@ export default function BoardTab({ projectId, canEdit }: BoardTabProps) {
             <div
               ref={boardProvided.innerRef}
               {...boardProvided.droppableProps}
-              className="flex items-start gap-3.5 overflow-x-auto pb-3"
+              className="flex items-start gap-3 sm:gap-3.5 overflow-x-auto pb-3 -mx-4 px-4 sm:mx-0 sm:px-0"
             >
               {ordered.map((column, columnIndex) => {
                 const items = tasksIn(column.id);
@@ -210,7 +210,7 @@ export default function BoardTab({ projectId, canEdit }: BoardTabProps) {
                       <section
                         ref={columnProvided.innerRef}
                         {...columnProvided.draggableProps}
-                        className="w-72 sm:w-[300px] shrink-0 flex flex-col gap-2.5 p-3 rounded-2xl bg-[#131317] border border-border"
+                        className="w-[82vw] max-w-[300px] sm:w-[300px] shrink-0 flex flex-col gap-2.5 p-3 rounded-2xl bg-[#131317] border border-border"
                       >
                         <div
                           {...columnProvided.dragHandleProps}

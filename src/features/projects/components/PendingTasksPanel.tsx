@@ -73,7 +73,7 @@ export default function PendingTasksPanel({ projects, columns, tasks }: PendingT
       <button
         onClick={toggleOpen}
         aria-expanded={open}
-        className="w-full flex items-center gap-3 px-5 py-4 text-left"
+        className="w-full flex items-center gap-3 px-4 sm:px-5 py-4 text-left"
       >
         <span className="w-9 h-9 rounded-[10px] bg-primary/15 text-primary-hover flex items-center justify-center shrink-0">
           <ListTodo className="w-4 h-4" />
@@ -93,7 +93,7 @@ export default function PendingTasksPanel({ projects, columns, tasks }: PendingT
       </button>
 
       {open && pending.length > 0 && (
-        <div className="px-5 pb-5 space-y-3">
+        <div className="px-3 sm:px-5 pb-4 sm:pb-5 space-y-3">
           <div className="flex gap-1 p-1 w-fit rounded-xl bg-background border border-border">
             {(
               [
@@ -126,7 +126,7 @@ export default function PendingTasksPanel({ projects, columns, tasks }: PendingT
                 <li key={task.id}>
                   <Link
                     to={`/projects/${project.id}`}
-                    className="flex items-center gap-3 px-3.5 py-2.5 bg-background hover:bg-surface-hover transition-colors"
+                    className="flex items-center gap-2.5 sm:gap-3 px-3 sm:px-3.5 py-2.5 bg-background hover:bg-surface-hover transition-colors"
                   >
                     <span
                       className="w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0"
@@ -144,7 +144,7 @@ export default function PendingTasksPanel({ projects, columns, tasks }: PendingT
                           className="w-1.5 h-1.5 rounded-full shrink-0"
                           style={{ backgroundColor: column.color }}
                         />
-                        <span className="shrink-0">{column.name}</span>
+                        <span className="truncate">{column.name}</span>
                         {task.tag && (
                           <span className="hidden sm:inline shrink-0 px-1.5 rounded bg-surface-hover">
                             {task.tag}
@@ -162,7 +162,8 @@ export default function PendingTasksPanel({ projects, columns, tasks }: PendingT
                               : "bg-surface-hover text-muted"
                         }`}
                       >
-                        {late ? "Vencida · " : dueToday ? "Hoy · " : ""}
+                        {late && <span className="hidden sm:inline">Vencida · </span>}
+                        {dueToday && "Hoy · "}
                         {formatDue(task.due)}
                       </span>
                     )}

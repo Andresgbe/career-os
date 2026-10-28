@@ -134,7 +134,7 @@ export default function ProjectModal({
       onClick={onClose}
     >
       <div
-        className="bg-surface border border-border rounded-xl p-5 w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+        className="bg-surface border border-border rounded-xl p-4 sm:p-5 w-full max-w-3xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">

@@ -94,16 +94,16 @@ export default function ProjectWorkspacePage() {
         crumbs={[{ label: "Proyectos", to: "/projects" }, { label: project.name }]}
       />
 
-      <div className="flex items-center gap-3.5 flex-wrap">
+      <div className="flex items-center gap-3 sm:gap-3.5">
         <span
           className="w-12 h-12 rounded-[13px] flex items-center justify-center font-bold shrink-0"
           style={{ backgroundColor: `${accent}22`, color: accent }}
         >
           {projectInitials(project.name)}
         </span>
-        <div className="flex-1 min-w-[200px]">
+        <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-2xl font-bold tracking-tight truncate">{project.name}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate min-w-0">{project.name}</h1>
             {!editable && (
               <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-hover border border-[#2c2c34] text-xs text-muted">
                 <Eye className="w-3 h-3" />
@@ -122,10 +122,11 @@ export default function ProjectWorkspacePage() {
         {editable && (
           <button
             onClick={() => setShowEditModal(true)}
-            className="flex items-center gap-2 h-10 px-3.5 rounded-xl border border-[#2f2f37] bg-surface text-sm font-medium hover:bg-surface-hover transition-colors"
+            className="flex items-center gap-2 h-10 px-3 sm:px-3.5 rounded-xl border border-[#2f2f37] bg-surface text-sm font-medium hover:bg-surface-hover transition-colors shrink-0"
+            aria-label="Editar proyecto"
           >
             <Pencil className="w-4 h-4" />
-            Editar proyecto
+            <span className="hidden sm:inline">Editar proyecto</span>
           </button>
         )}
       </div>

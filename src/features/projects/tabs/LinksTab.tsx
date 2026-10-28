@@ -102,7 +102,7 @@ export default function LinksTab({ project, onProjectChange }: LinksTabProps) {
 
   return (
     <div className="space-y-4">
-      <section className="bg-surface border border-border rounded-xl p-5 space-y-3">
+      <section className="bg-surface border border-border rounded-xl p-4 sm:p-5 space-y-3">
         <h2 className="font-semibold">Add link</h2>
         {error && <p className="text-sm text-red-400">{error}</p>}
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2">
@@ -132,7 +132,7 @@ export default function LinksTab({ project, onProjectChange }: LinksTabProps) {
         </div>
       </section>
 
-      <section className="bg-surface border border-border rounded-xl p-5">
+      <section className="bg-surface border border-border rounded-xl p-4 sm:p-5">
         {links.length === 0 ? (
           <p className="text-sm text-muted">No links yet.</p>
         ) : (
