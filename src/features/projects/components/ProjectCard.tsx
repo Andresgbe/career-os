@@ -25,8 +25,7 @@ export default function ProjectCard({ project, columns, access, onClick }: Proje
           {projectInitials(project.name)}
         </span>
         <div className="flex-1 min-w-0">
-          <h3 className="text-base font-semibold truncate">{project.name}</h3>
-          <p className="text-[13px] text-muted truncate mt-0.5">{project.client || "Sin cliente"}</p>
+          <h3 className="text-base font-semibold truncate mt-2.5">{project.name}</h3>
         </div>
         {access && (
           <span

@@ -16,7 +16,6 @@ export default function ProjectTable({ projects, boards, access, onOpen }: Proje
         <thead className="text-xs text-muted uppercase border-b border-border">
           <tr>
             <th className="px-4 py-3 font-medium">Proyecto</th>
-            <th className="px-4 py-3 font-medium">Cliente</th>
             <th className="px-4 py-3 font-medium">Stack</th>
             <th className="px-4 py-3 font-medium">Tablero</th>
             {access && <th className="px-4 py-3 font-medium">Acceso</th>}
@@ -44,7 +43,6 @@ export default function ProjectTable({ projects, boards, access, onOpen }: Proje
                     <span className="font-medium">{project.name}</span>
                   </span>
                 </td>
-                <td className="px-4 py-3 text-muted">{project.client || "—"}</td>
                 <td className="px-4 py-3 text-muted">
                   {project.tech_stack.slice(0, 3).join(", ") || "—"}
                 </td>

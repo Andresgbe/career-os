@@ -1,6 +1,7 @@
 import { supabase } from "../../lib/supabase";
 import { compressImage } from "../../lib/compressImage";
 import type {
+  PrivateCredentialRow,
   ProjectRow,
   ProjectResource,
   ProjectMilestone,
@@ -328,14 +329,19 @@ export async function getBoard(
 // Columns and task counts for every project the user can see, for the list
 export async function getBoardSummaries(): Promise<{
   columns: BoardColumnRow[];
-  tasks: Pick<BoardTaskRow, "project_id" | "column_id">[];
+  tasks: Pick<
+    BoardTaskRow,
+    "id" | "project_id" | "column_id" | "title" | "tag" | "due" | "created_at"
+  >[];
 }> {
   const [cols, tasks] = await Promise.all([
     supabase
       .from("project_board_columns")
       .select("*")
       .order("sort_order", { ascending: true }),
-    supabase.from("project_board_tasks").select("project_id, column_id"),
+    supabase
+      .from("project_board_tasks")
+      .select("id, project_id, column_id, title, tag, due, created_at"),
   ]);
   if (cols.error) throw cols.error;
   if (tasks.error) throw tasks.error;
@@ -547,4 +553,68 @@ export async function getProjectAccess(): Promise<Record<string, ProjectAccess>>
     if (access[p.project_id] !== "edit") access[p.project_id] = level;
   }
   return access;
+}
+
+// ============================================
+// PRIVATE CREDENTIALS
+// ============================================
+
+// RLS only returns the caller's own rows, so this is "my private
+// credentials for this project" for whoever is logged in.
+export async function getPrivateCredentials(
+  projectId: string
+): Promise<PrivateCredentialRow[]> {
+  const { data, error } = await supabase
+    .from("project_private_credentials")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as PrivateCredentialRow[];
+}
+
+export async function addPrivateCredential(
+  projectId: string,
+  fields: Pick<PrivateCredentialRow, "label" | "username" | "password" | "sort_order">
+): Promise<PrivateCredentialRow> {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("project_private_credentials")
+    .insert({ user_id: user.id, project_id: projectId, ...fields })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as PrivateCredentialRow;
+}
+
+export async function updatePrivateCredential(
+  id: string,
+  fields: Partial<Pick<PrivateCredentialRow, "label" | "username" | "password">>
+): Promise<void> {
+  const { error } = await supabase
+    .from("project_private_credentials")
+    .update(fields)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function reorderPrivateCredentials(
+  updates: { id: string; sort_order: number }[]
+): Promise<void> {
+  const results = await Promise.all(
+    updates.map(({ id, sort_order }) =>
+      supabase.from("project_private_credentials").update({ sort_order }).eq("id", id)
+    )
+  );
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw failed.error;
+}
+
+export async function deletePrivateCredential(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("project_private_credentials")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
 }

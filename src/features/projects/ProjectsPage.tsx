@@ -4,8 +4,9 @@ import { Plus, Search } from "lucide-react";
 import ProjectCard from "./components/ProjectCard";
 import ProjectTable from "./components/ProjectTable";
 import ProjectModal from "./components/ProjectModal";
+import PendingTasksPanel, { type PendingTask } from "./components/PendingTasksPanel";
 import { getProjects, getBoardSummaries, getProjectAccess } from "./api";
-import type { ColumnCount, ProjectAccess, ProjectRow } from "./types";
+import type { BoardColumnRow, ColumnCount, ProjectAccess, ProjectRow } from "./types";
 import { usePermissions } from "../../hooks/usePermissions";
 
 type ViewMode = "table" | "cards";
@@ -16,6 +17,8 @@ export default function ProjectsPage() {
   const { isAdmin } = usePermissions();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [boards, setBoards] = useState<Record<string, ColumnCount[]>>({});
+  const [boardColumns, setBoardColumns] = useState<BoardColumnRow[]>([]);
+  const [boardTasks, setBoardTasks] = useState<PendingTask[]>([]);
   const [access, setAccess] = useState<Record<string, ProjectAccess>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -58,6 +61,8 @@ export default function ProjectsPage() {
           });
         }
         setBoards(byProject);
+        setBoardColumns(columns);
+        setBoardTasks(tasks);
       })
       .catch(() => {});
   }, []);
@@ -129,6 +134,8 @@ export default function ProjectsPage() {
         </div>
       )}
 
+      <PendingTasksPanel projects={projects} columns={boardColumns} tasks={boardTasks} />
+
       {error && (
         <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-xl">{error}</div>
       )}
@@ -139,7 +146,7 @@ export default function ProjectsPage() {
           <span className="sr-only">Buscar proyectos</span>
           <input
             type="search"
-            placeholder="Buscar por nombre, cliente o stack"
+            placeholder="Buscar por nombre o stack"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="flex-1 min-w-0 bg-transparent outline-none text-sm"

@@ -11,8 +11,10 @@ export interface ProjectMilestone {
 }
 
 // A single piece of reference info attached to a project: a link, a
-// credential pair, an uploaded image, or a free-form note.
-export type ResourceType = "link" | "credential" | "image" | "note";
+// credential pair, an uploaded image, or a free-form note. A
+// "credential_group" is a user-made category in the Credenciales tab
+// (label = name, value = color); credentials point at it via `category`.
+export type ResourceType = "link" | "credential" | "credential_group" | "image" | "note";
 
 export const RESOURCE_TYPES: { value: ResourceType; label: string }[] = [
   { value: "note", label: "Note" },
@@ -25,6 +27,7 @@ export const RESOURCE_STYLE: Record<ResourceType, { color: string; bg: string }>
   note: { color: "text-emerald-400", bg: "bg-emerald-400/10" },
   link: { color: "text-blue-400", bg: "bg-blue-400/10" },
   credential: { color: "text-amber-400", bg: "bg-amber-400/10" },
+  credential_group: { color: "text-amber-400", bg: "bg-amber-400/10" },
   image: { color: "text-purple-400", bg: "bg-purple-400/10" },
 };
 
@@ -35,6 +38,7 @@ export interface ProjectResource {
   value: string; // URL for "link", text for "note"
   username: string; // "credential" only
   password: string; // "credential" only
+  category?: string; // "credential" only — id of its credential_group, "" when none
   file_path: string; // "image" only — path inside the "project-files" bucket
 }
 
@@ -90,6 +94,19 @@ export interface ProjectDesignEntryRow {
 // ============================================
 // BOARD (Kanban: columns the user creates, tasks dragged between them)
 // ============================================
+
+// A credential in the "Privada" category: its own table, readable only by
+// the user who created it (see BLOQUE 12 of PENDIENTE.sql).
+export interface PrivateCredentialRow {
+  id: string;
+  user_id: string;
+  project_id: string;
+  label: string;
+  username: string;
+  password: string;
+  sort_order: number;
+  created_at: string;
+}
 
 export interface BoardColumnRow {
   id: string;

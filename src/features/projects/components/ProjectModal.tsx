@@ -153,26 +153,14 @@ export default function ProjectModal({
         {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
 
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted">Project name *</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted">Client (optional)</label>
-              <input
-                type="text"
-                placeholder="Who is this for?"
-                value={form.client}
-                onChange={(e) => setForm({ ...form, client: e.target.value })}
-                className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
-              />
-            </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted">Project name *</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none"
+            />
           </div>
 
           <div className="flex flex-col gap-1">

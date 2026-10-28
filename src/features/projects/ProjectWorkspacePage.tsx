@@ -1,7 +1,8 @@
 import { errorMessage } from "../../lib/errors";
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, Eye } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Pencil, Eye } from "lucide-react";
+import BackNav from "../../components/BackNav";
 import { getProject, getProjectAccess, getUnreadCount } from "./api";
 import type { ProjectAccess, ProjectRow } from "./types";
 import { projectAccent, projectInitials } from "./types";
@@ -65,10 +66,7 @@ export default function ProjectWorkspacePage() {
             {error}
           </div>
         )}
-        <Link to="/projects" className="flex items-center gap-2 text-sm text-muted hover:text-foreground">
-          <ArrowLeft className="w-4 h-4" />
-          Proyectos
-        </Link>
+        <BackNav to="/projects" crumbs={[{ label: "Proyectos", to: "/projects" }]} />
       </div>
     );
   }
@@ -91,13 +89,10 @@ export default function ProjectWorkspacePage() {
 
   return (
     <div className="space-y-5">
-      <Link
+      <BackNav
         to="/projects"
-        className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Proyectos
-      </Link>
+        crumbs={[{ label: "Proyectos", to: "/projects" }, { label: project.name }]}
+      />
 
       <div className="flex items-center gap-3.5 flex-wrap">
         <span

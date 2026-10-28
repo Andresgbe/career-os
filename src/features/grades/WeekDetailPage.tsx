@@ -1,8 +1,7 @@
 import { errorMessage } from "../../lib/errors";
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import {
-  ArrowLeft,
   FileText,
   Image as ImageIcon,
   MessageCircle,
@@ -14,6 +13,7 @@ import {
 import RichTextEditor from "../../components/RichTextEditor";
 import CodeBlock from "../../components/CodeBlock";
 import ConfirmDialog from "../../components/ConfirmDialog";
+import BackNav from "../../components/BackNav";
 import {
   getSubjects,
   getWeeks,
@@ -121,13 +121,14 @@ export default function WeekDetailPage() {
 
   return (
     <div>
-      <Link
+      <BackNav
         to={`/grades/${subjectId}/weeks`}
-        className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors mb-5"
-      >
-        <ArrowLeft className="w-3.5 h-3.5" />
-        Semanas
-      </Link>
+        className="mb-5"
+        crumbs={[
+          { label: subject.name, to: `/grades/${subjectId}/weeks` },
+          { label: `Semana ${week.week_number}` },
+        ]}
+      />
 
       {/* Header */}
       <div className="flex flex-wrap justify-between items-start gap-5 mb-7">

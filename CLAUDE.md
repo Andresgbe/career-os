@@ -24,6 +24,7 @@ NEXUS ("career-os") is a personal dashboard SPA: React 19 + TypeScript + Vite, T
 - `CodeBlock` — collapsible code snippet; pass `onChange` to make it an editable input, omit it for a read-only collapsible viewer.
 - `TableBlock` — collapsible free-form spreadsheet-like table block, same editable-via-`onChange` / read-only-without-it convention as `CodeBlock`.
 - `ShortcutsBar` / `ShortcutTile` — the icon-grid "quick links" row (with add/reorder/delete, favicon auto-detection, custom icon upload) used on the Dashboard, Grades, and Work Tracker pages, each backed by its own `*_shortcuts` table.
+- `BackNav` — the "‹ PARENT / CURRENT" header for nested pages (square back button + uppercase breadcrumb). Use it on any page that sits under another one instead of a plain "← Back" link.
 - `SectionContextButton` — the fixed "CONTEXT" tab docked to the left edge of the viewport, mounted once in `AppLayout` so it appears on every module automatically. See "Section context" below.
 
 The **block pattern** — a title plus optional `RichTextEditor` + `CodeBlock` + `TableBlock` — is the standard shape for "flexible free-form entry" features (see `work_general_info`, `project_entries`, `work_endpoints`). Reach for that combination again rather than inventing a new entry format when a module needs open-ended notes.
@@ -69,6 +70,6 @@ There is no `supabase/` migrations directory or CLI setup in this repo — schem
   - insert: `user_id = auth.uid() and (nexus_is_admin() or nexus_can_edit('<module id>'))`
   - update: `user_id = auth.uid() or nexus_can_edit('<module id>')`
   - delete: `user_id = auth.uid()` — only the owner ever deletes
-  All four are named `"nexus read" / "nexus insert" / "nexus update" / "nexus delete"`, so BLOQUE 4 of `PENDIENTE.sql` can drop and recreate them idempotently. Add the new table to that block's `(table, module)` list. Tables that are private per account — `dashboard_*`, `pill_tracker_*`, `section_notes`, `chat_messages` — keep the old `auth.uid() = user_id` on all four.
+  All four are named `"nexus read" / "nexus insert" / "nexus update" / "nexus delete"`, so BLOQUE 4 of `PENDIENTE.sql` can drop and recreate them idempotently. Add the new table to that block's `(table, module)` list. Tables that are private per account — `dashboard_*`, `pill_tracker_*`, `section_notes`, `chat_messages`, `project_private_credentials` (the "Privada" credentials category) — keep the old `auth.uid() = user_id` on all four.
 - Repeatable/array fields (headers, resources, platforms, category_ids, tech_stack, milestones, ...) are stored as `jsonb not null default '[]'::jsonb`, normalized back to typed arrays in `api.ts` (`Array.isArray(...) ? ... : []`) since Supabase returns raw JSON. Optional text fields default to `''`, not `null`.
 - Storage buckets are public (e.g. `work-files`, `shortcut-icons`) so uploaded image/icon URLs can be embedded directly without re-signing on every render.

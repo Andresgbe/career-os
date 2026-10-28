@@ -1,6 +1,6 @@
 import { errorMessage } from "../../lib/errors";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { MessageCircle, Plus } from "lucide-react";
 import { getSubjects, ensureWeeksSeeded } from "./api";
 import {
@@ -11,6 +11,7 @@ import {
   type WeekRow,
 } from "./types";
 import { todayIso } from "../../lib/dates";
+import BackNav from "../../components/BackNav";
 
 // La vista de carpetas: las 16 semanas de una materia, cada una como una
 // tarjeta. Sigue el patrón de taller aprobado en la propuesta de diseño.
@@ -46,13 +47,11 @@ export default function SubjectWeeksPage() {
       {/* Header */}
       <div className="flex flex-wrap justify-between items-end gap-6 mb-6">
         <div>
-          <nav className="text-xs text-muted mb-2.5 flex items-center gap-1.5">
-            <Link to="/grades" className="hover:text-foreground transition-colors">
-              University
-            </Link>
-            <span>/</span>
-            <span className="text-foreground">{subject.name}</span>
-          </nav>
+          <BackNav
+            to="/grades"
+            className="mb-4"
+            crumbs={[{ label: "University", to: "/grades" }, { label: subject.name }]}
+          />
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-3xl font-bold">Semanas</h1>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface border border-border text-sm text-muted">
