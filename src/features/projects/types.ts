@@ -86,3 +86,101 @@ export interface ProjectDesignEntryRow {
   images: ProjectDesignImage[]; // stored as jsonb in Supabase
   created_at: string;
 }
+
+// ============================================
+// BOARD (Kanban: columns the user creates, tasks dragged between them)
+// ============================================
+
+export interface BoardColumnRow {
+  id: string;
+  user_id: string;
+  project_id: string;
+  name: string;
+  color: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface BoardTaskRow {
+  id: string;
+  user_id: string;
+  project_id: string;
+  column_id: string;
+  title: string;
+  tag: string; // free-form label, '' when none
+  assignee: string; // who's on it, '' when nobody
+  due: string | null; // YYYY-MM-DD
+  sort_order: number;
+  created_at: string;
+}
+
+export const BOARD_COLORS = [
+  "#a1a1aa",
+  "#a78bfa",
+  "#38bdf8",
+  "#34d399",
+  "#fbbf24",
+  "#fb923c",
+  "#f472b6",
+  "#f87171",
+];
+
+// A stable accent per project, so its badge looks the same everywhere
+const PROJECT_ACCENTS = ["#a78bfa", "#38bdf8", "#fbbf24", "#34d399", "#f472b6", "#fb923c"];
+
+export function projectAccent(name: string): string {
+  let hash = 0;
+  for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return PROJECT_ACCENTS[hash % PROJECT_ACCENTS.length];
+}
+
+export function projectInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  return words.map((w) => w.charAt(0)).join("").slice(0, 2).toUpperCase() || "?";
+}
+
+// "5 nov" for a YYYY-MM-DD due date
+export function formatDue(due: string): string {
+  return new Date(`${due}T00:00:00`).toLocaleDateString("es-VE", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
+// What a brand-new project's board starts with
+export const DEFAULT_BOARD_COLUMNS = [
+  { name: "Por hacer", color: "#a1a1aa" },
+  { name: "En progreso", color: "#a78bfa" },
+  { name: "Hecho", color: "#34d399" },
+];
+
+// ============================================
+// MESSAGES (conversation between Andrés and the project's client)
+// ============================================
+
+export interface ProjectMessageRow {
+  id: string;
+  user_id: string;
+  project_id: string;
+  author_name: string;
+  body: string;
+  task_id: string | null; // optional board task the message is about
+  created_at: string;
+}
+
+// One column of a project's board, summarized for the project list
+export interface ColumnCount {
+  name: string;
+  color: string;
+  count: number;
+}
+
+// Who besides the owner can see a project, as shown on the project list
+export type ProjectAccess = "private" | "view" | "edit";
+
+// How each access level reads on the project list
+export const ACCESS_CHIP: Record<ProjectAccess, { label: string; className: string }> = {
+  private: { label: "Privado", className: "bg-surface-hover text-muted" },
+  view: { label: "Cliente puede ver", className: "bg-emerald-400/10 text-emerald-300" },
+  edit: { label: "Cliente puede editar", className: "bg-emerald-400/10 text-emerald-300" },
+};

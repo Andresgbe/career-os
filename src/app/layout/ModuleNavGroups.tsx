@@ -48,6 +48,8 @@ export default function ModuleNavGroups({
   // contains the current page. Once the user toggles anything, this takes
   // over completely so their choice sticks across navigation.
   const [customOpen, setCustomOpen] = useState<Set<string> | null>(null);
+  // Which group's dropdown is open in the topbar, and where to draw it
+  const [menu, setMenu] = useState<{ id: string; left: number; top: number } | null>(null);
 
   const groups: ModuleGroup[] = columns
     .slice()
@@ -95,18 +97,20 @@ export default function ModuleNavGroups({
   }
 
   if (variant === "topbar") {
+    const isActive = (m: ModuleDef) =>
+      location.pathname === m.path || location.pathname.startsWith(`${m.path}/`);
     const linkClass = (active: boolean) =>
-      `px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap ${
+      `px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${
         active
-          ? "bg-primary text-white"
-          : "text-muted hover:bg-surface-hover"
+          ? "bg-surface-hover text-foreground font-medium"
+          : "text-muted hover:text-foreground"
       }`;
 
     if (useFlatNav) {
       return (
         <>
           {[...visibleModules, ...(isAdmin ? [ADMIN_MODULE] : [])].map((m) => (
-            <Link key={m.id} to={m.path} className={linkClass(location.pathname === m.path)}>
+            <Link key={m.id} to={m.path} className={linkClass(isActive(m))}>
               {m.name}
             </Link>
           ))}
@@ -114,55 +118,75 @@ export default function ModuleNavGroups({
       );
     }
 
+    const openGroup = groups.find((g) => g.id === menu?.id);
+
     return (
       <>
         {groups.map((group, index) => {
           const color = GROUP_COLORS[index % GROUP_COLORS.length];
-          const isOpen = openGroups.has(group.id);
-          const isActiveGroup = group.modules.some(
-            (m) => m.path === location.pathname
-          );
+          const activeModule = group.modules.find(isActive);
           return (
-            <div
+            <button
               key={group.id}
-              className="flex items-center gap-1 rounded-lg py-0.5 pl-0.5 pr-1 transition-colors"
-              style={{
-                backgroundColor: isOpen ? `${color}14` : "transparent",
-                border: `1px solid ${isOpen ? `${color}45` : "transparent"}`,
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setMenu(
+                  menu?.id === group.id
+                    ? null
+                    : { id: group.id, left: rect.left, top: rect.bottom + 6 }
+                );
               }}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${
+                activeModule || menu?.id === group.id
+                  ? "bg-surface-hover text-foreground font-medium"
+                  : "text-muted hover:text-foreground"
+              }`}
             >
-              <button
-                onClick={() => toggleGroup(group.id)}
-                style={{ color }}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-sm font-semibold whitespace-nowrap transition-colors ${
-                  isActiveGroup && !isOpen ? "" : "hover:bg-surface-hover"
-                }`}
-              >
-                <span
-                  className="w-1.5 h-1.5 rounded-full shrink-0"
-                  style={{ backgroundColor: color }}
-                />
-                {group.name}
-                {isOpen ? (
-                  <ChevronDown className="w-3.5 h-3.5" />
-                ) : (
-                  <ChevronRight className="w-3.5 h-3.5" />
-                )}
-              </button>
-              {isOpen &&
-                group.modules.map((m) => (
-                  <Link key={m.id} to={m.path} className={linkClass(location.pathname === m.path)}>
-                    {m.name}
-                  </Link>
-                ))}
-            </div>
+              <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ backgroundColor: color }} />
+              {group.name}
+              {activeModule && <span className="text-muted font-normal">· {activeModule.name}</span>}
+              <ChevronDown className="w-3.5 h-3.5 text-muted" />
+            </button>
           );
         })}
         {ungrouped.map((m) => (
-          <Link key={m.id} to={m.path} className={linkClass(location.pathname === m.path)}>
+          <Link key={m.id} to={m.path} className={linkClass(isActive(m))}>
             {m.name}
           </Link>
         ))}
+
+        {/* Fixed, so the nav's horizontal scroll doesn't clip it */}
+        {menu && openGroup && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} />
+            <div
+              className="fixed z-50 w-60 p-1.5 rounded-xl bg-surface border border-border shadow-2xl"
+              style={{ left: menu.left, top: menu.top }}
+            >
+              {openGroup.modules.length === 0 ? (
+                <p className="px-3 py-2 text-sm text-muted">Sin módulos</p>
+              ) : (
+                openGroup.modules.map((m) => {
+                  const Icon = m.icon;
+                  const active = isActive(m);
+                  return (
+                    <Link
+                      key={m.id}
+                      to={m.path}
+                      onClick={() => setMenu(null)}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                        active ? "bg-primary/15 text-primary-hover" : "text-foreground hover:bg-surface-hover"
+                      }`}
+                    >
+                      <Icon className={`w-4 h-4 ${active ? "" : "text-muted"}`} />
+                      {m.name}
+                    </Link>
+                  );
+                })
+              )}
+            </div>
+          </>
+        )}
       </>
     );
   }

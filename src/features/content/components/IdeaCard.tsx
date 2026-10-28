@@ -13,8 +13,25 @@ interface IdeaCardProps {
   ) => void;
 }
 
-// Compact square-ish tile for one idea — used both inside the Kanban board
-// (wrapped in a Draggable there) and in the Done grid.
+const NEXT_STEP = [
+  "Siguiente: escribir guion",
+  "Siguiente: grabar",
+  "Siguiente: editar",
+  "Lista para publicar",
+];
+
+function updatedLabel(iso: string): string {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days <= 0) return "hoy";
+  if (days === 1) return "ayer";
+  if (days < 7) return `hace ${days} días`;
+  const weeks = Math.floor(days / 7);
+  return weeks === 1 ? "hace 1 semana" : `hace ${weeks} semanas`;
+}
+
+// One idea: its title, a short description and the three production steps
+// as buttons you can tick right from the board. Used in the Kanban board
+// and in the Done grid.
 export default function IdeaCard({
   idea,
   category,
@@ -22,31 +39,31 @@ export default function IdeaCard({
   onDelete,
   onToggleStatus,
 }: IdeaCardProps) {
-  const completedSteps = STATUS_STEPS.filter((s) => idea[s.key]).length;
+  const completed = STATUS_STEPS.filter((s) => idea[s.key]).length;
+  // The first step not done yet is the one that comes next
+  const nextIndex = STATUS_STEPS.findIndex((s) => !idea[s.key]);
+  const next = NEXT_STEP[nextIndex === -1 ? 3 : nextIndex];
 
   return (
     <div
       onClick={onClick}
-      className="group relative bg-surface border border-border rounded-lg pl-3 pr-2 py-2.5 cursor-pointer hover:border-primary/50 transition-colors overflow-hidden"
+      className="group relative flex flex-col gap-2.5 p-3.5 rounded-xl bg-[#1a1a1f] border border-[#2c2c34] cursor-pointer hover:border-primary/50 transition-colors"
     >
-      {category && (
-        <span
-          className="absolute left-0 top-0 bottom-0 w-1"
-          style={{ backgroundColor: category.color }}
-        />
-      )}
-
-      <p className="text-sm font-medium leading-snug line-clamp-2 pr-5">
-        {idea.title}
-      </p>
+      <div className="flex items-start gap-2 pr-5">
+        {category && (
+          <span
+            className="w-2 h-2 rounded-[2px] mt-1.5 shrink-0"
+            style={{ backgroundColor: category.color }}
+          />
+        )}
+        <h3 className="text-sm font-semibold leading-snug line-clamp-2">{idea.title}</h3>
+      </div>
 
       {idea.description && (
-        <p className="text-xs text-muted line-clamp-2 mt-1">
-          {idea.description}
-        </p>
+        <p className="text-[12.5px] text-muted leading-relaxed line-clamp-2">{idea.description}</p>
       )}
 
-      <div className="flex items-center gap-1.5 mt-2">
+      <div className="grid grid-cols-3 gap-1">
         {STATUS_STEPS.map((step) => {
           const done = idea[step.key];
           return (
@@ -56,16 +73,24 @@ export default function IdeaCard({
                 e.stopPropagation();
                 onToggleStatus(step.key, !done);
               }}
-              title={`${step.label}: ${done ? "Done" : "Pending"}`}
-              className={`w-3 h-3 rounded-full transition-colors ${
-                done ? "bg-emerald-400" : "bg-border hover:bg-muted"
+              title={done ? `Desmarcar ${step.label}` : `Marcar ${step.label}`}
+              className={`py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
+                done
+                  ? "bg-emerald-400/15 text-emerald-300"
+                  : "bg-surface-hover text-muted hover:text-foreground"
               }`}
-            />
+            >
+              {step.label}
+            </button>
           );
         })}
-        <span className="text-[10px] text-muted ml-0.5">
-          {completedSteps}/{STATUS_STEPS.length}
+      </div>
+
+      <div className="flex items-center justify-between text-xs">
+        <span className={completed === 3 ? "text-emerald-300 font-semibold" : "text-primary-hover font-medium"}>
+          {next}
         </span>
+        <span className="text-muted">{updatedLabel(idea.updated_at)}</span>
       </div>
 
       <button
@@ -73,8 +98,8 @@ export default function IdeaCard({
           e.stopPropagation();
           onDelete();
         }}
-        className="absolute top-1.5 right-1.5 p-1 rounded text-muted opacity-0 group-hover:opacity-100 hover:bg-surface-hover hover:text-red-400 transition-all"
-        title="Delete"
+        className="absolute top-2 right-2 p-1 rounded text-muted opacity-0 group-hover:opacity-100 hover:bg-surface-hover hover:text-red-400 transition-all"
+        aria-label="Eliminar idea"
       >
         <Trash2 className="w-3.5 h-3.5" />
       </button>

@@ -55,6 +55,7 @@ interface ProjectModalProps {
   onClose: () => void;
   onSaved: (project: ProjectRow) => void;
   onDeleted: (id: string) => void;
+  canDelete?: boolean; // only the project's owner deletes it
 }
 
 export default function ProjectModal({
@@ -63,6 +64,7 @@ export default function ProjectModal({
   onClose,
   onSaved,
   onDeleted,
+  canDelete = true,
 }: ProjectModalProps) {
   const [form, setForm] = useState<ProjectForm>(
     project ? toForm(project) : emptyForm
@@ -86,26 +88,6 @@ export default function ProjectModal({
   const removeTech = (tech: string) =>
     setForm({ ...form, tech_stack: form.tech_stack.filter((t) => t !== tech) });
 
-  // Milestones
-  const setMilestone = (index: number, fields: Partial<ProjectMilestone>) => {
-    const milestones = [...form.milestones];
-    milestones[index] = { ...milestones[index], ...fields };
-    setForm({ ...form, milestones });
-  };
-  const addMilestone = () =>
-    setForm({
-      ...form,
-      milestones: [
-        ...form.milestones,
-        { id: crypto.randomUUID(), title: "", done: false },
-      ],
-    });
-  const removeMilestone = (index: number) =>
-    setForm({
-      ...form,
-      milestones: form.milestones.filter((_, i) => i !== index),
-    });
-
   const handleSave = async () => {
     if (!form.name.trim()) {
       setError("Project name is required.");
@@ -120,9 +102,9 @@ export default function ProjectModal({
           client: form.client.trim(),
           description: form.description.trim(),
           tech_stack: form.tech_stack,
-          milestones: form.milestones
-            .map((m) => ({ ...m, title: m.title.trim() }))
-            .filter((m) => m.title),
+          // Milestones are no longer edited anywhere; whatever an older
+          // project had is passed through untouched.
+          milestones: form.milestones,
         },
         project?.id ?? null,
         nextSortOrder
@@ -249,53 +231,10 @@ export default function ProjectModal({
             </div>
           </div>
 
-          {/* Resources (links, credentials, images, notes) are edited one by
-              one in their own tabs, so this modal only owns the project's
-              own fields. */}
-          {/* Milestones */}
-          <div className="flex flex-col gap-2">
-            <label className="text-xs text-muted">Milestones</label>
-            {form.milestones.map((m, index) => (
-              <div key={m.id} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={m.done}
-                  onChange={(e) =>
-                    setMilestone(index, { done: e.target.checked })
-                  }
-                  className="accent-primary shrink-0"
-                />
-                <input
-                  type="text"
-                  placeholder="Milestone"
-                  value={m.title}
-                  onChange={(e) =>
-                    setMilestone(index, { title: e.target.value })
-                  }
-                  className={`flex-1 bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none ${
-                    m.done ? "line-through text-muted" : ""
-                  }`}
-                />
-                <button
-                  onClick={() => removeMilestone(index)}
-                  className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-red-400 shrink-0"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={addMilestone}
-              className="flex items-center gap-1.5 text-xs text-primary hover:underline w-fit"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add milestone
-            </button>
-          </div>
         </div>
 
         <div className="flex items-center justify-between mt-5">
-          {project ? (
+          {project && canDelete ? (
             <button
               onClick={() => setConfirmingDelete(true)}
               className="flex items-center gap-2 px-4 py-2 rounded text-red-400 hover:bg-surface-hover text-sm font-medium transition-colors"

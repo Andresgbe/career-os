@@ -10,36 +10,11 @@
 -- ============================================================
 
 -- ------------------------------------------------------------
--- 1. TAREAS — to-do list simple, sin estados
---    Se cambia el sistema de estados por un simple "hecha / no hecha",
---    y cada tarea puede pertenecer a un proyecto (o a ninguno, que es
---    tu lista personal).
+-- 1. PROYECTOS — sin status
 -- ------------------------------------------------------------
 
-alter table tasks
-  add column if not exists project_id uuid
-    references personal_projects(id) on delete set null;
-
-alter table tasks
-  add column if not exists done boolean not null default false;
-
--- Quién es responsable de la tarea (texto libre, vacío = nadie)
-alter table tasks
-  add column if not exists assignee text not null default '';
-
--- Las tareas que ya estaban en un estado "terminado" quedan marcadas hechas
-update tasks
-set done = true
-where done = false
-  and status_id in (select id from task_statuses where is_done);
-
--- status_id deja de usarse; se vuelve opcional para que las altas nuevas
--- no lo necesiten. La columna y la tabla task_statuses se pueden borrar
--- en la PARTE FINAL de abajo, después de hacer push.
-alter table tasks alter column status_id drop not null;
-
--- Los proyectos ya no tienen status. Igual que arriba: se deja nullable
--- ahora y se borra al final, después de desplegar.
+-- Los proyectos ya no tienen status: se deja nullable ahora y se
+-- borra al final, después de desplegar.
 alter table personal_projects alter column status drop not null;
 
 -- ------------------------------------------------------------
@@ -135,63 +110,6 @@ create policy "delete own knowledge_docs" on knowledge_docs
   for delete using (auth.uid() = user_id);
 
 -- ------------------------------------------------------------
--- 3. TO BUY — la lista de compras (módulo que hoy está roto)
--- ------------------------------------------------------------
-
-create table if not exists tobuy_categories (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  name text not null,
-  color text not null default '#8b5cf6',
-  sort_order integer not null default 0,
-  collapsed boolean not null default false,
-  created_at timestamptz not null default now()
-);
-
-alter table tobuy_categories enable row level security;
-
-drop policy if exists "select own tobuy_categories" on tobuy_categories;
-drop policy if exists "insert own tobuy_categories" on tobuy_categories;
-drop policy if exists "update own tobuy_categories" on tobuy_categories;
-drop policy if exists "delete own tobuy_categories" on tobuy_categories;
-
-create policy "select own tobuy_categories" on tobuy_categories
-  for select using (auth.uid() = user_id);
-create policy "insert own tobuy_categories" on tobuy_categories
-  for insert with check (auth.uid() = user_id);
-create policy "update own tobuy_categories" on tobuy_categories
-  for update using (auth.uid() = user_id);
-create policy "delete own tobuy_categories" on tobuy_categories
-  for delete using (auth.uid() = user_id);
-
-create table if not exists tobuy_items (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  title text not null,
-  checked boolean not null default false,
-  category_id uuid references tobuy_categories(id) on delete set null,
-  sort_order integer not null default 0,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-alter table tobuy_items enable row level security;
-
-drop policy if exists "select own tobuy_items" on tobuy_items;
-drop policy if exists "insert own tobuy_items" on tobuy_items;
-drop policy if exists "update own tobuy_items" on tobuy_items;
-drop policy if exists "delete own tobuy_items" on tobuy_items;
-
-create policy "select own tobuy_items" on tobuy_items
-  for select using (auth.uid() = user_id);
-create policy "insert own tobuy_items" on tobuy_items
-  for insert with check (auth.uid() = user_id);
-create policy "update own tobuy_items" on tobuy_items
-  for update using (auth.uid() = user_id);
-create policy "delete own tobuy_items" on tobuy_items
-  for delete using (auth.uid() = user_id);
-
--- ------------------------------------------------------------
 -- 4. BUCKET grades-files — fotos del plan de evaluación
 --    Las políticas ya existían de un intento anterior, por eso
 --    se borran primero.
@@ -240,8 +158,6 @@ create policy "grades-files delete own"
 -- página de proyectos, porque el código viejo todavía la lee.
 --
 --   alter table personal_projects drop column if exists status;
---   alter table tasks drop column if exists status_id;
---   alter table tasks drop column if exists project;
 --   drop table if exists task_statuses;
 --
 -- ============================================================
@@ -493,8 +409,6 @@ declare
 begin
   for t in
     select * from (values
-      ('tobuy_categories',          'tasks'),
-      ('tobuy_items',               'tasks'),
       ('motorcycle_info',           'motorcycle'),
       ('oil_changes',               'motorcycle'),
       ('motorcycle_to_buy',         'motorcycle'),
@@ -514,8 +428,6 @@ begin
       ('grades_curriculum_stats',   'grades'),
       ('grades_payment_plans',      'grades'),
       ('grades_shortcuts',          'grades'),
-      ('programming_resources',     'programming'),
-      ('programming_shortcuts',     'programming'),
       ('insurance_policies',        'insurance'),
       ('finance_monthly_budget',    'finance'),
       ('finance_bills',             'finance'),
@@ -566,7 +478,7 @@ declare
   pol record;
   t text;
 begin
-  foreach t in array array['personal_projects', 'project_entries', 'project_design_entries', 'tasks']
+  foreach t in array array['personal_projects', 'project_entries', 'project_design_entries']
   loop
     if to_regclass('public.' || t) is null then continue; end if;
     execute format('alter table public.%I enable row level security', t);
@@ -628,35 +540,6 @@ create policy "nexus update" on project_design_entries for update
     or (public.nexus_can_edit('projects') and public.nexus_can_see_project(project_id))
   );
 create policy "nexus delete" on project_design_entries for delete
-  using (user_id = auth.uid());
-
--- Las tareas sin proyecto son la lista personal (módulo Pending); las que
--- tienen proyecto siguen el permiso de ESE proyecto.
-create policy "nexus read" on tasks for select
-  using (
-    user_id = auth.uid()
-    or (project_id is null and public.nexus_can_view('tasks'))
-    or (project_id is not null and public.nexus_can_view('projects')
-        and public.nexus_can_see_project(project_id))
-  );
-create policy "nexus insert" on tasks for insert
-  with check (
-    user_id = auth.uid()
-    and (
-      public.nexus_is_admin()
-      or (project_id is null and public.nexus_can_edit('tasks'))
-      or (project_id is not null and public.nexus_can_edit('projects')
-          and public.nexus_can_see_project(project_id))
-    )
-  );
-create policy "nexus update" on tasks for update
-  using (
-    user_id = auth.uid()
-    or (project_id is null and public.nexus_can_edit('tasks'))
-    or (project_id is not null and public.nexus_can_edit('projects')
-        and public.nexus_can_see_project(project_id))
-  );
-create policy "nexus delete" on tasks for delete
   using (user_id = auth.uid());
 
 -- ------------------------------------------------------------
@@ -912,52 +795,6 @@ create policy "delete own chat_conversations" on chat_conversations
 -- Acá va todo escrito una por una. Es idempotente: se puede correr de nuevo.
 -- Necesita que el BLOQUE 4 ya haya creado las funciones nexus_*.
 -- ============================================
-
--- tobuy_categories (módulo tasks)
-alter table tobuy_categories enable row level security;
-drop policy if exists "select own tobuy_categories" on tobuy_categories;
-drop policy if exists "insert own tobuy_categories" on tobuy_categories;
-drop policy if exists "update own tobuy_categories" on tobuy_categories;
-drop policy if exists "delete own tobuy_categories" on tobuy_categories;
-drop policy if exists "tobuy_categories select own" on tobuy_categories;
-drop policy if exists "tobuy_categories insert own" on tobuy_categories;
-drop policy if exists "tobuy_categories update own" on tobuy_categories;
-drop policy if exists "tobuy_categories delete own" on tobuy_categories;
-drop policy if exists "nexus read" on tobuy_categories;
-drop policy if exists "nexus insert" on tobuy_categories;
-drop policy if exists "nexus update" on tobuy_categories;
-drop policy if exists "nexus delete" on tobuy_categories;
-create policy "nexus read" on tobuy_categories for select
-  using (user_id = auth.uid() or public.nexus_can_view('tasks'));
-create policy "nexus insert" on tobuy_categories for insert
-  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('tasks')));
-create policy "nexus update" on tobuy_categories for update
-  using (user_id = auth.uid() or public.nexus_can_edit('tasks'));
-create policy "nexus delete" on tobuy_categories for delete
-  using (user_id = auth.uid());
-
--- tobuy_items (módulo tasks)
-alter table tobuy_items enable row level security;
-drop policy if exists "select own tobuy_items" on tobuy_items;
-drop policy if exists "insert own tobuy_items" on tobuy_items;
-drop policy if exists "update own tobuy_items" on tobuy_items;
-drop policy if exists "delete own tobuy_items" on tobuy_items;
-drop policy if exists "tobuy_items select own" on tobuy_items;
-drop policy if exists "tobuy_items insert own" on tobuy_items;
-drop policy if exists "tobuy_items update own" on tobuy_items;
-drop policy if exists "tobuy_items delete own" on tobuy_items;
-drop policy if exists "nexus read" on tobuy_items;
-drop policy if exists "nexus insert" on tobuy_items;
-drop policy if exists "nexus update" on tobuy_items;
-drop policy if exists "nexus delete" on tobuy_items;
-create policy "nexus read" on tobuy_items for select
-  using (user_id = auth.uid() or public.nexus_can_view('tasks'));
-create policy "nexus insert" on tobuy_items for insert
-  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('tasks')));
-create policy "nexus update" on tobuy_items for update
-  using (user_id = auth.uid() or public.nexus_can_edit('tasks'));
-create policy "nexus delete" on tobuy_items for delete
-  using (user_id = auth.uid());
 
 -- motorcycle_info (módulo motorcycle)
 alter table motorcycle_info enable row level security;
@@ -1396,52 +1233,6 @@ create policy "nexus update" on grades_shortcuts for update
 create policy "nexus delete" on grades_shortcuts for delete
   using (user_id = auth.uid());
 
--- programming_resources (módulo programming)
-alter table programming_resources enable row level security;
-drop policy if exists "select own programming_resources" on programming_resources;
-drop policy if exists "insert own programming_resources" on programming_resources;
-drop policy if exists "update own programming_resources" on programming_resources;
-drop policy if exists "delete own programming_resources" on programming_resources;
-drop policy if exists "programming_resources select own" on programming_resources;
-drop policy if exists "programming_resources insert own" on programming_resources;
-drop policy if exists "programming_resources update own" on programming_resources;
-drop policy if exists "programming_resources delete own" on programming_resources;
-drop policy if exists "nexus read" on programming_resources;
-drop policy if exists "nexus insert" on programming_resources;
-drop policy if exists "nexus update" on programming_resources;
-drop policy if exists "nexus delete" on programming_resources;
-create policy "nexus read" on programming_resources for select
-  using (user_id = auth.uid() or public.nexus_can_view('programming'));
-create policy "nexus insert" on programming_resources for insert
-  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('programming')));
-create policy "nexus update" on programming_resources for update
-  using (user_id = auth.uid() or public.nexus_can_edit('programming'));
-create policy "nexus delete" on programming_resources for delete
-  using (user_id = auth.uid());
-
--- programming_shortcuts (módulo programming)
-alter table programming_shortcuts enable row level security;
-drop policy if exists "select own programming_shortcuts" on programming_shortcuts;
-drop policy if exists "insert own programming_shortcuts" on programming_shortcuts;
-drop policy if exists "update own programming_shortcuts" on programming_shortcuts;
-drop policy if exists "delete own programming_shortcuts" on programming_shortcuts;
-drop policy if exists "programming_shortcuts select own" on programming_shortcuts;
-drop policy if exists "programming_shortcuts insert own" on programming_shortcuts;
-drop policy if exists "programming_shortcuts update own" on programming_shortcuts;
-drop policy if exists "programming_shortcuts delete own" on programming_shortcuts;
-drop policy if exists "nexus read" on programming_shortcuts;
-drop policy if exists "nexus insert" on programming_shortcuts;
-drop policy if exists "nexus update" on programming_shortcuts;
-drop policy if exists "nexus delete" on programming_shortcuts;
-create policy "nexus read" on programming_shortcuts for select
-  using (user_id = auth.uid() or public.nexus_can_view('programming'));
-create policy "nexus insert" on programming_shortcuts for insert
-  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('programming')));
-create policy "nexus update" on programming_shortcuts for update
-  using (user_id = auth.uid() or public.nexus_can_edit('programming'));
-create policy "nexus delete" on programming_shortcuts for delete
-  using (user_id = auth.uid());
-
 -- insurance_policies (módulo insurance)
 alter table insurance_policies enable row level security;
 drop policy if exists "select own insurance_policies" on insurance_policies;
@@ -1748,48 +1539,6 @@ create policy "nexus update" on project_design_entries for update
 create policy "nexus delete" on project_design_entries for delete
   using (user_id = auth.uid());
 
--- tasks: sin project_id es la lista personal (módulo Pending);
--- con project_id sigue el permiso de ESE proyecto.
-alter table tasks enable row level security;
-drop policy if exists "select own tasks" on tasks;
-drop policy if exists "insert own tasks" on tasks;
-drop policy if exists "update own tasks" on tasks;
-drop policy if exists "delete own tasks" on tasks;
-drop policy if exists "tasks select own" on tasks;
-drop policy if exists "tasks insert own" on tasks;
-drop policy if exists "tasks update own" on tasks;
-drop policy if exists "tasks delete own" on tasks;
-drop policy if exists "nexus read" on tasks;
-drop policy if exists "nexus insert" on tasks;
-drop policy if exists "nexus update" on tasks;
-drop policy if exists "nexus delete" on tasks;
-create policy "nexus read" on tasks for select
-  using (
-    user_id = auth.uid()
-    or (project_id is null and public.nexus_can_view('tasks'))
-    or (project_id is not null and public.nexus_can_view('projects')
-        and public.nexus_can_see_project(project_id))
-  );
-create policy "nexus insert" on tasks for insert
-  with check (
-    user_id = auth.uid()
-    and (
-      public.nexus_is_admin()
-      or (project_id is null and public.nexus_can_edit('tasks'))
-      or (project_id is not null and public.nexus_can_edit('projects')
-          and public.nexus_can_see_project(project_id))
-    )
-  );
-create policy "nexus update" on tasks for update
-  using (
-    user_id = auth.uid()
-    or (project_id is null and public.nexus_can_edit('tasks'))
-    or (project_id is not null and public.nexus_can_edit('projects')
-        and public.nexus_can_see_project(project_id))
-  );
-create policy "nexus delete" on tasks for delete
-  using (user_id = auth.uid());
-
 -- ------------------------------------------------------------
 -- Comprobación: después de correr esto, cada tabla debe tener sus cuatro
 -- políticas "nexus *". Si alguna sale con menos de 4, algo no corrió.
@@ -1914,3 +1663,169 @@ create policy "update own worker_heartbeat" on worker_heartbeat
   for update using (auth.uid() = user_id);
 create policy "delete own worker_heartbeat" on worker_heartbeat
   for delete using (auth.uid() = user_id);
+
+
+-- ============================================================
+-- BLOQUE 10 — PENDING Y PROGRAMMING, ELIMINADOS
+--
+-- Los dos módulos se quitaron de la app. Esto borra sus tablas y lo que
+-- quedaba apuntando a ellos (permisos del panel de admin y notas del botón
+-- CONTEXT). Sin cascade a propósito: si otra tabla dependiera de alguna,
+-- falla y no borra nada en vez de arrastrar datos ajenos.
+--
+-- El bucket shortcut-icons NO se toca: lo comparten Dashboard, Grades y
+-- Work Tracker.
+-- ============================================================
+
+drop table if exists tobuy_items;
+drop table if exists tobuy_categories;
+drop table if exists tasks;
+drop table if exists task_statuses;
+drop table if exists programming_resources;
+drop table if exists programming_shortcuts;
+
+delete from app_module_permissions where module in ('tasks', 'programming');
+delete from section_notes where section in ('tasks', 'tobuy', 'programming');
+
+
+-- ============================================================
+-- BLOQUE 11 — PROJECT MANAGEMENT: TABLERO KANBAN Y MENSAJES
+--
+-- Cada proyecto tiene su propio tablero: columnas que crea quien edita el
+-- proyecto, y tareas que se arrastran entre ellas. Y una conversación entre
+-- Andrés y el cliente del proyecto.
+--
+-- Mismo criterio de permisos que project_entries: lo ve quien puede ver ESE
+-- proyecto y lo escribe quien puede editarlo. Los mensajes son la
+-- excepción: el cliente con acceso al proyecto puede escribir aunque solo
+-- tenga permiso de ver, porque conversar no es editar el proyecto.
+--
+-- Sin bloques DO: en este editor no se ejecutan.
+-- ============================================================
+
+create table if not exists project_board_columns (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  project_id uuid not null references personal_projects(id) on delete cascade,
+  name text not null default '',
+  color text not null default '#a1a1aa',
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists project_board_tasks (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  project_id uuid not null references personal_projects(id) on delete cascade,
+  column_id uuid not null references project_board_columns(id) on delete cascade,
+  title text not null default '',
+  tag text not null default '',
+  assignee text not null default '',
+  due date,
+  sort_order integer not null default 0,
+  legacy_task_id uuid unique, -- la tarea vieja de la que salió, si salió de una
+  created_at timestamptz not null default now()
+);
+
+create index if not exists project_board_tasks_project_idx
+  on project_board_tasks (project_id, column_id, sort_order);
+
+create table if not exists project_messages (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  project_id uuid not null references personal_projects(id) on delete cascade,
+  author_name text not null default '',
+  body text not null default '',
+  task_id uuid references project_board_tasks(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists project_messages_project_idx
+  on project_messages (project_id, created_at);
+
+-- Hasta dónde leyó cada quien, para el contador de "sin leer"
+create table if not exists project_message_reads (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  project_id uuid not null references personal_projects(id) on delete cascade,
+  last_read_at timestamptz not null default now(),
+  primary key (user_id, project_id)
+);
+
+alter table project_board_columns enable row level security;
+alter table project_board_tasks enable row level security;
+alter table project_messages enable row level security;
+alter table project_message_reads enable row level security;
+
+-- Columnas y tareas: como project_entries
+drop policy if exists "nexus read" on project_board_columns;
+drop policy if exists "nexus insert" on project_board_columns;
+drop policy if exists "nexus update" on project_board_columns;
+drop policy if exists "nexus delete" on project_board_columns;
+create policy "nexus read" on project_board_columns for select
+  using (user_id = auth.uid() or (public.nexus_can_view('projects') and public.nexus_can_see_project(project_id)));
+create policy "nexus insert" on project_board_columns for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or (public.nexus_can_edit('projects') and public.nexus_can_see_project(project_id))));
+create policy "nexus update" on project_board_columns for update
+  using (user_id = auth.uid() or (public.nexus_can_edit('projects') and public.nexus_can_see_project(project_id)));
+-- Borrar una columna se lleva sus tareas: solo el admin o quien la creó
+create policy "nexus delete" on project_board_columns for delete
+  using (user_id = auth.uid() or public.nexus_is_admin());
+
+drop policy if exists "nexus read" on project_board_tasks;
+drop policy if exists "nexus insert" on project_board_tasks;
+drop policy if exists "nexus update" on project_board_tasks;
+drop policy if exists "nexus delete" on project_board_tasks;
+create policy "nexus read" on project_board_tasks for select
+  using (user_id = auth.uid() or (public.nexus_can_view('projects') and public.nexus_can_see_project(project_id)));
+create policy "nexus insert" on project_board_tasks for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or (public.nexus_can_edit('projects') and public.nexus_can_see_project(project_id))));
+create policy "nexus update" on project_board_tasks for update
+  using (user_id = auth.uid() or (public.nexus_can_edit('projects') and public.nexus_can_see_project(project_id)));
+create policy "nexus delete" on project_board_tasks for delete
+  using (user_id = auth.uid() or public.nexus_is_admin());
+
+-- Mensajes: escribe cualquiera que vea el proyecto, siempre a su nombre.
+-- Nadie edita mensajes ajenos; cada quien borra los suyos.
+drop policy if exists "nexus read" on project_messages;
+drop policy if exists "nexus insert" on project_messages;
+drop policy if exists "nexus update" on project_messages;
+drop policy if exists "nexus delete" on project_messages;
+create policy "nexus read" on project_messages for select
+  using (public.nexus_is_admin() or (public.nexus_can_view('projects') and public.nexus_can_see_project(project_id)));
+create policy "nexus insert" on project_messages for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or (public.nexus_can_view('projects') and public.nexus_can_see_project(project_id))));
+create policy "nexus update" on project_messages for update
+  using (user_id = auth.uid());
+create policy "nexus delete" on project_messages for delete
+  using (user_id = auth.uid());
+
+-- Lecturas: privadas de cada cuenta
+drop policy if exists "nexus read" on project_message_reads;
+drop policy if exists "nexus insert" on project_message_reads;
+drop policy if exists "nexus update" on project_message_reads;
+drop policy if exists "nexus delete" on project_message_reads;
+create policy "nexus read" on project_message_reads for select using (auth.uid() = user_id);
+create policy "nexus insert" on project_message_reads for insert with check (auth.uid() = user_id);
+create policy "nexus update" on project_message_reads for update using (auth.uid() = user_id);
+create policy "nexus delete" on project_message_reads for delete using (auth.uid() = user_id);
+
+-- Columnas iniciales para los proyectos que todavía no tienen tablero
+insert into project_board_columns (user_id, project_id, name, color, sort_order)
+select p.user_id, p.id, c.name, c.color, c.ord
+from personal_projects p
+cross join (values
+  ('Por hacer',   '#a1a1aa', 0),
+  ('En progreso', '#a78bfa', 1),
+  ('Hecho',       '#34d399', 2)
+) as c(name, color, ord)
+where not exists (
+  select 1 from project_board_columns x where x.project_id = p.id
+);
+
+-- (Aquí iba el paso que pasaba las tareas de la tabla vieja "tasks" al
+-- tablero. Se quitó: esa tabla ya se había borrado, así que no había nada
+-- que pasar.)
+
+-- Mensajes en tiempo real. Si Supabase dice que la tabla "is already member
+-- of publication", ya estaba: borrá esta línea y corré el resto.
+alter publication supabase_realtime add table project_messages;

@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, LogOut } from "lucide-react";
+import { Menu, X, LogOut, Search } from "lucide-react";
 import { APP_NAME } from "../../lib/constants";
 import { useAuth } from "../../hooks/useAuth";
 import { usePermissions } from "../../hooks/usePermissions";
 import { supabase } from "../../lib/supabase";
 import SectionContextButton from "../../components/SectionContextButton";
 import ModuleNavGroups from "./ModuleNavGroups";
+import CommandPalette from "./CommandPalette";
+import { getWorkerLastSeen } from "../../features/chat/api";
 import { BoardProvider } from "../../features/dashboard/BoardContext";
 
 export default function AppLayout() {
@@ -15,6 +17,34 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isAdmin } = usePermissions();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  // null = unknown (never checked, or no heartbeat table yet)
+  const [workerOnline, setWorkerOnline] = useState<boolean | null>(null);
+
+  // Ctrl/Cmd + K opens the module search from anywhere
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Whether the chat worker on Andrés's PC is listening. The worker writes a
+  // heartbeat every few seconds, so a minute-old one means it's off.
+  useEffect(() => {
+    if (!isAdmin) return;
+    const check = () =>
+      getWorkerLastSeen()
+        .then((ms) => setWorkerOnline(ms === null ? null : ms < 60000))
+        .catch(() => {});
+    check();
+    const timer = setInterval(check, 30000);
+    return () => clearInterval(timer);
+  }, [isAdmin]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -27,30 +57,33 @@ export default function AppLayout() {
     <BoardProvider>
       <div className="min-h-screen bg-background text-foreground">
       {/* Topbar */}
-      <header className="flex items-center gap-2 sm:gap-4 border-b border-border bg-surface px-3 sm:px-4 h-14">
+      <header className="sticky top-0 z-30 flex items-center gap-2 sm:gap-4 border-b border-border bg-surface/85 backdrop-blur px-3 sm:px-6 h-[60px]">
         <button
           onClick={() => setDrawerOpen(true)}
-          className="p-2 rounded hover:bg-surface-hover transition-colors shrink-0"
-          aria-label="Open menu"
+          className="p-2 rounded-lg hover:bg-surface-hover transition-colors shrink-0 lg:hidden"
+          aria-label="Abrir menú"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <Link to="/" className="text-lg font-bold shrink-0">
-          {APP_NAME}
+        <Link to="/" className="flex items-center gap-2.5 shrink-0">
+          <span className="w-[30px] h-[30px] rounded-[9px] bg-primary text-white flex items-center justify-center font-bold text-[15px]">
+            {APP_NAME.charAt(0)}
+          </span>
+          <span className="font-bold text-base tracking-[0.04em]">{APP_NAME}</span>
         </Link>
 
         {/* Horizontal tabs, grouped like the dashboard's module board.
             Scrolls sideways instead of wrapping — the header is a fixed
             height, so a wrapped second row would be clipped. */}
-        <nav className="hidden sm:flex items-center gap-1 ml-2 min-w-0 overflow-x-auto no-scrollbar">
+        <nav className="hidden sm:flex items-center gap-0.5 p-1 ml-1 rounded-xl bg-surface border border-border min-w-0 overflow-x-auto no-scrollbar">
           {isAdmin && (
             <Link
               to="/"
-              className={`px-3 py-1.5 rounded text-sm transition-colors shrink-0 ${
+              className={`px-3.5 py-1.5 rounded-lg text-sm transition-colors shrink-0 ${
                 location.pathname === "/"
-                  ? "bg-primary text-white"
-                  : "text-muted hover:bg-surface-hover"
+                  ? "bg-surface-hover text-foreground font-medium"
+                  : "text-muted hover:text-foreground"
               }`}
             >
               Dashboard
@@ -62,17 +95,42 @@ export default function AppLayout() {
           {/* Spacer */}
           <div className="flex-1" />
 
+          <button
+            onClick={() => setPaletteOpen(true)}
+            className="hidden md:flex items-center gap-2.5 h-[38px] px-3 min-w-[220px] rounded-[10px] border border-border bg-surface text-[13px] text-muted hover:text-foreground hover:border-[#3a3a44] transition-colors shrink-0"
+          >
+            <Search className="w-[15px] h-[15px]" />
+            <span className="flex-1 text-left">Buscar o ir a…</span>
+            <kbd className="px-1.5 py-0.5 rounded-[5px] border border-[#33333b] text-[11px]">Ctrl K</kbd>
+          </button>
+          <button
+            onClick={() => setPaletteOpen(true)}
+            className="md:hidden p-2 rounded-lg text-muted hover:bg-surface-hover shrink-0"
+            aria-label="Buscar"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+
+          {isAdmin && workerOnline !== null && (
+            <span
+              className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap shrink-0 ${
+                workerOnline ? "bg-emerald-400/10 text-emerald-300" : "bg-surface-hover text-muted"
+              }`}
+              title="El worker del chat en tu computadora"
+            >
+              <span className={`w-[7px] h-[7px] rounded-full ${workerOnline ? "bg-emerald-400" : "bg-muted"}`} />
+              {workerOnline ? "PC en línea" : "PC apagada"}
+            </span>
+          )}
+
           {/* User & Logout */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <div
-              className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-semibold select-none"
+              className="w-9 h-9 rounded-full bg-[#2e1065] text-[#c4b5fd] flex items-center justify-center text-sm font-semibold select-none"
               title={user?.email ?? ""}
             >
               {userInitial}
             </div>
-            <span className="hidden md:block text-sm text-muted max-w-[140px] truncate" title={user?.email ?? ""}>
-              {user?.email}
-            </span>
             <button
               onClick={handleSignOut}
               className="p-2 rounded text-muted hover:text-red-400 hover:bg-surface-hover transition-colors"
@@ -146,6 +204,8 @@ export default function AppLayout() {
       )}
 
       <SectionContextButton />
+
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
 
       {/* Page content */}
       <main className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8">

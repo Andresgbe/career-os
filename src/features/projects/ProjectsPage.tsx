@@ -1,27 +1,31 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Table2, LayoutGrid, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import ProjectCard from "./components/ProjectCard";
 import ProjectTable from "./components/ProjectTable";
 import ProjectModal from "./components/ProjectModal";
-import { getProjects } from "./api";
-import type { ProjectRow } from "./types";
+import { getProjects, getBoardSummaries, getProjectAccess } from "./api";
+import type { ColumnCount, ProjectAccess, ProjectRow } from "./types";
+import { usePermissions } from "../../hooks/usePermissions";
 
 type ViewMode = "table" | "cards";
 const VIEW_KEY = "projects-view";
 
 export default function ProjectsPage() {
   const navigate = useNavigate();
+  const { isAdmin } = usePermissions();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [boards, setBoards] = useState<Record<string, ColumnCount[]>>({});
+  const [access, setAccess] = useState<Record<string, ProjectAccess>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState("");
   const [view, setView] = useState<ViewMode>(() => {
     try {
-      return localStorage.getItem(VIEW_KEY) === "cards" ? "cards" : "table";
+      return localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards";
     } catch {
-      return "table";
+      return "cards";
     }
   });
 
@@ -38,16 +42,37 @@ export default function ProjectsPage() {
       .then(setProjects)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+
+    // How many tasks sit in each column, shown on every project. A
+    // nice-to-have: the list still works if the board tables aren't there.
+    getBoardSummaries()
+      .then(({ columns, tasks }) => {
+        const counts = new Map<string, number>();
+        for (const t of tasks) counts.set(t.column_id, (counts.get(t.column_id) ?? 0) + 1);
+        const byProject: Record<string, ColumnCount[]> = {};
+        for (const c of columns) {
+          (byProject[c.project_id] ??= []).push({
+            name: c.name,
+            color: c.color,
+            count: counts.get(c.id) ?? 0,
+          });
+        }
+        setBoards(byProject);
+      })
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    getProjectAccess().then(setAccess).catch(() => {});
+  }, [isAdmin]);
 
   const openProject = (project: ProjectRow) => navigate(`/projects/${project.id}`);
 
   const handleSaved = (saved: ProjectRow) => {
     setProjects((prev) => {
       const exists = prev.some((p) => p.id === saved.id);
-      return exists
-        ? prev.map((p) => (p.id === saved.id ? saved : p))
-        : [...prev, saved];
+      return exists ? prev.map((p) => (p.id === saved.id ? saved : p)) : [...prev, saved];
     });
     setShowModal(false);
   };
@@ -67,92 +92,93 @@ export default function ProjectsPage() {
       )
     : projects;
 
-  if (loading) return <p className="text-sm text-muted">Loading...</p>;
+  if (loading) return <p className="text-sm text-muted">Cargando...</p>;
+
+  const totalTasks = Object.values(boards)
+    .flat()
+    .reduce((sum, c) => sum + c.count, 0);
+  const sharedCount = Object.values(access).filter((a) => a !== "private").length;
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold mb-1">Project Management</h1>
-          <p className="text-sm text-muted">
-            Track your personal and freelance software projects.
+          <h1 className="text-[26px] font-bold tracking-tight">Proyectos</h1>
+          <p className="text-sm text-muted mt-1">
+            {isAdmin
+              ? "Tus proyectos de la agencia y lo que cada cliente puede ver."
+              : "Los proyectos que compartieron contigo."}
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add project
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 h-11 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Nuevo proyecto
+          </button>
+        )}
       </div>
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-xl">
-          {error}
+      {isAdmin && (
+        <div className="grid grid-cols-3 gap-3">
+          <Stat label="Proyectos" value={projects.length} />
+          <Stat label="Tareas en tableros" value={totalTasks} />
+          <Stat label="Compartidos con clientes" value={sharedCount} />
         </div>
       )}
 
-      {/* View switcher + search, the way a Notion database header works */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-1 bg-surface border border-border rounded-lg p-1">
-          <button
-            onClick={() => setView("table")}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-              view === "table"
-                ? "bg-surface-hover text-foreground"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            <Table2 className="w-3.5 h-3.5" />
-            Tabla
-          </button>
-          <button
-            onClick={() => setView("cards")}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-              view === "cards"
-                ? "bg-surface-hover text-foreground"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-            Tarjetas
-          </button>
-        </div>
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-xl">{error}</div>
+      )}
 
-        <div className="relative flex-1 min-w-[180px] max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted" />
+      <div className="flex items-center gap-2.5 flex-wrap">
+        <label className="flex-1 min-w-[220px] flex items-center gap-2 h-[42px] px-3.5 rounded-xl bg-surface border border-border focus-within:border-primary transition-colors">
+          <Search className="w-4 h-4 text-muted shrink-0" />
+          <span className="sr-only">Buscar proyectos</span>
           <input
-            type="text"
-            placeholder="Buscar proyecto, cliente o stack..."
+            type="search"
+            placeholder="Buscar por nombre, cliente o stack"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-surface border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs focus:border-primary outline-none"
+            className="flex-1 min-w-0 bg-transparent outline-none text-sm"
           />
+        </label>
+        <div className="flex gap-1 p-1 rounded-xl bg-surface border border-border">
+          {(["cards", "table"] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setView(mode)}
+              className={`px-3 py-1.5 rounded-lg text-[13px] transition-colors ${
+                view === mode ? "bg-surface-hover text-foreground font-semibold" : "text-muted hover:text-foreground"
+              }`}
+            >
+              {mode === "cards" ? "Tarjetas" : "Tabla"}
+            </button>
+          ))}
         </div>
-
-        <span className="text-xs text-muted">
-          {visibleProjects.length} de {projects.length}
-        </span>
       </div>
 
       {visibleProjects.length === 0 ? (
         <p className="text-sm text-muted">
-          {projects.length === 0
-            ? "No projects yet."
-            : "Ningún proyecto coincide con la búsqueda."}
+          {projects.length === 0 ? "Todavía no hay proyectos." : "Ningún proyecto coincide con la búsqueda."}
         </p>
       ) : view === "table" ? (
         <ProjectTable
           projects={visibleProjects}
+          boards={boards}
+          access={isAdmin ? access : null}
           onOpen={openProject}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           {visibleProjects.map((project) => (
             <ProjectCard
               key={project.id}
               project={project}
+              columns={boards[project.id] ?? []}
+              access={isAdmin ? (access[project.id] ?? "private") : null}
               onClick={() => openProject(project)}
             />
           ))}
@@ -168,6 +194,15 @@ export default function ProjectsPage() {
           onDeleted={handleDeleted}
         />
       )}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="px-4 sm:px-[18px] py-4 rounded-2xl bg-surface border border-border">
+      <p className="text-[13px] text-muted">{label}</p>
+      <p className="text-[26px] font-bold mt-1.5 leading-none">{value}</p>
     </div>
   );
 }

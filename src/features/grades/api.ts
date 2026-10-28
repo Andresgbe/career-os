@@ -333,7 +333,7 @@ export async function addGradesShortcut(
 
 // Upload a custom shortcut logo (used when a site has no discoverable
 // favicon, e.g. internal/local tools). Shares the same public bucket as
-// the dashboard, work, and programming shortcuts.
+// the dashboard and work shortcuts.
 export async function uploadShortcutIcon(file: File): Promise<string> {
   const user = await requireUser();
   const filePath = `${user.id}/${Date.now()}-${file.name}`;

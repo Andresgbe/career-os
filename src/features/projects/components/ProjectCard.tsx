@@ -1,73 +1,77 @@
-import { CheckSquare, FolderKanban, Paperclip } from "lucide-react";
-import type { ProjectRow } from "../types";
+import type { ColumnCount, ProjectAccess, ProjectRow } from "../types";
+import { ACCESS_CHIP, projectAccent, projectInitials } from "../types";
 
 interface ProjectCardProps {
   project: ProjectRow;
+  columns: ColumnCount[];
+  access: ProjectAccess | null; // null = not the admin, so not shown
   onClick: () => void;
 }
 
-export default function ProjectCard({
-  project,
-  onClick,
-}: ProjectCardProps) {
-  const doneMilestones = project.milestones.filter((m) => m.done).length;
+export default function ProjectCard({ project, columns, access, onClick }: ProjectCardProps) {
+  const accent = projectAccent(project.name);
+  const links = project.resources.filter((r) => r.type === "link").length;
 
   return (
-    <div
+    <button
       onClick={onClick}
-      className="group bg-surface border border-border rounded-xl p-5 hover:border-primary transition-all cursor-pointer hover:-translate-y-1 hover:shadow-lg"
+      className="text-left flex flex-col gap-3.5 p-[18px] rounded-2xl bg-surface border border-border hover:border-primary/50 transition-colors"
     >
-      <div className="flex items-start justify-between mb-4">
-        <div className="p-3 rounded-lg bg-primary/10">
-          <FolderKanban className="w-6 h-6 text-primary" />
+      <div className="flex items-start gap-3 w-full">
+        <span
+          className="w-[42px] h-[42px] rounded-[11px] flex items-center justify-center text-sm font-bold shrink-0"
+          style={{ backgroundColor: `${accent}22`, color: accent }}
+        >
+          {projectInitials(project.name)}
+        </span>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-base font-semibold truncate">{project.name}</h3>
+          <p className="text-[13px] text-muted truncate mt-0.5">{project.client || "Sin cliente"}</p>
         </div>
+        {access && (
+          <span
+            className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${ACCESS_CHIP[access].className}`}
+          >
+            {ACCESS_CHIP[access].label}
+          </span>
+        )}
       </div>
 
-      <h3 className="font-semibold text-lg mb-1 group-hover:text-primary transition-colors truncate">
-        {project.name}
-      </h3>
-      {project.client && (
-        <p className="text-sm text-muted truncate mb-2">{project.client}</p>
-      )}
-
       {project.description && (
-        <p className="text-sm text-muted line-clamp-2 mb-3">
-          {project.description}
-        </p>
+        <p className="text-[13px] text-[#c4c4cc] leading-relaxed line-clamp-2">{project.description}</p>
       )}
 
       {project.tech_stack.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
-          {project.tech_stack.slice(0, 5).map((tech, i) => (
+        <div className="flex gap-1.5 flex-wrap">
+          {project.tech_stack.slice(0, 5).map((tech) => (
             <span
-              key={i}
-              className="text-[10px] px-1.5 py-0.5 bg-surface-hover rounded text-muted"
+              key={tech}
+              className="px-2.5 py-0.5 rounded-full bg-surface-hover border border-[#2c2c34] text-xs text-[#d4d4d8]"
             >
               {tech}
             </span>
           ))}
-          {project.tech_stack.length > 5 && (
-            <span className="text-[10px] px-1.5 py-0.5 text-muted">
-              +{project.tech_stack.length - 5}
-            </span>
-          )}
         </div>
       )}
 
-      <div className="flex items-center flex-wrap gap-3 pt-3 border-t border-border text-xs text-muted">
-        {project.milestones.length > 0 && (
-          <span className="flex items-center gap-1">
-            <CheckSquare className="w-3.5 h-3.5" />
-            {doneMilestones}/{project.milestones.length}
-          </span>
-        )}
-        {project.resources.length > 0 && (
-          <span className="flex items-center gap-1">
-            <Paperclip className="w-3.5 h-3.5" />
-            {project.resources.length}
-          </span>
-        )}
-      </div>
-    </div>
+      {columns.length > 0 && (
+        <div className="flex gap-1.5 flex-wrap">
+          {columns.map((c, i) => (
+            <span
+              key={i}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#131317] border border-border text-xs text-[#d4d4d8]"
+            >
+              <span className="w-2 h-2 rounded-[2px]" style={{ backgroundColor: c.color }} />
+              {c.name}
+              <span className="font-bold text-foreground">{c.count}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {links > 0 && (
+        <p className="text-xs text-muted border-t border-border pt-3 w-full">{links} links</p>
+      )}
+    </button>
   );
 }

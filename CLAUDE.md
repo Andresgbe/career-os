@@ -30,7 +30,7 @@ The **block pattern** — a title plus optional `RichTextEditor` + `CodeBlock` +
 
 ### Module system
 
-The app is organized as a fixed set of "modules" (Motorcycle, Medical, Content, Grades, Project Management, Programming, Insurance, Finance, Work Tracker), each a self-contained vertical slice under `src/features/<name>/`. A module typically contains:
+The app is organized as a fixed set of "modules" (Motorcycle, Medical, Content, Grades, Project Management, Insurance, Finance, Work Tracker), each a self-contained vertical slice under `src/features/<name>/`. A module typically contains:
 - `<Name>Page.tsx` — top-level page with its own tab state, fetches data in `useEffect` and passes it down
 - `api.ts` — direct Supabase queries (no shared data-fetching layer/React Query; each module calls `supabase.from(...)` itself and throws on `error`)
 - `types.ts` — row types matching Supabase tables, plus any pure helper functions for that domain (e.g. grade-point math in `grades/types.ts`)
@@ -41,7 +41,7 @@ The app is organized as a fixed set of "modules" (Motorcycle, Medical, Content, 
 
 All modules are now wired to Supabase (the earlier placeholder mock data in `projects` has been replaced by a real `personal_projects` + `project_entries` backend). `grades`, `medical`, and `work` remain good reference patterns for a fully wired module (api.ts + types.ts + tabs).
 
-A few modules go one level deeper with a **nested workspace** pattern: a list page (`ProjectsPage.tsx`) links into a per-item page with its own route param and its own tab bar (`ProjectWorkspacePage.tsx` at `/projects/:id`, tabs: Overview/Links/Credentials/Images/Entries). Reach for this when a module's items each need a substantial amount of their own sub-content, rather than cramming it into an expandable card.
+A few modules go one level deeper with a **nested workspace** pattern: a list page (`ProjectsPage.tsx`) links into a per-item page with its own route param and its own tab bar (`ProjectWorkspacePage.tsx` at `/projects/:id`, tabs: Tablero/Mensajes/Resumen/Links/Credenciales/Entradas/Diseño). The Tablero tab is a per-project Kanban (`project_board_columns` + `project_board_tasks`, user-created columns, drag via `@hello-pangea/dnd`); Mensajes is a client↔owner conversation (`project_messages`, realtime + polling fallback, unread count from `project_message_reads`). Clients see the project read-only unless they have edit on `projects`, never see Credenciales, and only the owner can delete the project. Reach for this when a module's items each need a substantial amount of their own sub-content, rather than cramming it into an expandable card.
 
 ### Section context ("CONTEXT" button)
 

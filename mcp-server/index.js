@@ -122,7 +122,6 @@ const SECTIONS = [
   "content",
   "grades",
   "projects",
-  "programming",
   "insurance",
   "finance",
   "passwords",

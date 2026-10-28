@@ -37,7 +37,12 @@ function isDone(idea: ContentIdeaRow) {
   return idea.script_done && idea.recorded && idea.edited;
 }
 
-export default function ContentBoard() {
+interface ContentBoardProps {
+  // Each bump opens the quick-add field in "Sin categoría"
+  newIdeaSignal?: number;
+}
+
+export default function ContentBoard({ newIdeaSignal = 0 }: ContentBoardProps) {
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [ideas, setIdeas] = useState<ContentIdeaRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,16 +60,28 @@ export default function ContentBoard() {
   const [quickAddTitle, setQuickAddTitle] = useState("");
 
   const [openIdeaId, setOpenIdeaId] = useState<string | null>(null);
+  // Finished ideas leave the board, but still count in the summary
+  const [doneCount, setDoneCount] = useState(0);
 
   useEffect(() => {
     Promise.all([getCategories(), getContentIdeas()])
       .then(([cats, allIdeas]) => {
         setCategories(cats);
         setIdeas(allIdeas.filter((i) => !isDone(i)));
+        setDoneCount(allIdeas.filter(isDone).length);
       })
       .catch((err) => reportError(err))
       .finally(() => setLoading(false));
   }, []);
+
+  // "Nueva idea" in the page header: open the quick-add field. Adjusted
+  // during render (not in an effect) so it lands in the same paint.
+  const [seenSignal, setSeenSignal] = useState(newIdeaSignal);
+  if (newIdeaSignal !== seenSignal) {
+    setSeenSignal(newIdeaSignal);
+    setQuickAddColumn(UNASSIGNED);
+    setQuickAddTitle("");
+  }
 
   function reportError(err: unknown) {
     setError(errorMessage(err, "Something went wrong"));
@@ -229,6 +246,7 @@ export default function ContentBoard() {
   ) => {
     try {
       const updated = await updateContentIdea(id, fields);
+      if (isDone(updated)) setDoneCount((n) => n + 1);
       setIdeas((prev) =>
         isDone(updated)
           ? prev.filter((i) => i.id !== id)
@@ -246,6 +264,7 @@ export default function ContentBoard() {
   ) => {
     try {
       const updated = await toggleIdeaStatus(id, field, value);
+      if (isDone(updated)) setDoneCount((n) => n + 1);
       setIdeas((prev) =>
         isDone(updated)
           ? prev.filter((i) => i.id !== id)
@@ -265,7 +284,18 @@ export default function ContentBoard() {
     }
   };
 
-  if (loading) return <p className="text-sm text-muted">Loading...</p>;
+  if (loading) return <p className="text-sm text-muted">Cargando...</p>;
+
+  // Where every idea is in production: how many steps it has ticked
+  const stepsDone = (i: ContentIdeaRow) =>
+    [i.script_done, i.recorded, i.edited].filter(Boolean).length;
+  const stages = [
+    { label: "Sin guion", count: ideas.filter((i) => stepsDone(i) === 0).length, color: "#71717a" },
+    { label: "Con guion", count: ideas.filter((i) => stepsDone(i) === 1).length, color: "#a78bfa" },
+    { label: "Grabadas", count: ideas.filter((i) => stepsDone(i) === 2).length, color: "#38bdf8" },
+    { label: "Listas", count: doneCount, color: "#34d399" },
+  ];
+  const stageTotal = stages.reduce((sum, st) => sum + st.count, 0);
 
   const columns: { id: string; name: string; color: string | null; collapsed: boolean; deletable: boolean }[] = [
     { id: UNASSIGNED, name: "Sin categoría", color: null, collapsed: false, deletable: false },
@@ -284,11 +314,31 @@ export default function ContentBoard() {
   const openIdea = ideas.find((i) => i.id === openIdeaId) || null;
 
   return (
-    <div>
-      {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
+    <div className="space-y-5">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {stages.map((st) => (
+          <div key={st.label} className="flex flex-col gap-2.5 px-4 py-3.5 rounded-2xl bg-surface border border-border">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] text-muted">{st.label}</span>
+              <span className="text-[22px] font-bold tabular-nums leading-none">{st.count}</span>
+            </div>
+            <div className="h-1 rounded-full bg-border overflow-hidden">
+              <div
+                className="h-full rounded-full"
+                style={{
+                  backgroundColor: st.color,
+                  width: `${stageTotal ? Math.round((st.count / stageTotal) * 100) : 0}%`,
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex items-start gap-4 overflow-x-auto pb-2">
+        <div className="flex items-start gap-3.5 overflow-x-auto pb-2">
           {columns.map((column) => {
             const items = ideas
               .filter((i) => (column.id === UNASSIGNED ? !i.category_id : i.category_id === column.id))
@@ -302,7 +352,7 @@ export default function ContentBoard() {
                     toggleCollapsed(categories.find((c) => c.id === column.id)!)
                   }
                   title={column.name}
-                  className="flex flex-col items-center gap-2 py-3 px-1.5 w-10 flex-shrink-0 bg-surface/60 border border-border rounded-xl hover:border-primary transition-colors"
+                  className="flex flex-col items-center gap-2 py-3 px-1.5 w-11 flex-shrink-0 bg-[#131317] border border-border rounded-2xl hover:border-primary transition-colors"
                 >
                   <ChevronRight className="w-4 h-4 text-muted flex-shrink-0" />
                   <span
@@ -321,15 +371,13 @@ export default function ContentBoard() {
             return (
               <div
                 key={column.id}
-                className="bg-surface/60 border border-border rounded-xl w-72 flex-shrink-0 flex flex-col"
+                className="bg-[#131317] border border-border rounded-2xl w-[290px] flex-shrink-0 flex flex-col p-3 gap-2.5"
               >
-                <div className="flex items-center gap-1.5 px-3 py-2.5 border-b border-border">
-                  {column.color && (
-                    <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: column.color }}
-                    />
-                  )}
+                <div className="flex items-center gap-2 px-1 py-0.5">
+                  <span
+                    className="w-2.5 h-2.5 rounded-[3px] shrink-0"
+                    style={{ backgroundColor: column.color ?? "#71717a" }}
+                  />
                   {editingColumnId === column.id ? (
                     <input
                       autoFocus
@@ -356,7 +404,7 @@ export default function ContentBoard() {
                       {column.name}
                     </span>
                   )}
-                  <span className="text-xs text-muted flex-shrink-0">
+                  <span className="text-xs text-muted px-2 py-0.5 rounded-full bg-surface-hover flex-shrink-0">
                     {items.length}
                   </span>
                   {column.deletable && (
@@ -388,7 +436,7 @@ export default function ContentBoard() {
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className="flex flex-col gap-2 p-2.5 min-h-[48px]"
+                      className="flex flex-col gap-2 min-h-[48px]"
                     >
                       {items.map((idea, index) => (
                         <Draggable key={idea.id} draggableId={idea.id} index={index}>
@@ -424,16 +472,16 @@ export default function ContentBoard() {
                             if (e.key === "Enter") submitQuickAdd();
                             if (e.key === "Escape") setQuickAddColumn(null);
                           }}
-                          placeholder="Idea title"
-                          className="bg-background border border-primary rounded px-2.5 py-1.5 text-sm focus:outline-none"
+                          placeholder="Título de la idea, Enter para guardar"
+                          className="h-10 px-3 rounded-xl bg-background border border-primary text-sm outline-none placeholder:text-muted"
                         />
                       ) : (
                         <button
                           onClick={() => startQuickAdd(column.id)}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-muted hover:text-primary transition-colors"
+                          className="flex items-center gap-2 h-10 px-2.5 rounded-xl text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
                         >
-                          <Plus className="w-3.5 h-3.5" />
-                          Add idea
+                          <Plus className="w-4 h-4" />
+                          Añadir idea
                         </button>
                       )}
                     </div>
@@ -474,7 +522,7 @@ export default function ContentBoard() {
           ) : (
             <button
               onClick={() => setAddingColumn(true)}
-              className="w-72 flex-shrink-0 border border-dashed border-border rounded-xl flex items-center justify-center gap-2 text-muted hover:border-primary hover:text-primary transition-colors py-4"
+              className="w-64 h-14 flex-shrink-0 border border-dashed border-[#3f3f48] rounded-2xl flex items-center justify-center gap-2 text-sm font-medium text-muted hover:border-primary hover:text-foreground transition-colors"
             >
               <Plus className="w-4 h-4" />
               Agregar categoría
@@ -496,8 +544,9 @@ export default function ContentBoard() {
 
       {deletingColumn && (
         <ConfirmDialog
-          title="Delete category"
-          message={`Delete "${deletingColumn.name}"? Its ideas move to "Sin categoría".`}
+          title="Eliminar categoría"
+          confirmLabel="Eliminar"
+          message={`Se elimina "${deletingColumn.name}". Sus ideas pasan a "Sin categoría".`}
           onConfirm={confirmDeleteColumn}
           onCancel={() => setDeletingColumn(null)}
         />

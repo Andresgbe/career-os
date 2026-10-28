@@ -79,10 +79,8 @@ function AdminDashboard() {
   }, []);
 
   return (
-    // El chat se lee mejor en una columna más angosta y centrada; el
-    // tablero de módulos usa todo el ancho que haya.
-    <div className={activeTab === "chat" ? "mx-auto w-full max-w-4xl" : ""}>
-      <div className="flex gap-1 border-b border-border pb-0 mb-5 overflow-x-auto no-scrollbar">
+    <div>
+      <div className="flex w-fit gap-1 p-1 mb-5 rounded-xl bg-surface border border-border">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -90,10 +88,10 @@ function AdminDashboard() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t transition-colors -mb-px border-b-2 shrink-0 whitespace-nowrap ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap ${
                 isActive
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted hover:text-foreground hover:bg-surface-hover"
+                  ? "bg-primary text-white font-semibold"
+                  : "text-muted hover:text-foreground"
               }`}
             >
               <Icon className="w-4 h-4" />

@@ -1,66 +1,61 @@
 import { errorMessage } from "../../lib/errors";
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import {
-  ArrowLeft,
-  Pencil,
-  Trash2,
-  LayoutDashboard,
-  Link2,
-  KeyRound,
-  NotebookText,
-  Palette,
-} from "lucide-react";
-import { getProject, deleteProject } from "./api";
-import type { ProjectRow } from "./types";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Pencil, Eye } from "lucide-react";
+import { getProject, getProjectAccess, getUnreadCount } from "./api";
+import type { ProjectAccess, ProjectRow } from "./types";
+import { projectAccent, projectInitials } from "./types";
 import ProjectModal from "./components/ProjectModal";
-import ConfirmDialog from "../../components/ConfirmDialog";
+import { useAuth } from "../../hooks/useAuth";
+import { usePermissions } from "../../hooks/usePermissions";
+import BoardTab from "./tabs/BoardTab";
+import MessagesTab from "./tabs/MessagesTab";
 import OverviewTab from "./tabs/OverviewTab";
 import LinksTab from "./tabs/LinksTab";
 import CredentialsTab from "./tabs/CredentialsTab";
 import EntriesTab from "./tabs/EntriesTab";
 import DesignTab from "./tabs/DesignTab";
 
-const TABS = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "links", label: "Links", icon: Link2 },
-  { id: "credentials", label: "Credentials", icon: KeyRound },
-  { id: "entries", label: "Entries", icon: NotebookText },
-  { id: "design", label: "Design", icon: Palette },
-] as const;
+type TabId = "board" | "messages" | "overview" | "links" | "credentials" | "entries" | "design";
 
-type TabId = (typeof TABS)[number]["id"];
+const ACCESS_LABEL: Record<ProjectAccess, string> = {
+  private: "",
+  view: "el cliente puede ver este proyecto",
+  edit: "el cliente puede editar este proyecto",
+};
 
 export default function ProjectWorkspacePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { isAdmin, canEdit } = usePermissions();
   const [project, setProject] = useState<ProjectRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [activeTab, setActiveTab] = useState<TabId>("board");
   const [showEditModal, setShowEditModal] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const [access, setAccess] = useState<ProjectAccess>("private");
 
   useEffect(() => {
     if (!id) return;
     getProject(id)
       .then(setProject)
-      .catch((e) => setError(e.message))
+      .catch((e) => setError(errorMessage(e, "No se pudo abrir el proyecto")))
       .finally(() => setLoading(false));
+    getUnreadCount(id).then(setUnread).catch(() => {});
   }, [id]);
 
-  const handleDelete = async () => {
-    if (!project) return;
-    try {
-      await deleteProject(project.id);
-      navigate("/projects");
-    } catch (err) {
-      setError(errorMessage(err, "Delete failed"));
-      setConfirmingDelete(false);
-    }
-  };
+  useEffect(() => {
+    if (!isAdmin || !id) return;
+    getProjectAccess()
+      .then((map) => setAccess(map[id] ?? "private"))
+      .catch(() => {});
+  }, [isAdmin, id]);
 
-  if (loading) return <p className="text-sm text-muted">Loading...</p>;
+  const clearUnread = useCallback(() => setUnread(0), []);
+
+  if (loading) return <p className="text-sm text-muted">Cargando...</p>;
 
   if (!project) {
     return (
@@ -70,85 +65,109 @@ export default function ProjectWorkspacePage() {
             {error}
           </div>
         )}
-        <button
-          onClick={() => navigate("/projects")}
-          className="flex items-center gap-2 text-sm text-muted hover:text-foreground"
-        >
+        <Link to="/projects" className="flex items-center gap-2 text-sm text-muted hover:text-foreground">
           <ArrowLeft className="w-4 h-4" />
-          Back to projects
-        </button>
+          Proyectos
+        </Link>
       </div>
     );
   }
 
+  const editable = canEdit("projects");
+  const isOwner = project.user_id === user?.id;
+  // Credentials are Andrés's working notes: a client never sees them
+  const showCredentials = isAdmin || isOwner;
+  const accent = projectAccent(project.name);
+
+  const tabs: { id: TabId; label: string; badge?: number }[] = [
+    { id: "board", label: "Tablero" },
+    { id: "messages", label: "Mensajes", badge: unread },
+    { id: "overview", label: "Resumen" },
+    { id: "links", label: "Links" },
+    ...(showCredentials ? [{ id: "credentials" as const, label: "Credenciales" }] : []),
+    { id: "entries", label: "Entradas" },
+    { id: "design", label: "Diseño" },
+  ];
 
   return (
-    <div className="space-y-6">
-      <button
-        onClick={() => navigate("/projects")}
-        className="flex items-center gap-2 text-sm text-muted hover:text-foreground"
+    <div className="space-y-5">
+      <Link
+        to="/projects"
+        className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground"
       >
         <ArrowLeft className="w-4 h-4" />
-        Back to projects
-      </button>
+        Proyectos
+      </Link>
 
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1">
-            <h1 className="text-2xl font-bold truncate">{project.name}</h1>
+      <div className="flex items-center gap-3.5 flex-wrap">
+        <span
+          className="w-12 h-12 rounded-[13px] flex items-center justify-center font-bold shrink-0"
+          style={{ backgroundColor: `${accent}22`, color: accent }}
+        >
+          {projectInitials(project.name)}
+        </span>
+        <div className="flex-1 min-w-[200px]">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-2xl font-bold tracking-tight truncate">{project.name}</h1>
+            {!editable && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-hover border border-[#2c2c34] text-xs text-muted">
+                <Eye className="w-3 h-3" />
+                Solo lectura
+              </span>
+            )}
           </div>
-          {project.client && <p className="text-sm text-muted">{project.client}</p>}
+          {(project.client || access !== "private") && (
+            <p className="text-[13px] text-muted mt-0.5">
+              {project.client && `Cliente: ${project.client}`}
+              {project.client && access !== "private" && " · "}
+              {access !== "private" && <span className="text-emerald-300">{ACCESS_LABEL[access]}</span>}
+            </p>
+          )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => setConfirmingDelete(true)}
-            className="flex items-center gap-2 px-3 py-2 rounded text-red-400 hover:bg-surface-hover text-sm font-medium transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete
-          </button>
+        {editable && (
           <button
             onClick={() => setShowEditModal(true)}
-            className="flex items-center gap-2 px-3 py-2 rounded bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors"
+            className="flex items-center gap-2 h-10 px-3.5 rounded-xl border border-[#2f2f37] bg-surface text-sm font-medium hover:bg-surface-hover transition-colors"
           >
             <Pencil className="w-4 h-4" />
-            Edit
+            Editar proyecto
           </button>
-        </div>
+        )}
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-xl">
-          {error}
-        </div>
+        <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-xl">{error}</div>
       )}
 
-      {/* Tab bar */}
-      <div className="flex gap-1 border-b border-border pb-0 overflow-x-auto no-scrollbar">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
+      <div className="flex gap-1 p-1 rounded-xl bg-surface border border-border w-fit max-w-full overflow-x-auto no-scrollbar">
+        {tabs.map((tab) => {
+          const active = activeTab === tab.id;
           return (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t transition-colors -mb-px border-b-2 shrink-0 whitespace-nowrap ${
-                isActive
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted hover:text-foreground hover:bg-surface-hover"
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-[13px] whitespace-nowrap transition-colors ${
+                active
+                  ? "bg-surface-hover text-foreground font-semibold"
+                  : "text-muted hover:text-foreground"
               }`}
             >
-              <Icon className="w-4 h-4" />
               {tab.label}
+              {!!tab.badge && (
+                <span className="px-1.5 min-w-[20px] rounded-full bg-primary text-white text-[11px] font-semibold">
+                  {tab.badge}
+                </span>
+              )}
             </button>
           );
         })}
       </div>
 
-      {/* Tab content */}
-      {activeTab === "overview" && <OverviewTab project={project} onProjectChange={setProject} />}
+      {activeTab === "board" && <BoardTab projectId={project.id} canEdit={editable} />}
+      {activeTab === "messages" && <MessagesTab projectId={project.id} onRead={clearUnread} />}
+      {activeTab === "overview" && <OverviewTab project={project} />}
       {activeTab === "links" && <LinksTab project={project} onProjectChange={setProject} />}
-      {activeTab === "credentials" && (
+      {activeTab === "credentials" && showCredentials && (
         <CredentialsTab project={project} onProjectChange={setProject} />
       )}
       {activeTab === "entries" && <EntriesTab projectId={project.id} />}
@@ -158,21 +177,13 @@ export default function ProjectWorkspacePage() {
         <ProjectModal
           project={project}
           nextSortOrder={0}
+          canDelete={isOwner}
           onClose={() => setShowEditModal(false)}
           onSaved={(saved) => {
             setProject(saved);
             setShowEditModal(false);
           }}
           onDeleted={() => navigate("/projects")}
-        />
-      )}
-
-      {confirmingDelete && (
-        <ConfirmDialog
-          title="Delete project?"
-          message={`"${project.name}" will be permanently deleted.`}
-          onConfirm={handleDelete}
-          onCancel={() => setConfirmingDelete(false)}
         />
       )}
     </div>

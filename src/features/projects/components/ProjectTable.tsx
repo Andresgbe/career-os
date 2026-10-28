@@ -1,33 +1,32 @@
-import { Paperclip, CheckSquare } from "lucide-react";
-import type { ProjectRow } from "../types";
+import type { ColumnCount, ProjectAccess, ProjectRow } from "../types";
+import { ACCESS_CHIP, projectAccent, projectInitials } from "../types";
 
 interface ProjectTableProps {
   projects: ProjectRow[];
+  boards: Record<string, ColumnCount[]>;
+  access: Record<string, ProjectAccess> | null; // null = not the admin
   onOpen: (project: ProjectRow) => void;
 }
 
-// Notion-style database view: one row per project with its properties as
-// columns, denser than the card grid and easier to scan across projects.
-export default function ProjectTable({
-  projects,
-  onOpen,
-}: ProjectTableProps) {
+// Denser view of the same projects: one row each, easier to scan.
+export default function ProjectTable({ projects, boards, access, onOpen }: ProjectTableProps) {
   return (
-    <div className="bg-surface border border-border rounded-xl overflow-x-auto">
+    <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
       <table className="w-full min-w-[760px] text-sm text-left">
         <thead className="text-xs text-muted uppercase border-b border-border">
           <tr>
-            <th className="px-4 py-2.5 font-medium">Proyecto</th>
-            <th className="px-4 py-2.5 font-medium">Cliente</th>
-            <th className="px-4 py-2.5 font-medium">Stack</th>
-            <th className="px-4 py-2.5 font-medium">Hitos</th>
-            <th className="px-4 py-2.5 font-medium">Archivos</th>
+            <th className="px-4 py-3 font-medium">Proyecto</th>
+            <th className="px-4 py-3 font-medium">Cliente</th>
+            <th className="px-4 py-3 font-medium">Stack</th>
+            <th className="px-4 py-3 font-medium">Tablero</th>
+            {access && <th className="px-4 py-3 font-medium">Acceso</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
           {projects.map((project) => {
-            const doneMilestones = project.milestones.filter((m) => m.done).length;
-
+            const accent = projectAccent(project.name);
+            const columns = boards[project.id] ?? [];
+            const level = access?.[project.id] ?? "private";
             return (
               <tr
                 key={project.id}
@@ -35,55 +34,41 @@ export default function ProjectTable({
                 className="hover:bg-surface-hover/60 cursor-pointer transition-colors"
               >
                 <td className="px-4 py-3">
-                  <span className="font-medium">{project.name}</span>
-                  {project.description && (
-                    <span className="block text-xs text-muted truncate max-w-[280px]">
-                      {project.description}
+                  <span className="flex items-center gap-3">
+                    <span
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0"
+                      style={{ backgroundColor: `${accent}22`, color: accent }}
+                    >
+                      {projectInitials(project.name)}
                     </span>
-                  )}
+                    <span className="font-medium">{project.name}</span>
+                  </span>
                 </td>
                 <td className="px-4 py-3 text-muted">{project.client || "—"}</td>
+                <td className="px-4 py-3 text-muted">
+                  {project.tech_stack.slice(0, 3).join(", ") || "—"}
+                </td>
                 <td className="px-4 py-3">
-                  {project.tech_stack.length === 0 ? (
+                  {columns.length === 0 ? (
                     <span className="text-muted">—</span>
                   ) : (
-                    <span className="flex flex-wrap gap-1">
-                      {project.tech_stack.slice(0, 3).map((tech, i) => (
-                        <span
-                          key={i}
-                          className="text-[10px] px-1.5 py-0.5 bg-surface-hover rounded text-muted"
-                        >
-                          {tech}
+                    <span className="flex gap-3 text-xs text-muted">
+                      {columns.map((c, i) => (
+                        <span key={i} className="flex items-center gap-1.5 whitespace-nowrap">
+                          <span className="w-2 h-2 rounded-[2px]" style={{ backgroundColor: c.color }} />
+                          <span className="font-semibold text-foreground">{c.count}</span>
                         </span>
                       ))}
-                      {project.tech_stack.length > 3 && (
-                        <span className="text-[10px] text-muted">
-                          +{project.tech_stack.length - 3}
-                        </span>
-                      )}
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-muted">
-                  {project.milestones.length > 0 ? (
-                    <span className="flex items-center gap-1">
-                      <CheckSquare className="w-3.5 h-3.5" />
-                      {doneMilestones}/{project.milestones.length}
+                {access && (
+                  <td className="px-4 py-3">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${ACCESS_CHIP[level].className}`}>
+                      {ACCESS_CHIP[level].label}
                     </span>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="px-4 py-3 text-muted">
-                  {project.resources.length > 0 ? (
-                    <span className="flex items-center gap-1">
-                      <Paperclip className="w-3.5 h-3.5" />
-                      {project.resources.length}
-                    </span>
-                  ) : (
-                    "—"
-                  )}
-                </td>
+                  </td>
+                )}
               </tr>
             );
           })}
