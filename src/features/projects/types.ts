@@ -108,6 +108,61 @@ export interface PrivateCredentialRow {
   created_at: string;
 }
 
+// A link in the "Privada" section of the Links tab, readable only by the
+// user who created it (BLOQUE 13 of PENDIENTE.sql).
+export interface PrivateLinkRow {
+  id: string;
+  user_id: string;
+  project_id: string;
+  label: string;
+  url: string;
+  sort_order: number;
+  created_at: string;
+}
+
+// ============================================
+// EXPEDIENTE (contracts, documents, notes and payments)
+// ============================================
+
+export type DossierKind = "content" | "payments";
+
+export interface DossierFile {
+  id: string;
+  name: string; // the original file name, shown and used for the download
+  path: string; // inside the private "project-dossier" bucket
+  size: number;
+}
+
+// A block the admin creates. The client only gets the row while
+// visible_to_client is on (enforced by RLS, BLOQUE 14 of PENDIENTE.sql).
+export interface DossierSectionRow {
+  id: string;
+  user_id: string;
+  project_id: string;
+  title: string;
+  kind: DossierKind;
+  body: string; // HTML, "content" sections only
+  files: DossierFile[]; // stored as jsonb, "content" sections only
+  visible_to_client: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export type DossierPaymentStatus = "pending" | "paid" | "cancelled";
+
+export interface DossierPaymentRow {
+  id: string;
+  user_id: string;
+  section_id: string;
+  concept: string;
+  amount: number;
+  currency: string;
+  date: string | null; // YYYY-MM-DD
+  status: DossierPaymentStatus;
+  note: string;
+  created_at: string;
+}
+
 export interface BoardColumnRow {
   id: string;
   user_id: string;

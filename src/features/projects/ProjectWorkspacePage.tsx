@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Pencil, Eye } from "lucide-react";
 import BackNav from "../../components/BackNav";
-import { getProject, getProjectAccess, getUnreadCount } from "./api";
+import { getDossierSections, getProject, getProjectAccess, getUnreadCount } from "./api";
 import type { ProjectAccess, ProjectRow } from "./types";
 import { projectAccent, projectInitials } from "./types";
 import ProjectModal from "./components/ProjectModal";
@@ -14,10 +14,19 @@ import MessagesTab from "./tabs/MessagesTab";
 import OverviewTab from "./tabs/OverviewTab";
 import LinksTab from "./tabs/LinksTab";
 import CredentialsTab from "./tabs/CredentialsTab";
+import DossierTab from "./tabs/DossierTab";
 import EntriesTab from "./tabs/EntriesTab";
 import DesignTab from "./tabs/DesignTab";
 
-type TabId = "board" | "messages" | "overview" | "links" | "credentials" | "entries" | "design";
+type TabId =
+  | "board"
+  | "messages"
+  | "overview"
+  | "links"
+  | "credentials"
+  | "dossier"
+  | "entries"
+  | "design";
 
 const ACCESS_LABEL: Record<ProjectAccess, string> = {
   private: "",
@@ -37,6 +46,7 @@ export default function ProjectWorkspacePage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [unread, setUnread] = useState(0);
   const [access, setAccess] = useState<ProjectAccess>("private");
+  const [clientHasDossier, setClientHasDossier] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -51,6 +61,15 @@ export default function ProjectWorkspacePage() {
     if (!isAdmin || !id) return;
     getProjectAccess()
       .then((map) => setAccess(map[id] ?? "private"))
+      .catch(() => {});
+  }, [isAdmin, id]);
+
+  // A client only gets the Expediente tab once something in it is shown to
+  // them. RLS already hides the rest, so any row back means there's content.
+  useEffect(() => {
+    if (isAdmin || !id) return;
+    getDossierSections(id)
+      .then((sections) => setClientHasDossier(sections.length > 0))
       .catch(() => {});
   }, [isAdmin, id]);
 
@@ -73,8 +92,9 @@ export default function ProjectWorkspacePage() {
 
   const editable = canEdit("projects");
   const isOwner = project.user_id === user?.id;
-  // Credentials are Andrés's working notes: a client never sees them
-  const showCredentials = isAdmin || isOwner;
+  // Clients see the shared credentials too; the "Privada" sections of
+  // Credenciales and Links are only for Andrés.
+  const canSeePrivate = isAdmin || isOwner;
   const accent = projectAccent(project.name);
 
   const tabs: { id: TabId; label: string; badge?: number }[] = [
@@ -82,7 +102,8 @@ export default function ProjectWorkspacePage() {
     { id: "messages", label: "Mensajes", badge: unread },
     { id: "overview", label: "Resumen" },
     { id: "links", label: "Links" },
-    ...(showCredentials ? [{ id: "credentials" as const, label: "Credenciales" }] : []),
+    { id: "credentials", label: "Credenciales" },
+    ...(isAdmin || clientHasDossier ? [{ id: "dossier" as const, label: "Expediente" }] : []),
     { id: "entries", label: "Entradas" },
     { id: "design", label: "Diseño" },
   ];
@@ -162,10 +183,16 @@ export default function ProjectWorkspacePage() {
       {activeTab === "board" && <BoardTab projectId={project.id} canEdit={editable} />}
       {activeTab === "messages" && <MessagesTab projectId={project.id} onRead={clearUnread} />}
       {activeTab === "overview" && <OverviewTab project={project} />}
-      {activeTab === "links" && <LinksTab project={project} onProjectChange={setProject} />}
-      {activeTab === "credentials" && showCredentials && (
-        <CredentialsTab project={project} onProjectChange={setProject} />
+      {activeTab === "links" && <LinksTab project={project} onProjectChange={setProject} allowPrivate={canSeePrivate} />}
+      {activeTab === "credentials" && (
+        <CredentialsTab
+          project={project}
+          onProjectChange={setProject}
+          allowPrivate={canSeePrivate}
+          canEdit={editable}
+        />
       )}
+      {activeTab === "dossier" && <DossierTab projectId={project.id} canManage={isAdmin} />}
       {activeTab === "entries" && <EntriesTab projectId={project.id} />}
       {activeTab === "design" && <DesignTab projectId={project.id} />}
 

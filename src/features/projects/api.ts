@@ -1,7 +1,12 @@
 import { supabase } from "../../lib/supabase";
 import { compressImage } from "../../lib/compressImage";
 import type {
+  DossierFile,
+  DossierKind,
+  DossierPaymentRow,
+  DossierSectionRow,
   PrivateCredentialRow,
+  PrivateLinkRow,
   ProjectRow,
   ProjectResource,
   ProjectMilestone,
@@ -616,5 +621,188 @@ export async function deletePrivateCredential(id: string): Promise<void> {
     .from("project_private_credentials")
     .delete()
     .eq("id", id);
+  if (error) throw error;
+}
+
+// ============================================
+// PRIVATE LINKS
+// ============================================
+
+export async function getPrivateLinks(projectId: string): Promise<PrivateLinkRow[]> {
+  const { data, error } = await supabase
+    .from("project_private_links")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as PrivateLinkRow[];
+}
+
+export async function addPrivateLink(
+  projectId: string,
+  fields: Pick<PrivateLinkRow, "label" | "url" | "sort_order">
+): Promise<PrivateLinkRow> {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("project_private_links")
+    .insert({ user_id: user.id, project_id: projectId, ...fields })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as PrivateLinkRow;
+}
+
+export async function updatePrivateLink(
+  id: string,
+  fields: Partial<Pick<PrivateLinkRow, "label" | "url">>
+): Promise<void> {
+  const { error } = await supabase.from("project_private_links").update(fields).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deletePrivateLink(id: string): Promise<void> {
+  const { error } = await supabase.from("project_private_links").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ============================================
+// EXPEDIENTE
+// ============================================
+
+const DOSSIER_BUCKET = "project-dossier";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeDossierSection(row: any): DossierSectionRow {
+  return { ...row, files: Array.isArray(row.files) ? row.files : [] };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeDossierPayment(row: any): DossierPaymentRow {
+  return { ...row, amount: Number(row.amount) };
+}
+
+// RLS decides what comes back: the admin gets every section, a client only
+// the ones marked visible.
+export async function getDossierSections(projectId: string): Promise<DossierSectionRow[]> {
+  const { data, error } = await supabase
+    .from("project_dossier_sections")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(normalizeDossierSection);
+}
+
+export async function addDossierSection(
+  projectId: string,
+  kind: DossierKind,
+  title: string,
+  sortOrder: number
+): Promise<DossierSectionRow> {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("project_dossier_sections")
+    .insert({ user_id: user.id, project_id: projectId, kind, title, sort_order: sortOrder })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return normalizeDossierSection(data);
+}
+
+export async function updateDossierSection(
+  id: string,
+  fields: Partial<Pick<DossierSectionRow, "title" | "body" | "files" | "visible_to_client">>
+): Promise<void> {
+  const { error } = await supabase.from("project_dossier_sections").update(fields).eq("id", id);
+  if (error) throw error;
+}
+
+export async function reorderDossierSections(
+  updates: { id: string; sort_order: number }[]
+): Promise<void> {
+  const results = await Promise.all(
+    updates.map(({ id, sort_order }) =>
+      supabase.from("project_dossier_sections").update({ sort_order }).eq("id", id)
+    )
+  );
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw failed.error;
+}
+
+// Payments go with it (on delete cascade); the files have to be removed by hand
+export async function deleteDossierSection(section: DossierSectionRow): Promise<void> {
+  const { error } = await supabase.from("project_dossier_sections").delete().eq("id", section.id);
+  if (error) throw error;
+  if (section.files.length > 0) {
+    await supabase.storage.from(DOSSIER_BUCKET).remove(section.files.map((f) => f.path));
+  }
+}
+
+export async function uploadDossierFile(
+  section: DossierSectionRow,
+  file: File
+): Promise<DossierFile> {
+  const id = crypto.randomUUID();
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "";
+  const path = `${section.project_id}/${section.id}/${id}${ext ? `.${ext}` : ""}`;
+  const { error } = await supabase.storage.from(DOSSIER_BUCKET).upload(path, file);
+  if (error) throw error;
+  return { id, name: file.name, path, size: file.size };
+}
+
+export async function deleteDossierFile(path: string): Promise<void> {
+  const { error } = await supabase.storage.from(DOSSIER_BUCKET).remove([path]);
+  if (error) throw error;
+}
+
+// The bucket is private, so each download gets a URL that expires in a minute
+export async function getDossierFileUrl(file: DossierFile): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from(DOSSIER_BUCKET)
+    .createSignedUrl(file.path, 60, { download: file.name });
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+export type DossierPaymentFields = Pick<
+  DossierPaymentRow,
+  "concept" | "amount" | "currency" | "date" | "status" | "note"
+>;
+
+export async function getDossierPayments(sectionId: string): Promise<DossierPaymentRow[]> {
+  const { data, error } = await supabase
+    .from("project_dossier_payments")
+    .select("*")
+    .eq("section_id", sectionId);
+  if (error) throw error;
+  return (data ?? []).map(normalizeDossierPayment);
+}
+
+export async function addDossierPayment(
+  sectionId: string,
+  fields: DossierPaymentFields
+): Promise<DossierPaymentRow> {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("project_dossier_payments")
+    .insert({ user_id: user.id, section_id: sectionId, ...fields })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return normalizeDossierPayment(data);
+}
+
+export async function updateDossierPayment(
+  id: string,
+  fields: DossierPaymentFields
+): Promise<void> {
+  const { error } = await supabase.from("project_dossier_payments").update(fields).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteDossierPayment(id: string): Promise<void> {
+  const { error } = await supabase.from("project_dossier_payments").delete().eq("id", id);
   if (error) throw error;
 }

@@ -37,6 +37,10 @@ import type { ProjectRow, ProjectResource, PrivateCredentialRow } from "../types
 interface CredentialsTabProps {
   project: ProjectRow;
   onProjectChange: (project: ProjectRow) => void;
+  // Admin/owner only: the "Privada" category, backed by its own table
+  allowPrivate?: boolean;
+  // Without it the tab is read-only: view, reveal and copy, nothing else
+  canEdit?: boolean;
 }
 
 // Bucket id for credentials that aren't in any category.
@@ -55,7 +59,12 @@ const INPUT =
 // The "Privada" category is the exception: those credentials live in
 // project_private_credentials, which only their creator can read (the
 // resources column is readable by anyone with access to the project).
-export default function CredentialsTab({ project, onProjectChange }: CredentialsTabProps) {
+export default function CredentialsTab({
+  project,
+  onProjectChange,
+  allowPrivate = false,
+  canEdit = true,
+}: CredentialsTabProps) {
   const [label, setLabel] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -94,6 +103,7 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
   const [privates, setPrivates] = useState<PrivateCredentialRow[]>([]);
 
   useEffect(() => {
+    if (!allowPrivate) return;
     let cancelled = false;
     getPrivateCredentials(project.id)
       .then((rows) => {
@@ -106,7 +116,7 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
     return () => {
       cancelled = true;
     };
-  }, [project.id]);
+  }, [project.id, allowPrivate]);
 
   const privateIds = new Set(privates.map((p) => p.id));
   const privateResources: ProjectResource[] = privates.map((p) => ({
@@ -503,7 +513,7 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
         key={resource.id}
         draggableId={resource.id}
         index={index}
-        isDragDisabled={editing}
+        isDragDisabled={editing || !canEdit}
       >
         {(provided, snapshot) => (
           <div
@@ -572,20 +582,24 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
                   <p className="text-sm font-medium truncate flex-1">
                     {resource.label || <span className="text-muted">Sin nombre</span>}
                   </p>
-                  <button
-                    onClick={() => startEdit(resource)}
-                    className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-primary shrink-0"
-                    title="Editar"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setToDelete(resource)}
-                    className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-red-400 shrink-0"
-                    title="Eliminar"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {canEdit && (
+                    <>
+                      <button
+                        onClick={() => startEdit(resource)}
+                        className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-primary shrink-0"
+                        title="Editar"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setToDelete(resource)}
+                        className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-red-400 shrink-0"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
                 </div>
                 <div className="text-sm space-y-1 pl-1 sm:pl-9">
                   {resource.username && (
@@ -641,7 +655,7 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
           {items.map(renderCredential)}
           {items.length === 0 && !snapshot.isDraggingOver && (
             <p className="flex items-center justify-center h-[52px] rounded-lg border border-dashed border-border text-xs text-muted">
-              Arrastra credenciales aquí
+              {canEdit ? "Arrastra credenciales aquí" : "Vacía"}
             </p>
           )}
           {provided.placeholder}
@@ -657,18 +671,21 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
   ) => {
     return (
       <div className={`relative flex items-center gap-2 ${collapsed.has(group.id) ? "" : "mb-3"}`}>
-        <span
-          {...dragHandle}
-          className="p-1 -ml-1 rounded text-muted hover:text-foreground cursor-grab"
-          title="Arrastrar categoría"
-        >
-          <GripVertical className="w-4 h-4" />
-        </span>
+        {canEdit && (
+          <span
+            {...dragHandle}
+            className="p-1 -ml-1 rounded text-muted hover:text-foreground cursor-grab"
+            title="Arrastrar categoría"
+          >
+            <GripVertical className="w-4 h-4" />
+          </span>
+        )}
         <button
-          onClick={() => setColorMenuId(colorMenuId === group.id ? null : group.id)}
-          className="w-3 h-3 rounded-full shrink-0 ring-2 ring-transparent hover:ring-border"
+          onClick={() => canEdit && setColorMenuId(colorMenuId === group.id ? null : group.id)}
+          disabled={!canEdit}
+          className="w-3 h-3 rounded-full shrink-0 ring-2 ring-transparent enabled:hover:ring-border"
           style={{ backgroundColor: group.value || BOARD_COLORS[0] }}
-          title="Cambiar color"
+          title={canEdit ? "Cambiar color" : undefined}
         />
         {renameId === group.id ? (
           <input
@@ -693,23 +710,27 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
             <span className="text-xs text-muted shrink-0">{count}</span>
           </button>
         )}
-        <button
-          onClick={() => {
-            setRenameId(group.id);
-            setRenameDraft(group.label);
-          }}
-          className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-primary shrink-0"
-          title="Renombrar"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={() => setGroupToDelete(group)}
-          className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-red-400 shrink-0"
-          title="Eliminar categoría"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        {canEdit && (
+          <>
+            <button
+              onClick={() => {
+                setRenameId(group.id);
+                setRenameDraft(group.label);
+              }}
+              className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-primary shrink-0"
+              title="Renombrar"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setGroupToDelete(group)}
+              className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-red-400 shrink-0"
+              title="Eliminar categoría"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </>
+        )}
         {collapseButton(group.id)}
 
         {colorMenuId === group.id && (
@@ -741,67 +762,72 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
 
   return (
     <div className="space-y-4">
-      <section className="bg-surface border border-border rounded-xl p-4 sm:p-5 space-y-3">
-        <h2 className="font-semibold">Nueva credencial</h2>
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-          <input
-            type="text"
-            placeholder="Nombre (opcional)"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            className={INPUT}
-          />
-          <input
-            type="text"
-            placeholder="Usuario / email"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className={INPUT}
-          />
-          <input
-            type="password"
-            placeholder="Contraseña"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            className={INPUT}
-          />
-          <select
-            value={groupIds.has(category) || category === PRIVATE ? category : NONE}
-            onChange={(e) => setCategory(e.target.value)}
-            className={INPUT}
+      {!canEdit && error && <p className="text-sm text-red-400">{error}</p>}
+      {canEdit && (
+        <section className="bg-surface border border-border rounded-xl p-4 sm:p-5 space-y-3">
+          <h2 className="font-semibold">Nueva credencial</h2>
+          {error && <p className="text-sm text-red-400">{error}</p>}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            <input
+              type="text"
+              placeholder="Nombre (opcional)"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              className={INPUT}
+            />
+            <input
+              type="text"
+              placeholder="Usuario / email"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className={INPUT}
+            />
+            <input
+              type="password"
+              placeholder="Contraseña"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+              className={INPUT}
+            />
+            <select
+              value={groupIds.has(category) || (allowPrivate && category === PRIVATE) ? category : NONE}
+              onChange={(e) => setCategory(e.target.value)}
+              className={INPUT}
+            >
+              <option value={NONE}>Sin categoría</option>
+              {allowPrivate && <option value={PRIVATE}>Privada (solo tú)</option>}
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={handleAdd}
+            disabled={saving}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors disabled:opacity-50"
           >
-            <option value={NONE}>Sin categoría</option>
-            <option value={PRIVATE}>Privada (solo tú)</option>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button
-          onClick={handleAdd}
-          disabled={saving}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors disabled:opacity-50"
-        >
-          <Plus className="w-4 h-4" />
-          Agregar
-        </button>
-      </section>
+            <Plus className="w-4 h-4" />
+            Agregar
+          </button>
+        </section>
+      )}
 
       <DragDropContext onDragEnd={onDragEnd}>
-        <section className="bg-surface border border-border border-l-4 border-l-amber-400 rounded-xl p-4 sm:p-5">
-          <div className={`flex items-center gap-2 ${collapsed.has(PRIVATE) ? "" : "mb-3"}`}>
-            <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span className="font-semibold text-sm uppercase tracking-wide">Privada</span>
-            <span className="text-xs text-muted">{privates.length}</span>
-            <span className="ml-auto text-xs text-muted">Solo tú la ves</span>
-            {collapseButton(PRIVATE)}
-          </div>
-          {!collapsed.has(PRIVATE) && renderBucket(PRIVATE, privateResources)}
-        </section>
+        {allowPrivate && (
+          <section className="bg-surface border border-border border-l-4 border-l-amber-400 rounded-xl p-4 sm:p-5">
+            <div className={`flex items-center gap-2 ${collapsed.has(PRIVATE) ? "" : "mb-3"}`}>
+              <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="font-semibold text-sm uppercase tracking-wide">Privada</span>
+              <span className="text-xs text-muted">{privates.length}</span>
+              <span className="ml-auto text-xs text-muted">Solo tú la ves</span>
+              {collapseButton(PRIVATE)}
+            </div>
+            {!collapsed.has(PRIVATE) && renderBucket(PRIVATE, privateResources)}
+          </section>
+        )}
 
         {/* Sin categoría: only shown while something is in it, or when
             there are no categories yet. */}
@@ -828,7 +854,12 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
           {(provided) => (
             <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-4">
               {groups.map((group, index) => (
-                <Draggable key={group.id} draggableId={group.id} index={index}>
+                <Draggable
+                  key={group.id}
+                  draggableId={group.id}
+                  index={index}
+                  isDragDisabled={!canEdit}
+                >
                   {(dragProvided, snapshot) => (
                     <section
                       ref={dragProvided.innerRef}
@@ -857,7 +888,7 @@ export default function CredentialsTab({ project, onProjectChange }: Credentials
         </Droppable>
       </DragDropContext>
 
-      {newGroupOpen ? (
+      {!canEdit ? null : newGroupOpen ? (
         <div className="flex items-center gap-2 bg-surface border border-primary rounded-xl p-3">
           <input
             autoFocus
