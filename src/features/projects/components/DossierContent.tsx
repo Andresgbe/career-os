@@ -47,7 +47,7 @@ export default function DossierContent({ section, canManage, onUpdate }: Dossier
     const uploaded: DossierFile[] = [];
     try {
       for (const file of Array.from(list)) {
-        uploaded.push(await uploadDossierFile(section, file));
+        uploaded.push(await uploadDossierFile(section.project_id, section.id, file));
       }
     } catch (err) {
       setError(errorMessage(err, "No se pudo subir el archivo"));

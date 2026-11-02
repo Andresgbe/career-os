@@ -143,12 +143,12 @@ export interface DossierSectionRow {
   kind: DossierKind;
   body: string; // HTML, "content" sections only
   files: DossierFile[]; // stored as jsonb, "content" sections only
+  total_amount: number | null; // "payments" sections only, null until it's set
+  total_currency: string; // "payments" sections only
   visible_to_client: boolean;
   sort_order: number;
   created_at: string;
 }
-
-export type DossierPaymentStatus = "pending" | "paid" | "cancelled";
 
 export interface DossierPaymentRow {
   id: string;
@@ -158,8 +158,8 @@ export interface DossierPaymentRow {
   amount: number;
   currency: string;
   date: string | null; // YYYY-MM-DD
-  status: DossierPaymentStatus;
   note: string;
+  files: DossierFile[]; // receipts, stored as jsonb
   created_at: string;
 }
 

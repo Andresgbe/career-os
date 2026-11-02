@@ -672,14 +672,49 @@ export async function deletePrivateLink(id: string): Promise<void> {
 
 const DOSSIER_BUCKET = "project-dossier";
 
+// The switch for the whole tab, per project. No row means hidden.
+export async function getDossierVisible(projectId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("project_dossier_settings")
+    .select("visible")
+    .eq("project_id", projectId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.visible ?? false;
+}
+
+export async function setDossierVisible(projectId: string, visible: boolean): Promise<void> {
+  const user = await requireUser();
+  const { error } = await supabase
+    .from("project_dossier_settings")
+    .upsert(
+      {
+        project_id: projectId,
+        user_id: user.id,
+        visible,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "project_id" }
+    );
+  if (error) throw error;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeDossierSection(row: any): DossierSectionRow {
-  return { ...row, files: Array.isArray(row.files) ? row.files : [] };
+  return {
+    ...row,
+    files: Array.isArray(row.files) ? row.files : [],
+    total_amount: row.total_amount == null ? null : Number(row.total_amount),
+  };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeDossierPayment(row: any): DossierPaymentRow {
-  return { ...row, amount: Number(row.amount) };
+  return {
+    ...row,
+    amount: Number(row.amount),
+    files: Array.isArray(row.files) ? row.files : [],
+  };
 }
 
 // RLS decides what comes back: the admin gets every section, a client only
@@ -713,7 +748,12 @@ export async function addDossierSection(
 
 export async function updateDossierSection(
   id: string,
-  fields: Partial<Pick<DossierSectionRow, "title" | "body" | "files" | "visible_to_client">>
+  fields: Partial<
+    Pick<
+      DossierSectionRow,
+      "title" | "body" | "files" | "visible_to_client" | "total_amount" | "total_currency"
+    >
+  >
 ): Promise<void> {
   const { error } = await supabase.from("project_dossier_sections").update(fields).eq("id", id);
   if (error) throw error;
@@ -731,22 +771,24 @@ export async function reorderDossierSections(
   if (failed?.error) throw failed.error;
 }
 
-// Payments go with it (on delete cascade); the files have to be removed by hand
+// Payments go with it (on delete cascade); the files have to be removed by
+// hand, so the receipts are looked up before the rows disappear.
 export async function deleteDossierSection(section: DossierSectionRow): Promise<void> {
+  const payments = await getDossierPayments(section.id);
   const { error } = await supabase.from("project_dossier_sections").delete().eq("id", section.id);
   if (error) throw error;
-  if (section.files.length > 0) {
-    await supabase.storage.from(DOSSIER_BUCKET).remove(section.files.map((f) => f.path));
-  }
+  const paths = [...section.files, ...payments.flatMap((p) => p.files)].map((f) => f.path);
+  if (paths.length > 0) await supabase.storage.from(DOSSIER_BUCKET).remove(paths);
 }
 
 export async function uploadDossierFile(
-  section: DossierSectionRow,
+  projectId: string,
+  sectionId: string,
   file: File
 ): Promise<DossierFile> {
   const id = crypto.randomUUID();
   const ext = file.name.includes(".") ? file.name.split(".").pop() : "";
-  const path = `${section.project_id}/${section.id}/${id}${ext ? `.${ext}` : ""}`;
+  const path = `${projectId}/${sectionId}/${id}${ext ? `.${ext}` : ""}`;
   const { error } = await supabase.storage.from(DOSSIER_BUCKET).upload(path, file);
   if (error) throw error;
   return { id, name: file.name, path, size: file.size };
@@ -768,7 +810,7 @@ export async function getDossierFileUrl(file: DossierFile): Promise<string> {
 
 export type DossierPaymentFields = Pick<
   DossierPaymentRow,
-  "concept" | "amount" | "currency" | "date" | "status" | "note"
+  "concept" | "amount" | "currency" | "date" | "note" | "files"
 >;
 
 export async function getDossierPayments(sectionId: string): Promise<DossierPaymentRow[]> {

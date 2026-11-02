@@ -17,7 +17,9 @@ import {
   addDossierSection,
   deleteDossierSection,
   getDossierSections,
+  getDossierVisible,
   reorderDossierSections,
+  setDossierVisible,
   updateDossierSection,
 } from "../api";
 import DossierContent from "../components/DossierContent";
@@ -43,6 +45,22 @@ export default function DossierTab({ projectId, canManage }: DossierTabProps) {
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [toDelete, setToDelete] = useState<DossierSectionRow | null>(null);
+  const [tabVisible, setTabVisible] = useState(false);
+
+  useEffect(() => {
+    if (!canManage) return;
+    let cancelled = false;
+    getDossierVisible(projectId)
+      .then((visible) => {
+        if (!cancelled) setTabVisible(visible);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(errorMessage(err, "No se pudo leer si el cliente ve el expediente"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, canManage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +79,18 @@ export default function DossierTab({ projectId, canManage }: DossierTabProps) {
     };
   }, [projectId]);
 
+  const toggleTabVisible = async () => {
+    const next = !tabVisible;
+    setTabVisible(next);
+    setError("");
+    try {
+      await setDossierVisible(projectId, next);
+    } catch (err) {
+      setTabVisible(!next);
+      setError(errorMessage(err, "No se pudo cambiar la visibilidad"));
+    }
+  };
+
   const addSection = async (kind: DossierKind) => {
     setError("");
     try {
@@ -75,7 +105,12 @@ export default function DossierTab({ projectId, canManage }: DossierTabProps) {
 
   const updateSection = async (
     id: string,
-    fields: Partial<Pick<DossierSectionRow, "title" | "body" | "files" | "visible_to_client">>
+    fields: Partial<
+      Pick<
+        DossierSectionRow,
+        "title" | "body" | "files" | "visible_to_client" | "total_amount" | "total_currency"
+      >
+    >
   ) => {
     const prev = sections;
     setSections((list) => list.map((s) => (s.id === id ? { ...s, ...fields } : s)));
@@ -135,13 +170,53 @@ export default function DossierTab({ projectId, canManage }: DossierTabProps) {
 
   if (loading) return <p className="text-sm text-muted">Cargando...</p>;
 
+  const shownCount = sections.filter((s) => s.visible_to_client).length;
+
   return (
     <div className="space-y-4">
       {canManage && (
+        <div
+          className={`flex items-center gap-3 px-4 py-3.5 rounded-xl border ${
+            tabVisible ? "bg-emerald-400/5 border-emerald-400/30" : "bg-surface border-border"
+          }`}
+        >
+          {tabVisible ? (
+            <Eye className="w-5 h-5 text-emerald-300 shrink-0" />
+          ) : (
+            <EyeOff className="w-5 h-5 text-muted shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold">Mostrar Expediente al cliente</p>
+            <p className="text-xs text-muted mt-0.5">
+              {!tabVisible
+                ? "Apagado: el cliente no ve esta pestaña."
+                : shownCount === 0
+                  ? "Encendido, pero ningún bloque está mostrado: el cliente aún no ve la pestaña."
+                  : `Encendido: el cliente ve ${shownCount} de ${sections.length} bloques.`}
+            </p>
+          </div>
+          <button
+            role="switch"
+            aria-checked={tabVisible}
+            aria-label="Mostrar Expediente al cliente"
+            onClick={toggleTabVisible}
+            className={`relative w-11 h-6 rounded-full shrink-0 transition-colors ${
+              tabVisible ? "bg-emerald-500" : "bg-border"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                tabVisible ? "translate-x-5" : ""
+              }`}
+            />
+          </button>
+        </div>
+      )}
+
+      {canManage && (
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-sm text-muted flex-1 min-w-[220px]">
-            Contratos, documentos, notas y pagos. El cliente solo ve los bloques que le muestres, y
-            nunca puede modificarlos.
+            Contratos, documentos, notas y pagos. El cliente nunca puede modificarlos.
           </p>
           <button
             onClick={() => addSection("content")}
@@ -251,14 +326,18 @@ export default function DossierTab({ projectId, canManage }: DossierTabProps) {
                                 }
                                 aria-pressed={section.visible_to_client}
                                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap shrink-0 transition-colors ${
-                                  section.visible_to_client
-                                    ? "bg-emerald-400/15 text-emerald-300"
-                                    : "bg-surface-hover text-muted hover:text-foreground"
+                                  !section.visible_to_client
+                                    ? "bg-surface-hover text-muted hover:text-foreground"
+                                    : tabVisible
+                                      ? "bg-emerald-400/15 text-emerald-300"
+                                      : "bg-emerald-400/5 text-emerald-300/70"
                                 }`}
                                 title={
-                                  section.visible_to_client
-                                    ? "El cliente lo ve. Clic para ocultarlo."
-                                    : "El cliente no lo ve. Clic para mostrárselo."
+                                  !section.visible_to_client
+                                    ? "El cliente no lo ve. Clic para mostrárselo."
+                                    : tabVisible
+                                      ? "El cliente lo ve. Clic para ocultarlo."
+                                      : "Se mostrará cuando enciendas el Expediente. Clic para ocultarlo."
                                 }
                               >
                                 {section.visible_to_client ? (
@@ -267,7 +346,11 @@ export default function DossierTab({ projectId, canManage }: DossierTabProps) {
                                   <EyeOff className="w-3.5 h-3.5" />
                                 )}
                                 <span className="hidden sm:inline">
-                                  {section.visible_to_client ? "Lo ve el cliente" : "Oculto"}
+                                  {!section.visible_to_client
+                                    ? "Oculto"
+                                    : tabVisible
+                                      ? "Lo ve el cliente"
+                                      : "Se mostrará"}
                                 </span>
                               </button>
                               <button
@@ -305,7 +388,11 @@ export default function DossierTab({ projectId, canManage }: DossierTabProps) {
 
                         {!isCollapsed &&
                           (section.kind === "payments" ? (
-                            <DossierPayments sectionId={section.id} canManage={canManage} />
+                            <DossierPayments
+                              section={section}
+                              canManage={canManage}
+                              onUpdate={(fields) => updateSection(section.id, fields)}
+                            />
                           ) : (
                             <DossierContent
                               section={section}
