@@ -188,23 +188,46 @@ export default function ContextLibrary({
 
   // ---------- folders ----------
 
+  // Suggested folders/templates not created yet (matched by name), so they
+  // can still be added after the library already has content of its own —
+  // into the existing folder when one with that name is already there.
+  const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const missingStarter = (starter ?? [])
+    .map((s) => {
+      const folder = folders.find((f) => sameName(f.name, s.name)) ?? null;
+      const docsMissing = s.docs.filter(
+        (d) => !folder || !docs.some((x) => x.folder_id === folder.id && sameName(x.title, d.title))
+      );
+      return { ...s, folder, docs: docsMissing };
+    })
+    .filter((s) => !s.folder || s.docs.length > 0);
+
   async function createStarter() {
-    if (!starter) return;
+    if (!missingStarter.length) return;
     try {
+      let nextOrder = folders.length ? Math.max(...folders.map((f) => f.sort_order)) + 1 : 0;
       const createdFolders: KnowledgeFolderRow[] = [];
       const createdDocs: KnowledgeDocRow[] = [];
-      for (const [i, f] of starter.entries()) {
-        const folder = await addFolder(f.name, f.color, i, section);
-        createdFolders.push(folder);
-        for (const [j, d] of f.docs.entries()) {
-          createdDocs.push(await addDoc(folder.id, d.title, d.content, j, section));
+      let firstTouched: string | null = null;
+      for (const s of missingStarter) {
+        let folder = s.folder;
+        if (!folder) {
+          folder = await addFolder(s.name, s.color, nextOrder++, section);
+          createdFolders.push(folder);
+        }
+        firstTouched ??= folder.id;
+        const already = docs.filter((d) => d.folder_id === folder.id).length;
+        for (const [j, d] of s.docs.entries()) {
+          createdDocs.push(await addDoc(folder.id, d.title, d.content, already + j, section));
         }
       }
-      setFolders(createdFolders);
-      setDocs(createdDocs);
-      setSelectedFolder(createdFolders[0].id);
-      const firstDoc = createdDocs.find((d) => d.folder_id === createdFolders[0].id);
-      if (firstDoc) openDoc(firstDoc);
+      setFolders((prev) => [...prev, ...createdFolders]);
+      setDocs((prev) => [...prev, ...createdDocs]);
+      if (firstTouched) {
+        setSelectedFolder(firstTouched);
+        const firstDoc = createdDocs.find((d) => d.folder_id === firstTouched);
+        if (firstDoc) openDoc(firstDoc);
+      }
     } catch (err) {
       report(err);
     }
@@ -421,7 +444,19 @@ export default function ContextLibrary({
           <span className="w-1 h-1 rounded-full bg-border" />
           <span><span className="text-foreground font-semibold tabular-nums">{totalWords.toLocaleString("es")}</span> palabras de contexto</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {missingStarter.length > 0 && (
+            <button
+              onClick={createStarter}
+              className="flex items-center gap-2 h-10 px-4 rounded-xl border border-primary/40 bg-primary/10 text-sm font-semibold text-primary-hover hover:bg-primary/15 transition-colors"
+              title={`Agrega: ${missingStarter
+                .map((s) => (s.folder ? `${s.docs.map((d) => d.title).join(", ")} (en ${s.name})` : s.name))
+                .join(" · ")}`}
+            >
+              <Sparkles className="w-4 h-4" />
+              Carpetas sugeridas
+            </button>
+          )}
           <button
             onClick={() => copy("all")}
             className="flex items-center gap-2 h-10 px-4 rounded-xl border border-border bg-surface text-sm font-semibold text-muted hover:text-foreground hover:border-[#3a3a44] transition-colors"
