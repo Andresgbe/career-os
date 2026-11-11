@@ -1,119 +1,48 @@
-import { errorMessage } from "../../../lib/errors";
-import { useEffect, useState } from "react";
-import {
-  getContentIdeas,
-  getCategories,
-  updateContentIdea,
-  toggleIdeaStatus,
-  deleteContentIdea,
-} from "../api";
-import type { ContentIdeaRow, CategoryRow } from "../types";
+import { CircleCheck } from "lucide-react";
+import { isDone } from "../types";
 import IdeaCard from "../components/IdeaCard";
-import IdeaModal from "../components/IdeaModal";
+import type { ContentStudio } from "../useContentStudio";
 
-function isDone(idea: ContentIdeaRow) {
-  return idea.script_done && idea.recorded && idea.edited;
-}
+// Every finished piece (Guion + Grabado + Editado), most recent first.
+// Unticking a step sends it back to the board.
+export default function DoneTab({
+  studio,
+  onOpenIdea,
+}: {
+  studio: ContentStudio;
+  onOpenIdea: (id: string) => void;
+}) {
+  const doneIdeas = studio.ideas
+    .filter(isDone)
+    .sort((a, b) =>
+      (b.scheduled_date ?? b.updated_at).localeCompare(a.scheduled_date ?? a.updated_at)
+    );
 
-export default function DoneTab() {
-  const [ideas, setIdeas] = useState<ContentIdeaRow[]>([]);
-  const [categories, setCategories] = useState<CategoryRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [openIdeaId, setOpenIdeaId] = useState<string | null>(null);
-
-  useEffect(() => {
-    Promise.all([getContentIdeas(), getCategories()])
-      .then(([ideas, cats]) => {
-        setIdeas(ideas);
-        setCategories(cats);
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const doneIdeas = ideas.filter(isDone);
-  const openIdea = doneIdeas.find((i) => i.id === openIdeaId) || null;
-
-  const handleSaveIdea = async (
-    id: string,
-    fields: {
-      title: string;
-      description: string;
-      script: string;
-      category_id: string | null;
-    }
-  ) => {
-    try {
-      const updated = await updateContentIdea(id, fields);
-      setIdeas((prev) => prev.map((i) => (i.id === id ? updated : i)));
-    } catch (err) {
-      setError(errorMessage(err, "Error updating idea"));
-    }
-  };
-
-  const handleToggleStatus = async (
-    id: string,
-    field: "script_done" | "recorded" | "edited",
-    value: boolean
-  ) => {
-    try {
-      const updated = await toggleIdeaStatus(id, field, value);
-      setIdeas((prev) => prev.map((i) => (i.id === id ? updated : i)));
-    } catch (err) {
-      setError(errorMessage(err, "Error updating status"));
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteContentIdea(id);
-      setIdeas((prev) => prev.filter((i) => i.id !== id));
-    } catch (err) {
-      setError(errorMessage(err, "Error deleting idea"));
-    }
-  };
+  if (doneIdeas.length === 0) {
+    return (
+      <div className="rounded-3xl border border-dashed border-[#33333b] p-12 text-center space-y-3">
+        <span className="mx-auto w-12 h-12 rounded-2xl bg-emerald-400/10 text-emerald-300 flex items-center justify-center">
+          <CircleCheck className="w-6 h-6" />
+        </span>
+        <p className="text-lg font-semibold">Todavía no hay piezas terminadas</p>
+        <p className="text-sm text-muted max-w-md mx-auto">
+          Una idea llega aquí cuando marcas Guion, Grabado y Editado.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      {error && <p className="text-sm text-red-400">{error}</p>}
-
-      {loading ? (
-        <p className="text-sm text-muted">Loading...</p>
-      ) : doneIdeas.length === 0 ? (
-        <div className="bg-surface border border-border rounded-xl p-8 text-center">
-          <p className="text-muted text-sm">
-            No finished content yet. Ideas move here once Guion, Grabado and
-            Editado are all checked.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-          {doneIdeas.map((idea) => (
-            <IdeaCard
-              key={idea.id}
-              idea={idea}
-              category={categories.find((c) => c.id === idea.category_id)}
-              onClick={() => setOpenIdeaId(idea.id)}
-              onDelete={() => handleDelete(idea.id)}
-              onToggleStatus={(field, value) =>
-                handleToggleStatus(idea.id, field, value)
-              }
-            />
-          ))}
-        </div>
-      )}
-
-      {openIdea && (
-        <IdeaModal
-          idea={openIdea}
-          categories={categories}
-          onClose={() => setOpenIdeaId(null)}
-          onSave={handleSaveIdea}
-          onToggleStatus={handleToggleStatus}
-          onDelete={handleDelete}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
+      {doneIdeas.map((idea) => (
+        <IdeaCard
+          key={idea.id}
+          idea={idea}
+          category={studio.categories.find((c) => c.id === idea.category_id)}
+          onClick={() => onOpenIdea(idea.id)}
+          onToggleStatus={(field, value) => studio.toggleStep(idea.id, field, value)}
         />
-      )}
+      ))}
     </div>
   );
 }

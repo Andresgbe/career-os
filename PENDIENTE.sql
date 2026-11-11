@@ -259,3 +259,54 @@ alter table project_dossier_payments
 alter table project_dossier_sections
   add column if not exists total_amount numeric,
   add column if not exists total_currency text not null default 'USD';
+
+
+-- ============================================================
+-- BLOQUE 18 — CONTENT STUDIO: PLANNER SEMANAL
+--
+-- Cada idea de contenido puede tener un día de publicación
+-- (scheduled_date). La semana ISO a la que pertenece se calcula de esa
+-- fecha, así que no hay FK a la semana: mover una pieza de día es cambiar
+-- solo la fecha. Sin fecha = queda en el banco de ideas.
+--
+-- content_weeks guarda el plan de cada semana (tema, brief para la IA,
+-- estado borrador / aprobada / completada). Una fila por usuario y semana;
+-- se crea la primera vez que tocas algo de esa semana.
+-- ============================================================
+
+alter table content_ideas
+  add column if not exists hook text not null default '',
+  add column if not exists format text not null default '',
+  add column if not exists scheduled_date date,
+  add column if not exists schedule_order integer not null default 0;
+
+create index if not exists content_ideas_scheduled_idx
+  on content_ideas (user_id, scheduled_date);
+
+create table if not exists content_weeks (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  week_key text not null check (week_key ~ '^\d{4}-W\d{2}$'),
+  title text not null default '',
+  goal text not null default '',
+  notes text not null default '',
+  status text not null default 'draft' check (status in ('draft', 'approved', 'done')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, week_key)
+);
+
+alter table content_weeks enable row level security;
+
+drop policy if exists "nexus read" on content_weeks;
+drop policy if exists "nexus insert" on content_weeks;
+drop policy if exists "nexus update" on content_weeks;
+drop policy if exists "nexus delete" on content_weeks;
+create policy "nexus read" on content_weeks for select
+  using (user_id = auth.uid() or public.nexus_can_view('content'));
+create policy "nexus insert" on content_weeks for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('content')));
+create policy "nexus update" on content_weeks for update
+  using (user_id = auth.uid() or public.nexus_can_edit('content'));
+create policy "nexus delete" on content_weeks for delete
+  using (user_id = auth.uid());

@@ -1,265 +1,182 @@
-import { errorMessage } from "../../../lib/errors";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
-import { getCategories, addCategory, updateCategory, deleteCategory } from "../api";
+import ConfirmDialog from "../../../components/ConfirmDialog";
 import type { CategoryRow } from "../types";
+import { isDone } from "../types";
+import { CATEGORY_COLORS } from "../useContentStudio";
+import type { ContentStudio } from "../useContentStudio";
 
-const DEFAULT_COLORS = [
-  "#8b5cf6", // purple
-  "#06b6d4", // cyan
-  "#f59e0b", // amber
-  "#ef4444", // red
-  "#10b981", // emerald
-  "#ec4899", // pink
-  "#3b82f6", // blue
-  "#f97316", // orange
-];
+function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+  return (
+    <div className="flex gap-1.5 flex-wrap">
+      {CATEGORY_COLORS.map((c) => (
+        <button
+          key={c}
+          onClick={() => onChange(c)}
+          className={`w-7 h-7 rounded-full transition-transform ${
+            value === c ? "ring-2 ring-white/80 ring-offset-2 ring-offset-surface scale-110" : "hover:scale-110"
+          }`}
+          style={{ backgroundColor: c }}
+          aria-label={c}
+        />
+      ))}
+    </div>
+  );
+}
 
-export default function CategoriesTab() {
-  const [categories, setCategories] = useState<CategoryRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+// Manage the categories (board columns): name, color, and how many ideas
+// each one holds.
+export default function CategoriesTab({ studio }: { studio: ContentStudio }) {
+  const { categories, ideas } = studio;
 
-  // New category form
   const [newName, setNewName] = useState("");
-  const [newColor, setNewColor] = useState(DEFAULT_COLORS[0]);
-  const [adding, setAdding] = useState(false);
-
-  // Inline editing
+  const [newColor, setNewColor] = useState(CATEGORY_COLORS[0]);
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState("");
+  const [deleting, setDeleting] = useState<CategoryRow | null>(null);
 
-  useEffect(() => {
-    getCategories()
-      .then(setCategories)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const handleAdd = async () => {
-    if (!newName.trim()) {
-      setError("Enter a category name.");
-      return;
-    }
-    setAdding(true);
-    setError("");
-    try {
-      const sortOrder = categories.length
-        ? Math.max(...categories.map((c) => c.sort_order)) + 1
-        : 0;
-      const row = await addCategory(newName.trim(), newColor, sortOrder);
-      setCategories((prev) => [...prev, row]);
-      setNewName("");
-      // Cycle to next color
-      const idx = DEFAULT_COLORS.indexOf(newColor);
-      setNewColor(DEFAULT_COLORS[(idx + 1) % DEFAULT_COLORS.length]);
-    } catch (err) {
-      setError(errorMessage(err, "Error adding category"));
-    } finally {
-      setAdding(false);
-    }
+  const handleAdd = () => {
+    if (!newName.trim()) return;
+    studio.createCategory(newName.trim(), newColor);
+    setNewName("");
+    const idx = CATEGORY_COLORS.indexOf(newColor);
+    setNewColor(CATEGORY_COLORS[(idx + 1) % CATEGORY_COLORS.length]);
   };
 
-  const startEdit = (cat: CategoryRow) => {
-    setEditId(cat.id);
-    setEditName(cat.name);
-    setEditColor(cat.color);
-    setError("");
-  };
-
-  const cancelEdit = () => {
+  const saveEdit = () => {
+    if (!editId || !editName.trim()) return;
+    studio.editCategory(editId, { name: editName.trim(), color: editColor });
     setEditId(null);
   };
 
-  const saveEdit = async () => {
-    if (!editId || !editName.trim()) return;
-    setError("");
-    try {
-      const updated = await updateCategory(editId, {
-        name: editName.trim(),
-        color: editColor,
-      });
-      setCategories((prev) =>
-        prev.map((c) => (c.id === editId ? updated : c))
-      );
-      setEditId(null);
-    } catch (err) {
-      setError(errorMessage(err, "Error updating category"));
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    setError("");
-    try {
-      await deleteCategory(id);
-      setCategories((prev) => prev.filter((c) => c.id !== id));
-    } catch (err) {
-      setError(errorMessage(err, "Error deleting category"));
-    }
-  };
+  const sorted = categories.slice().sort((a, b) => a.sort_order - b.sort_order);
 
   return (
-    <div className="space-y-6">
-      {/* Add new category */}
-      <section className="bg-surface border border-border rounded-xl p-5">
-        <h2 className="font-semibold mb-4">New Category</h2>
-
-        {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
-
-        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <input
-            type="text"
-            placeholder="Category name"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            className="bg-background border border-border rounded px-3 py-2 text-sm focus:border-primary outline-none flex-1"
-          />
-
-          {/* Color picker */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted">Color:</span>
-            <div className="flex gap-1.5">
-              {DEFAULT_COLORS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setNewColor(c)}
-                  className={`w-6 h-6 rounded-full transition-all ${
-                    newColor === c
-                      ? "ring-2 ring-offset-2 ring-offset-background scale-110"
-                      : "hover:scale-110"
-                  }`}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-            </div>
-          </div>
+    <div className="grid lg:grid-cols-[380px_1fr] gap-5 items-start">
+      <section className="rounded-3xl border border-border bg-surface p-6 space-y-5">
+        <div>
+          <h2 className="text-lg font-bold">Nueva categoría</h2>
+          <p className="text-sm text-muted mt-1">Cada categoría es una columna del tablero de ideas.</p>
         </div>
-
-        {/* Preview */}
-        {newName.trim() && (
-          <div className="mb-4">
-            <span className="text-xs text-muted mr-2">Preview:</span>
-            <span
-              className="text-xs font-semibold px-3 py-1 rounded-full"
-              style={{
-                backgroundColor: newColor + "30",
-                color: newColor,
-              }}
-            >
-              {newName.trim()}
-            </span>
-          </div>
-        )}
-
-        <button
-          onClick={handleAdd}
-          disabled={adding}
-          className="flex items-center gap-2 px-4 py-2 rounded bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors disabled:opacity-50"
-        >
-          <Plus className="w-4 h-4" />
-          {adding ? "Adding..." : "Add category"}
-        </button>
+        <input
+          type="text"
+          placeholder="Nombre (ej. Tutoriales, Opinión, Behind the scenes)"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+          className="w-full bg-background/60 border border-border rounded-xl px-3.5 py-2.5 text-sm focus:border-primary outline-none"
+        />
+        <ColorPicker value={newColor} onChange={setNewColor} />
+        <div className="flex items-center justify-between gap-3">
+          <span
+            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full"
+            style={{ backgroundColor: newColor + "26", color: newColor }}
+          >
+            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: newColor }} />
+            {newName.trim() || "Vista previa"}
+          </span>
+          <button
+            onClick={handleAdd}
+            disabled={!newName.trim()}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold transition-colors disabled:opacity-40"
+          >
+            <Plus className="w-4 h-4" />
+            Agregar
+          </button>
+        </div>
       </section>
 
-      {/* Categories list */}
-      <section className="bg-surface border border-border rounded-xl p-5">
-        <h2 className="font-semibold mb-4">Your Categories</h2>
+      <section className="rounded-3xl border border-border bg-surface p-6 space-y-4">
+        <h2 className="text-lg font-bold">
+          Tus categorías <span className="text-muted font-normal">· {categories.length}</span>
+        </h2>
 
-        {loading ? (
-          <p className="text-sm text-muted">Loading...</p>
-        ) : categories.length === 0 ? (
-          <p className="text-sm text-muted">
-            No categories yet. Create one above to organize your content ideas.
-          </p>
+        {sorted.length === 0 ? (
+          <p className="text-sm text-muted">Aún no hay categorías. Crea una para ordenar tus ideas.</p>
         ) : (
-          <ul className="space-y-2">
-            {categories.map((cat) => (
-              <li
-                key={cat.id}
-                className="flex items-center gap-3 bg-background border border-border rounded-lg p-3"
-              >
-                {editId === cat.id ? (
-                  /* ========== EDIT MODE ========== */
-                  <div className="flex items-center gap-3 flex-1 flex-wrap">
-                    <input
-                      type="text"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && saveEdit()}
-                      className="bg-surface border border-border rounded px-3 py-1.5 text-sm focus:border-primary outline-none flex-1 min-w-[120px]"
-                    />
-                    <div className="flex gap-1.5">
-                      {DEFAULT_COLORS.map((c) => (
-                        <button
-                          key={c}
-                          onClick={() => setEditColor(c)}
-                          className={`w-5 h-5 rounded-full transition-all ${
-                            editColor === c
-                              ? "ring-2 ring-offset-1 ring-offset-background scale-110"
-                              : "hover:scale-110"
-                          }`}
-                          style={{ backgroundColor: c }}
-                        />
-                      ))}
+          <ul className="grid sm:grid-cols-2 gap-2.5">
+            {sorted.map((cat) => {
+              const inCat = ideas.filter((i) => i.category_id === cat.id);
+              const done = inCat.filter(isDone).length;
+              return (
+                <li
+                  key={cat.id}
+                  className="relative flex items-center gap-3 rounded-2xl border border-border bg-background/50 p-3.5 overflow-hidden"
+                >
+                  <span className="absolute left-0 inset-y-0 w-1" style={{ backgroundColor: cat.color }} />
+                  {editId === cat.id ? (
+                    <div className="flex flex-col gap-3 flex-1 min-w-0">
+                      <input
+                        autoFocus
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit();
+                          if (e.key === "Escape") setEditId(null);
+                        }}
+                        className="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:border-primary outline-none"
+                      />
+                      <div className="flex items-center justify-between gap-2">
+                        <ColorPicker value={editColor} onChange={setEditColor} />
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button onClick={saveEdit} className="p-1.5 rounded-lg text-emerald-400 hover:bg-surface-hover" title="Guardar">
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setEditId(null)} className="p-1.5 rounded-lg text-muted hover:bg-surface-hover" title="Cancelar">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
+                  ) : (
+                    <>
+                      <div className="flex-1 min-w-0 pl-1.5">
+                        <p className="text-sm font-semibold truncate">{cat.name}</p>
+                        <p className="text-xs text-muted">
+                          {inCat.length} {inCat.length === 1 ? "idea" : "ideas"} · {done} terminadas
+                        </p>
+                      </div>
                       <button
-                        onClick={saveEdit}
-                        className="p-1.5 rounded text-emerald-400 hover:bg-surface-hover transition-colors"
-                        title="Save"
-                      >
-                        <Check className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={cancelEdit}
-                        className="p-1.5 rounded text-muted hover:bg-surface-hover transition-colors"
-                        title="Cancel"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  /* ========== VIEW MODE ========== */
-                  <>
-                    <span
-                      className="w-4 h-4 rounded-full shrink-0"
-                      style={{ backgroundColor: cat.color }}
-                    />
-                    <span
-                      className="text-sm font-semibold px-3 py-0.5 rounded-full flex-1"
-                      style={{
-                        backgroundColor: cat.color + "20",
-                        color: cat.color,
-                      }}
-                    >
-                      {cat.name}
-                    </span>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => startEdit(cat)}
-                        className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-primary transition-colors"
-                        title="Edit"
+                        onClick={() => {
+                          setEditId(cat.id);
+                          setEditName(cat.name);
+                          setEditColor(cat.color);
+                        }}
+                        className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-primary-hover transition-colors"
+                        title="Editar"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(cat.id)}
-                        className="p-1.5 rounded text-muted hover:bg-surface-hover hover:text-red-400 transition-colors"
-                        title="Delete"
+                        onClick={() => setDeleting(cat)}
+                        className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-red-400 transition-colors"
+                        title="Eliminar"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                    </div>
-                  </>
-                )}
-              </li>
-            ))}
+                    </>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
+
+      {deleting && (
+        <ConfirmDialog
+          title="Eliminar categoría"
+          confirmLabel="Eliminar"
+          message={`Se elimina "${deleting.name}". Sus ideas pasan a "Sin categoría".`}
+          onConfirm={() => {
+            studio.removeCategory(deleting.id);
+            setDeleting(null);
+          }}
+          onCancel={() => setDeleting(null)}
+        />
+      )}
     </div>
   );
 }

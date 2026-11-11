@@ -11,6 +11,8 @@ import CommandPalette from "./CommandPalette";
 import { getWorkerLastSeen } from "../../features/chat/api";
 import { BoardProvider } from "../../features/dashboard/BoardContext";
 
+const WIDE_ROUTES = ["/content"];
+
 export default function AppLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
@@ -209,7 +211,12 @@ export default function AppLayout() {
 
       {/* Page content */}
       <main className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        <div className="mx-auto w-full max-w-6xl">
+        {/* Wide pages (the content planner's 7-day grid) get more room */}
+        <div
+          className={`mx-auto w-full ${
+            WIDE_ROUTES.some((p) => location.pathname.startsWith(p)) ? "max-w-[1480px]" : "max-w-6xl"
+          }`}
+        >
           <Outlet />
         </div>
       </main>

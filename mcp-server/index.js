@@ -318,6 +318,9 @@ server.registerTool(
         grabado: !!i.recorded,
         editado: !!i.edited,
         tiene_script: !!(i.script && i.script.trim()),
+        hook: i.hook || null,
+        formato: i.format || null,
+        fecha: i.scheduled_date ?? null,
       }));
     return ok(rows);
   })
@@ -371,6 +374,244 @@ server.registerTool(
       .single();
     if (error) throw new Error(error.message);
     return ok({ creada: { id: data.id, title: data.title } });
+  })
+);
+
+// ============================================
+// CONTENT — WEEKLY PLANNER
+// Mirrors src/features/content/types.ts: ISO weeks (Mon–Sun) keyed
+// 'YYYY-Www'; a piece belongs to a week through its scheduled_date.
+// ============================================
+
+const FORMAT_KEYS = ["reel", "carrusel", "post", "historia", "video", "texto"];
+const pad2 = (n) => String(n).padStart(2, "0");
+const isoDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const parseDate = (s) => {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+
+function weekKeyOfDate(d) {
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  t.setDate(t.getDate() - ((t.getDay() + 6) % 7) + 3);
+  const year = t.getFullYear();
+  const jan4 = new Date(year, 0, 4);
+  const week =
+    1 + Math.round(((t - jan4) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+  return `${year}-W${pad2(week)}`;
+}
+
+function weekDates(key) {
+  const [y, w] = key.split("-W").map(Number);
+  const jan4 = new Date(y, 0, 4);
+  const monday = new Date(y, 0, 4 - ((jan4.getDay() + 6) % 7) + (w - 1) * 7);
+  return Array.from({ length: 7 }, (_, i) =>
+    isoDate(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i))
+  );
+}
+
+const WEEK_KEY = z
+  .string()
+  .regex(/^\d{4}-W\d{2}$/)
+  .describe("Semana ISO, formato 'YYYY-Www' (ej. 2026-W46). Lunes a domingo.");
+
+server.registerTool(
+  "get_content_week",
+  {
+    description:
+      "Plan de contenido de una semana ISO: tema, brief, estado, las piezas " +
+      "programadas día por día y el banco de ideas sin fecha. Úsalo antes de " +
+      "plan_content_week. Sin week_key devuelve la semana actual.",
+    inputSchema: z.object({ week_key: WEEK_KEY.optional() }),
+  },
+  tool(async ({ week_key }) => {
+    const { supabase } = await getSession();
+    const key = week_key ?? weekKeyOfDate(parseDate(caracasToday().date));
+    const dates = weekDates(key);
+
+    const [{ data: cats }, { data: ideas, error }, weekRes] = await Promise.all([
+      supabase.from("content_categories").select("id,name"),
+      supabase.from("content_ideas").select("*"),
+      soft(
+        "content_weeks",
+        supabase.from("content_weeks").select("*").eq("week_key", key).maybeSingle()
+      ),
+    ]);
+    if (error) throw new Error(error.message);
+    const catName = new Map((cats ?? []).map((c) => [c.id, c.name]));
+    const piece = (i) => ({
+      id: i.id,
+      title: i.title,
+      hook: i.hook || null,
+      formato: i.format || null,
+      categoria: i.category_id ? catName.get(i.category_id) ?? null : null,
+      descripcion: i.description || null,
+      guion: !!i.script_done,
+      grabado: !!i.recorded,
+      editado: !!i.edited,
+      tiene_script: !!(i.script && i.script.trim()),
+    });
+
+    const all = ideas ?? [];
+    const plan = weekRes.error ? null : weekRes.data;
+    return ok({
+      semana: key,
+      desde: dates[0],
+      hasta: dates[6],
+      plan: plan
+        ? { tema: plan.title, brief: plan.goal, notas: plan.notes, estado: plan.status }
+        : { estado: "sin plan", nota: weekRes.error ?? null },
+      dias: dates.map((date) => ({
+        fecha: date,
+        piezas: all
+          .filter((i) => i.scheduled_date === date)
+          .sort((a, b) => (a.schedule_order ?? 0) - (b.schedule_order ?? 0))
+          .map(piece),
+      })),
+      banco_de_ideas: all
+        .filter((i) => !i.scheduled_date && !(i.script_done && i.recorded && i.edited))
+        .map(piece),
+      categorias: [...catName.values()],
+      formatos: FORMAT_KEYS,
+    });
+  })
+);
+
+server.registerTool(
+  "plan_content_week",
+  {
+    description:
+      "Planea una semana de contenido en NEXUS: guarda tema/brief/estado de la " +
+      "semana y programa piezas en días concretos. Cada pieza con idea_id mueve " +
+      "(y actualiza) una idea existente del banco; sin idea_id crea una nueva. " +
+      "Las fechas deben caer dentro de la semana.",
+    inputSchema: z.object({
+      week_key: WEEK_KEY,
+      title: z.string().optional().describe("Tema de la semana"),
+      goal: z.string().optional().describe("Brief: objetivo, audiencia, ángulo"),
+      status: z.enum(["draft", "approved", "done"]).optional(),
+      pieces: z
+        .array(
+          z.object({
+            date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("Día de publicación YYYY-MM-DD"),
+            idea_id: z.string().optional().describe("Id de una idea existente a programar"),
+            title: z.string().optional().describe("Obligatorio si no hay idea_id"),
+            hook: z.string().optional(),
+            format: z.enum(FORMAT_KEYS).optional(),
+            description: z.string().optional(),
+            script: z.string().optional(),
+            category: z.string().optional().describe("Nombre de una categoría existente"),
+          })
+        )
+        .optional(),
+    }),
+  },
+  tool(async ({ week_key, title, goal, status, pieces }) => {
+    const { supabase, userId } = await getSession();
+    const dates = weekDates(week_key);
+    const list = pieces ?? [];
+    const outside = list.filter((p) => !dates.includes(p.date));
+    if (outside.length) {
+      return fail(
+        `Estas fechas no están en ${week_key} (${dates[0]} a ${dates[6]}): ` +
+          outside.map((p) => p.date).join(", ")
+      );
+    }
+    if (list.some((p) => !p.idea_id && !p.title)) {
+      return fail("Cada pieza nueva necesita title.");
+    }
+
+    const weekFields = {};
+    if (title !== undefined) weekFields.title = title;
+    if (goal !== undefined) weekFields.goal = goal;
+    if (status !== undefined) weekFields.status = status;
+    if (Object.keys(weekFields).length || list.length) {
+      const { error } = await supabase.from("content_weeks").upsert(
+        {
+          user_id: userId,
+          week_key,
+          ...weekFields,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,week_key" }
+      );
+      if (error) throw new Error(error.message);
+    }
+
+    const { data: cats } = await supabase.from("content_categories").select("id,name");
+    const catId = (name) =>
+      name
+        ? (cats ?? []).find((c) => c.name.toLowerCase() === name.toLowerCase())?.id ?? null
+        : undefined;
+
+    // New pieces go after whatever is already on that day
+    const { data: existing } = await supabase
+      .from("content_ideas")
+      .select("id,scheduled_date")
+      .in("scheduled_date", dates);
+    const dayCount = new Map(dates.map((d) => [d, 0]));
+    for (const row of existing ?? []) {
+      dayCount.set(row.scheduled_date, (dayCount.get(row.scheduled_date) ?? 0) + 1);
+    }
+    const nextOrder = (date) => {
+      const n = dayCount.get(date) ?? 0;
+      dayCount.set(date, n + 1);
+      return n;
+    };
+
+    const done = [];
+    for (const p of list) {
+      const fields = {};
+      if (p.title !== undefined) fields.title = p.title;
+      if (p.hook !== undefined) fields.hook = p.hook;
+      if (p.format !== undefined) fields.format = p.format;
+      if (p.description !== undefined) fields.description = p.description;
+      if (p.script !== undefined) fields.script = p.script;
+      const category = catId(p.category);
+      if (category !== undefined) fields.category_id = category;
+
+      if (p.idea_id) {
+        const { data, error } = await supabase
+          .from("content_ideas")
+          .update({
+            ...fields,
+            scheduled_date: p.date,
+            schedule_order: nextOrder(p.date),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", p.idea_id)
+          .select("id,title")
+          .single();
+        if (error) throw new Error(`${p.idea_id}: ${error.message}`);
+        done.push({ fecha: p.date, accion: "programada", id: data.id, title: data.title });
+      } else {
+        const categoryId = fields.category_id ?? null;
+        const countQuery = supabase
+          .from("content_ideas")
+          .select("id", { count: "exact", head: true });
+        const { count } = await (categoryId
+          ? countQuery.eq("category_id", categoryId)
+          : countQuery.is("category_id", null));
+        const { data, error } = await supabase
+          .from("content_ideas")
+          .insert({
+            user_id: userId,
+            description: "",
+            script: "",
+            ...fields,
+            category_id: categoryId,
+            sort_order: count ?? 0,
+            scheduled_date: p.date,
+            schedule_order: nextOrder(p.date),
+          })
+          .select("id,title")
+          .single();
+        if (error) throw new Error(`${p.title}: ${error.message}`);
+        done.push({ fecha: p.date, accion: "creada", id: data.id, title: data.title });
+      }
+    }
+
+    return ok({ semana: week_key, ...weekFields, piezas: done });
   })
 );
 
