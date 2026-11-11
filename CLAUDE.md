@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 There is no test runner configured in this project.
 
-## Architecture
+## Architecture 
 
 NEXUS ("career-os") is a personal dashboard SPA: React 19 + TypeScript + Vite, Tailwind v4 (via `@tailwindcss/vite`, config lives in `src/index.css` under `@theme`, not a `tailwind.config.js`), React Router v7, and Supabase for auth + data.
 
@@ -25,13 +25,14 @@ NEXUS ("career-os") is a personal dashboard SPA: React 19 + TypeScript + Vite, T
 - `TableBlock` — collapsible free-form spreadsheet-like table block, same editable-via-`onChange` / read-only-without-it convention as `CodeBlock`.
 - `ShortcutsBar` / `ShortcutTile` — the icon-grid "quick links" row (with add/reorder/delete, favicon auto-detection, custom icon upload) used on the Dashboard, Grades, and Work Tracker pages, each backed by its own `*_shortcuts` table.
 - `BackNav` — the "‹ PARENT / CURRENT" header for nested pages (square back button + uppercase breadcrumb). Use it on any page that sits under another one instead of a plain "← Back" link.
+- `ContextLibrary` — folders of markdown context docs with an edit/split/preview editor, autosave and "Copiar todo", backed by `knowledge_folders` / `knowledge_docs` and scoped by a `section` prop (`""` = the general Knowledge page, a module id = that module's own context, e.g. Content's "Contexto IA" tab). Pass `starter` folders+templates for the empty state. Reach for it whenever a module needs AI-readable context docs; don't create new doc tables.
 - `SectionContextButton` — the fixed "CONTEXT" tab docked to the left edge of the viewport, mounted once in `AppLayout` so it appears on every module automatically. See "Section context" below.
 
 The **block pattern** — a title plus optional `RichTextEditor` + `CodeBlock` + `TableBlock` — is the standard shape for "flexible free-form entry" features (see `work_general_info`, `project_entries`, `work_endpoints`). Reach for that combination again rather than inventing a new entry format when a module needs open-ended notes.
 
 ### Module system
 
-The app is organized as a fixed set of "modules" (Motorcycle, Medical, Content, Grades, Project Management, Insurance, Finance, Work Tracker), each a self-contained vertical slice under `src/features/<name>/`. A module typically contains:
+The app is organized as a fixed set of "modules" (Motorcycle, Medical, Content, Grades, Project Management, Finance, Work Tracker), each a self-contained vertical slice under `src/features/<name>/`. A module typically contains:
 - `<Name>Page.tsx` — top-level page with its own tab state, fetches data in `useEffect` and passes it down
 - `api.ts` — direct Supabase queries (no shared data-fetching layer/React Query; each module calls `supabase.from(...)` itself and throws on `error`)
 - `types.ts` — row types matching Supabase tables, plus any pure helper functions for that domain (e.g. grade-point math in `grades/types.ts`)
@@ -44,7 +45,7 @@ All modules are now wired to Supabase (the earlier placeholder mock data in `pro
 
 A few modules go one level deeper with a **nested workspace** pattern: a list page (`ProjectsPage.tsx`) links into a per-item page with its own route param and its own tab bar (`ProjectWorkspacePage.tsx` at `/projects/:id`, tabs: Tablero/Mensajes/Resumen/Links/Credenciales/Expediente/Entradas/Diseño). The Tablero tab is a per-project Kanban (`project_board_columns` + `project_board_tasks`, user-created columns, drag via `@hello-pangea/dnd`); Mensajes is a client↔owner conversation (`project_messages`, realtime + polling fallback, unread count from `project_message_reads`). Expediente is admin-made blocks of documents/notes or payments (`project_dossier_sections` + `project_dossier_payments`, files in the private `project-dossier` bucket via signed URLs): a client sees a block only if both the per-project switch (`project_dossier_settings.visible`) and that block's `visible_to_client` are on, enforced by RLS, and only the admin writes, even if the client has edit on `projects`. Clients see the project read-only unless they have edit on `projects`, see shared Credenciales and Links but never their "Privada" sections, and only the owner can delete the project. Reach for this when a module's items each need a substantial amount of their own sub-content, rather than cramming it into an expandable card.
 
-**Content** (`src/features/content/`) is a "Content Studio" built around a **weekly planner** keyed by ISO week (`'YYYY-Www'`, Mon–Sun; helpers in `content/types.ts`). All four tabs (Planner semanal / Tablero de ideas / Publicadas / Categorías) share one store, `useContentStudio()`, instead of fetching per tab. An idea (`content_ideas`) is a "piece" once it has a `scheduled_date`; its week is derived from that date (no FK), `schedule_order` orders it within its day, and ideas with no date form the "banco de ideas". `content_weeks` holds each week's plan (one row per `user_id` + `week_key`, upserted on first edit: `title`, `goal` = the brief the AI reads, `status` draft/approved/done). A piece is finished/"publicada" when `script_done && recorded && edited`. The AI plans weeks through the NEXUS MCP server (`mcp-server/index.js`: `get_content_week`, `plan_content_week`); the planner's "Planear con IA" button copies a prompt for those tools. `/content` is in `WIDE_ROUTES` in `AppLayout` so the 7-day grid gets a wider container.
+**Content** (`src/features/content/`) is a "Content Studio" built around a **weekly planner** keyed by ISO week (`'YYYY-Www'`, Mon–Sun; helpers in `content/types.ts`). All four tabs (Planner semanal / Tablero de ideas / Publicadas / Categorías) share one store, `useContentStudio()`, instead of fetching per tab. An idea (`content_ideas`) is a "piece" once it has a `scheduled_date`; its week is derived from that date (no FK), `schedule_order` orders it within its day, and ideas with no date form the "banco de ideas". `content_weeks` holds each week's plan (one row per `user_id` + `week_key`, upserted on first edit: `title`, `goal` = the brief the AI reads, `status` draft/approved/done). A piece is finished/"publicada" when `script_done && recorded && edited`. The "Contexto IA" tab is a `ContextLibrary` with `section="content"` (starter templates in `content/contextTemplates.ts`). The AI reads that context and plans weeks through the NEXUS MCP server (`mcp-server/index.js`: `get_content_context`, `write_content_context`, `get_content_week`, `plan_content_week`); the planner's "Planear con IA" button copies a prompt for those tools. `/content` is in `WIDE_ROUTES` in `AppLayout` so the 7-day grid gets a wider container.
 
 ### Section context ("CONTEXT" button)
 

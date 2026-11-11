@@ -13,25 +13,40 @@ async function requireUser() {
 // FOLDERS
 // ============================================
 
-export async function getFolders(): Promise<KnowledgeFolderRow[]> {
+// `section` scopes a library: "" is the general Knowledge base, a module id
+// (e.g. "content") is that module's own context folders. Filtered here
+// rather than in the query so the general base keeps working on a database
+// where the section column (BLOQUE 19 of PENDIENTE.sql) doesn't exist yet.
+const inSection = (section: string) => (row: { section?: string | null }) =>
+  (row.section ?? "") === section;
+
+export async function getFolders(section = ""): Promise<KnowledgeFolderRow[]> {
   const { data, error } = await supabase
     .from("knowledge_folders")
     .select("*")
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).filter(inSection(section));
 }
 
 export async function addFolder(
   name: string,
   color: string,
-  sortOrder: number
+  sortOrder: number,
+  section = ""
 ): Promise<KnowledgeFolderRow> {
   const user = await requireUser();
   const { data, error } = await supabase
     .from("knowledge_folders")
-    .insert({ user_id: user.id, name, color, sort_order: sortOrder })
+    .insert({
+      user_id: user.id,
+      name,
+      color,
+      sort_order: sortOrder,
+      // Only sent when set, so the general base doesn't need the column
+      ...(section ? { section } : {}),
+    })
     .select("*")
     .single();
   if (error) throw error;
@@ -64,21 +79,22 @@ export async function deleteFolder(id: string): Promise<void> {
 // DOCS
 // ============================================
 
-export async function getDocs(): Promise<KnowledgeDocRow[]> {
+export async function getDocs(section = ""): Promise<KnowledgeDocRow[]> {
   const { data, error } = await supabase
     .from("knowledge_docs")
     .select("*")
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).filter(inSection(section));
 }
 
 export async function addDoc(
   folderId: string | null,
   title: string,
   content: string,
-  sortOrder: number
+  sortOrder: number,
+  section = ""
 ): Promise<KnowledgeDocRow> {
   const user = await requireUser();
   const { data, error } = await supabase
@@ -89,6 +105,7 @@ export async function addDoc(
       title,
       content,
       sort_order: sortOrder,
+      ...(section ? { section } : {}),
     })
     .select("*")
     .single();

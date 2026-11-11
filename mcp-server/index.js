@@ -122,7 +122,6 @@ const SECTIONS = [
   "content",
   "grades",
   "projects",
-  "insurance",
   "finance",
   "passwords",
 ];
@@ -421,7 +420,8 @@ server.registerTool(
     description:
       "Plan de contenido de una semana ISO: tema, brief, estado, las piezas " +
       "programadas día por día y el banco de ideas sin fecha. Úsalo antes de " +
-      "plan_content_week. Sin week_key devuelve la semana actual.",
+      "plan_content_week (y get_content_context para la voz, audiencia y pilares). " +
+      "Sin week_key devuelve la semana actual.",
     inputSchema: z.object({ week_key: WEEK_KEY.optional() }),
   },
   tool(async ({ week_key }) => {
@@ -612,6 +612,138 @@ server.registerTool(
     }
 
     return ok({ semana: week_key, ...weekFields, piezas: done });
+  })
+);
+
+// ============================================
+// CONTENT — CONTEXT DOCS
+// The Content module's "Contexto IA" tab: knowledge_folders/docs rows with
+// section = 'content'. Filtered client-side so an unmigrated DB (no section
+// column) just reads as empty instead of failing.
+// ============================================
+
+const CONTENT_SECTION = "content";
+
+async function loadContentContext(supabase) {
+  const [{ data: folders, error: fErr }, { data: docs, error: dErr }] =
+    await Promise.all([
+      supabase.from("knowledge_folders").select("*").order("sort_order"),
+      supabase.from("knowledge_docs").select("*").order("sort_order"),
+    ]);
+  if (fErr) throw new Error(fErr.message);
+  if (dErr) throw new Error(dErr.message);
+  return {
+    folders: (folders ?? []).filter((f) => f.section === CONTENT_SECTION),
+    docs: (docs ?? []).filter((d) => d.section === CONTENT_SECTION),
+  };
+}
+
+server.registerTool(
+  "get_content_context",
+  {
+    description:
+      "CONTEXTO DE CONTENIDO: documentos markdown de la pestaña Contexto IA " +
+      "del módulo Content (voz y tono, audiencia, pilares, formatos, " +
+      "aprendizajes...). Léelo SIEMPRE antes de planear una semana, proponer " +
+      "ideas o escribir guiones. Sin argumentos devuelve todos los documentos " +
+      "completos agrupados por carpeta.",
+    inputSchema: z.object({
+      folder: z.string().optional().describe("Solo esta carpeta (por nombre)"),
+    }),
+  },
+  tool(async ({ folder }) => {
+    const { supabase } = await getSession();
+    const { folders, docs } = await loadContentContext(supabase);
+    const picked = folder
+      ? folders.filter((f) => f.name.toLowerCase() === folder.toLowerCase())
+      : folders;
+    if (folder && picked.length === 0) {
+      throw new Error(
+        `No existe la carpeta "${folder}". Carpetas: ${
+          folders.map((f) => f.name).join(", ") || "ninguna"
+        }`
+      );
+    }
+    const asDoc = (d) => ({ titulo: d.title, contenido: d.content, actualizado: d.updated_at });
+    const out = {
+      carpetas: picked.map((f) => ({
+        carpeta: f.name,
+        documentos: docs.filter((d) => d.folder_id === f.id).map(asDoc),
+      })),
+    };
+    if (!folder) out.sin_carpeta = docs.filter((d) => !d.folder_id).map(asDoc);
+    if (folders.length === 0 && docs.length === 0) {
+      out.nota =
+        "Aún no hay contexto de contenido. Pídele que abra Content → Contexto IA " +
+        "y cree las carpetas, o créalas con write_content_context.";
+    }
+    return ok(out);
+  })
+);
+
+server.registerTool(
+  "write_content_context",
+  {
+    description:
+      "Crea o actualiza un documento del contexto de contenido (pestaña " +
+      "Contexto IA). Si ya existe un documento con ese título en el contexto " +
+      "de contenido lo sobrescribe (o le agrega al final con append); si no, " +
+      "lo crea en la carpeta indicada, creando la carpeta si hace falta. Úsalo " +
+      "para registrar aprendizajes, ajustar la voz, sumar referencias, etc.",
+    inputSchema: z.object({
+      title: z.string(),
+      content: z.string().describe("Contenido en markdown"),
+      folder: z.string().optional().describe('Carpeta destino, ej. "Aprendizajes"'),
+      append: z.boolean().optional().describe("Agrega al final en vez de sobrescribir"),
+    }),
+  },
+  tool(async ({ title, content, folder, append }) => {
+    const { supabase, userId } = await getSession();
+    const { folders, docs } = await loadContentContext(supabase);
+
+    const existing = docs.find((d) => d.title.toLowerCase() === title.toLowerCase());
+    if (existing) {
+      const next = append ? `${existing.content}\n\n${content}`.trim() : content;
+      const { error } = await supabase
+        .from("knowledge_docs")
+        .update({ content: next, updated_at: new Date().toISOString() })
+        .eq("id", existing.id);
+      if (error) throw new Error(error.message);
+      return ok(`Documento de contexto "${existing.title}" actualizado.`);
+    }
+
+    let folderId = null;
+    if (folder) {
+      const match = folders.find((f) => f.name.toLowerCase() === folder.toLowerCase());
+      if (match) {
+        folderId = match.id;
+      } else {
+        const { data, error } = await supabase
+          .from("knowledge_folders")
+          .insert({
+            user_id: userId,
+            name: folder,
+            color: "#8b5cf6",
+            sort_order: folders.length,
+            section: CONTENT_SECTION,
+          })
+          .select("id")
+          .single();
+        if (error) throw new Error(error.message);
+        folderId = data.id;
+      }
+    }
+
+    const { error } = await supabase.from("knowledge_docs").insert({
+      user_id: userId,
+      folder_id: folderId,
+      title,
+      content,
+      sort_order: docs.filter((d) => d.folder_id === folderId).length,
+      section: CONTENT_SECTION,
+    });
+    if (error) throw new Error(error.message);
+    return ok(`Documento de contexto "${title}" creado${folder ? ` en ${folder}` : ""}.`);
   })
 );
 
@@ -812,6 +944,7 @@ server.registerTool(
     return ok({
       carpetas: (folders ?? []).map((f) => ({
         nombre: f.name,
+        ambito: f.section ? `módulo ${f.section}` : "general",
         documentos: (docs ?? [])
           .filter((d) => d.folder_id === f.id)
           .map((d) => d.title),
@@ -844,7 +977,7 @@ server.registerTool(
   tool(async ({ title, content, folder, append }) => {
     const { supabase, userId } = await getSession();
     const [{ data: folders }, { data: docs }] = await Promise.all([
-      supabase.from("knowledge_folders").select("id,name"),
+      supabase.from("knowledge_folders").select("*"),
       supabase.from("knowledge_docs").select("id,title,content,folder_id"),
     ]);
 
@@ -864,10 +997,10 @@ server.registerTool(
       return ok(`Documento "${existing.title}" actualizado.`);
     }
 
-    const folderId = folder
+    const target = folder
       ? (folders ?? []).find((f) => f.name.toLowerCase() === folder.toLowerCase())
-          ?.id ?? null
       : null;
+    const folderId = target?.id ?? null;
 
     const { error } = await supabase.from("knowledge_docs").insert({
       user_id: userId,
@@ -875,6 +1008,7 @@ server.registerTool(
       title,
       content,
       sort_order: (docs ?? []).length,
+      ...(target?.section ? { section: target.section } : {}),
     });
     if (error) throw new Error(error.message);
     return ok(

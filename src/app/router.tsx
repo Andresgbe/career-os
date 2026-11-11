@@ -11,7 +11,6 @@ import SubjectWeeksPage from "../features/grades/SubjectWeeksPage";
 import WeekDetailPage from "../features/grades/WeekDetailPage";
 import ProjectsPage from "../features/projects/ProjectsPage";
 import ProjectWorkspacePage from "../features/projects/ProjectWorkspacePage";
-import InsurancePage from "../features/insurance/InsurancePage";
 import FinancePage from "../features/finance/FinancePage";
 import PasswordsPage from "../features/passwords/PasswordsPage";
 import KnowledgePage from "../features/knowledge/KnowledgePage";
@@ -53,7 +52,6 @@ export const router = createBrowserRouter([
         path: "projects/:id",
         element: guard("projects", <ProjectWorkspacePage />),
       },
-      { path: "insurance", element: guard("insurance", <InsurancePage />) },
       { path: "finance", element: guard("finance", <FinancePage />) },
       { path: "passwords", element: guard("passwords", <PasswordsPage />) },
       { path: "knowledge", element: guard("knowledge", <KnowledgePage />) },

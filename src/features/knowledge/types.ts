@@ -9,6 +9,7 @@ export interface KnowledgeFolderRow {
   name: string;
   color: string;
   sort_order: number;
+  section?: string; // "" = general base, module id = that module's context
   created_at: string;
 }
 
@@ -19,6 +20,7 @@ export interface KnowledgeDocRow {
   title: string;
   content: string; // markdown
   sort_order: number;
+  section?: string;
   created_at: string;
   updated_at: string;
 }

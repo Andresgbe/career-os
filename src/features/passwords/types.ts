@@ -1,6 +1,5 @@
 // Passwords module types.
-// These mirror the DB row (snake_case), same approach as InsuranceRow
-// in the insurance module.
+// These mirror the DB row (snake_case), same approach as the other modules.
 
 export interface PasswordEntryRow {
   id: string;

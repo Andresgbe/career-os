@@ -418,7 +418,8 @@ function WeekBrief({
     if (goal.trim()) lines.push(`Brief:\n${goal.trim()}`);
     lines.push(
       "",
-      `Primero usa get_content_week con week_key "${weekKey}" para ver lo que ya está programado y el banco de ideas. ` +
+      "Primero lee mi contexto de contenido con get_content_context (voz, audiencia, pilares, aprendizajes). " +
+        `Luego usa get_content_week con week_key "${weekKey}" para ver lo que ya está programado y el banco de ideas. ` +
         "Después usa plan_content_week para programar las piezas día por día (con hook, formato, descripción y guion), " +
         "reutilizando ideas del banco cuando encajen. Déjala en estado borrador para que yo la apruebe."
     );

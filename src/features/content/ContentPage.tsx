@@ -10,7 +10,10 @@ import {
   Inbox,
   Flame,
   Clapperboard,
+  BrainCircuit,
 } from "lucide-react";
+import ContextLibrary from "../../components/ContextLibrary";
+import { CONTENT_CONTEXT_SECTION, CONTENT_CONTEXT_STARTER } from "./contextTemplates";
 import { useContentStudio } from "./useContentStudio";
 import type { IdeaFields } from "./types";
 import {
@@ -27,7 +30,7 @@ import DoneTab from "./tabs/DoneTab";
 import CategoriesTab from "./tabs/CategoriesTab";
 import IdeaModal from "./components/IdeaModal";
 
-type TabId = "planner" | "ideas" | "done" | "categories";
+type TabId = "planner" | "ideas" | "done" | "categories" | "context";
 
 // What the idea modal is showing: an existing piece, or a new one prefilled
 type ModalState = { id: string } | { defaults: Partial<IdeaFields> } | null;
@@ -55,6 +58,7 @@ export default function ContentPage() {
     { id: "ideas", label: "Tablero de ideas", icon: LayoutGrid, count: ideas.length - published },
     { id: "done", label: "Publicadas", icon: CircleCheck, count: published },
     { id: "categories", label: "Categorías", icon: Tags, count: categories.length },
+    { id: "context", label: "Contexto IA", icon: BrainCircuit },
   ];
 
   const stats = [
@@ -234,6 +238,22 @@ export default function ContentPage() {
           {activeTab === "ideas" && <BoardTab studio={studio} onOpenIdea={(id) => setModal({ id })} />}
           {activeTab === "done" && <DoneTab studio={studio} onOpenIdea={(id) => setModal({ id })} />}
           {activeTab === "categories" && <CategoriesTab studio={studio} />}
+          {activeTab === "context" && (
+            <ContextLibrary
+              section={CONTENT_CONTEXT_SECTION}
+              starter={CONTENT_CONTEXT_STARTER}
+              starterLabel="Crear carpetas de contexto"
+              emptyText="Dale contexto a la IA"
+              aiHint={
+                <>
+                  Estos documentos son la memoria de tu contenido: voz, audiencia, pilares, formatos y aprendizajes.
+                  Claude los lee con la herramienta{" "}
+                  <code className="font-mono text-primary-hover">get_content_context</code> antes de planear una
+                  semana o escribir un guion. Llénalos poco a poco; también puedes pedirle a Claude que los actualice.
+                </>
+              }
+            />
+          )}
         </>
       )}
 

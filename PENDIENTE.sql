@@ -310,3 +310,24 @@ create policy "nexus update" on content_weeks for update
   using (user_id = auth.uid() or public.nexus_can_edit('content'));
 create policy "nexus delete" on content_weeks for delete
   using (user_id = auth.uid());
+
+
+-- ============================================================
+-- BLOQUE 19 — CONTEXTO IA POR MÓDULO (pestaña "Contexto IA" de Content)
+--
+-- Las carpetas y documentos markdown de Knowledge ahora tienen un ámbito:
+-- section = '' es la base general (página Knowledge); section = '<módulo>'
+-- son las carpetas de contexto de ese módulo (hoy: 'content'). Misma tabla,
+-- mismas policies; la IA las lee con get_content_context por MCP.
+-- ============================================================
+
+alter table knowledge_folders
+  add column if not exists section text not null default '';
+
+alter table knowledge_docs
+  add column if not exists section text not null default '';
+
+create index if not exists knowledge_folders_section_idx
+  on knowledge_folders (user_id, section);
+create index if not exists knowledge_docs_section_idx
+  on knowledge_docs (user_id, section);
