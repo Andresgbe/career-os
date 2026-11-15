@@ -12,6 +12,7 @@ import type { ShortcutRow } from "./types";
 import ShortcutsBar from "../../components/ShortcutsBar";
 import PillTrackerButton from "./components/PillTrackerButton";
 import ModuleBoard from "./components/ModuleBoard";
+import QuickModuleCards from "./components/QuickModuleCards";
 import ChatPanel from "../chat/ChatPanel";
 import { usePermissions } from "../../hooks/usePermissions";
 import { MODULES } from "../../lib/modules";
@@ -101,6 +102,13 @@ function AdminDashboard() {
         })}
       </div>
 
+      {/* Big shortcuts to Projects and Content on the left, the active
+          view on the right; stacked on phones */}
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] gap-5 items-stretch">
+        <aside>
+          <QuickModuleCards />
+        </aside>
+        <div className="min-w-0">
       {activeTab === "chat" ? (
         <ChatPanel />
       ) : (
@@ -133,6 +141,8 @@ function AdminDashboard() {
           </div>
         </>
       )}
+        </div>
+      </div>
     </div>
   );
 }

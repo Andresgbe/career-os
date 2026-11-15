@@ -13,9 +13,10 @@ import ProjectsPage from "../features/projects/ProjectsPage";
 import ProjectWorkspacePage from "../features/projects/ProjectWorkspacePage";
 import FinancePage from "../features/finance/FinancePage";
 import PasswordsPage from "../features/passwords/PasswordsPage";
-import KnowledgePage from "../features/knowledge/KnowledgePage";
+import PipelinePage from "../features/pipeline/PipelinePage";
 import LoginPage from "../features/auth/LoginPage";
 import AdminPage from "../features/admin/AdminPage";
+import BrainPage from "../features/brain/BrainPage";
 
 const guard = (module: string, element: ReactNode) => (
   <RequireModule module={module}>{element}</RequireModule>
@@ -54,7 +55,15 @@ export const router = createBrowserRouter([
       },
       { path: "finance", element: guard("finance", <FinancePage />) },
       { path: "passwords", element: guard("passwords", <PasswordsPage />) },
-      { path: "knowledge", element: guard("knowledge", <KnowledgePage />) },
+      { path: "pipeline", element: guard("pipeline", <PipelinePage />) },
+      {
+        path: "brain",
+        element: (
+          <RequireAdmin>
+            <BrainPage />
+          </RequireAdmin>
+        ),
+      },
       {
         path: "admin",
         element: (

@@ -80,13 +80,13 @@ export async function buildContext(supabase, includeKnowledge) {
     rows(supabase.from("finance_categories").select("id,name")),
     rows(supabase.from("finance_rates").select("code,label,per_usd")),
       includeKnowledge
-        ? rows(supabase.from("knowledge_folders").select("id,name").order("sort_order"))
+        ? rows(supabase.from("knowledge_folders").select("id,name,section").order("sort_order"))
         : [],
       includeKnowledge
         ? rows(
             supabase
               .from("knowledge_docs")
-              .select("title,content,folder_id")
+              .select("title,content,folder_id,section")
               .order("sort_order")
           )
         : [],
@@ -167,19 +167,22 @@ export async function buildContext(supabase, includeKnowledge) {
     );
   }
 
-  if (includeKnowledge && docs.length) {
+  // Only BRAIN goes into the chat context (Content has its own context docs,
+  // read on demand with get_content_context).
+  const brainDocs = docs.filter((d) => d.section === "brain");
+  if (includeKnowledge && brainDocs.length) {
     const folderName = new Map(folders.map((f) => [f.id, f.name]));
     let kb = "";
-    for (const d of docs) {
+    for (const d of brainDocs) {
       const where = d.folder_id ? folderName.get(d.folder_id) ?? "?" : "Sin carpeta";
       const entry = `\n### ${where} / ${d.title}\n${(d.content ?? "").trim()}\n`;
       if (kb.length + entry.length > KB_BUDGET) {
-        kb += `\n(…resto de los documentos recortado; leelo con la herramienta knowledge.)\n`;
+        kb += `\n(…resto de los documentos recortado; leelo con la herramienta brain.)\n`;
         break;
       }
       kb += entry;
     }
-    out.push(`BASE DE CONOCIMIENTO (quién es Andrés, su salud, su agencia):${kb}`);
+    out.push(`BRAIN (contexto de Andrés: quién es, su salud, su agencia, la universidad, sus finanzas):${kb}`);
   }
 
   return out.join("\n\n");

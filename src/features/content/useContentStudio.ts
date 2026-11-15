@@ -13,12 +13,17 @@ import {
   updateCategory,
   deleteCategory,
   upsertContentWeek,
+  getPublications,
+  addPublications,
+  updatePublication,
+  deletePublication,
 } from "./api";
 import type {
   CategoryRow,
   ContentIdeaRow,
   ContentWeekRow,
   IdeaFields,
+  PublicationRow,
   StepKey,
   WeekStatus,
 } from "./types";
@@ -41,6 +46,9 @@ export function useContentStudio() {
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [ideas, setIdeas] = useState<ContentIdeaRow[]>([]);
   const [weeks, setWeeks] = useState<ContentWeekRow[]>([]);
+  const [publications, setPublications] = useState<PublicationRow[]>([]);
+  // false until content_publications exists (BLOQUE 25 of PENDIENTE.sql)
+  const [publicationsReady, setPublicationsReady] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -58,8 +66,15 @@ export function useContentStudio() {
         report(err);
         return [] as ContentWeekRow[];
       }),
+      // Missing table = feature not set up yet; the Published / Stats tabs
+      // say so instead of a red banner on every page load
+      getPublications().catch(() => {
+        setPublicationsReady(false);
+        return [] as PublicationRow[];
+      }),
     ])
-      .then(([cats, allIdeas, allWeeks]) => {
+      .then(([cats, allIdeas, allWeeks, pubs]) => {
+        setPublications(pubs);
         setCategories(cats);
         setIdeas(allIdeas);
         setWeeks(allWeeks);
@@ -226,10 +241,42 @@ export function useContentStudio() {
     }
   }
 
+  // ---------- publications ----------
+
+  async function markPosted(
+    ideaId: string,
+    entries: { platform: string; published_at: string; url: string }[]
+  ) {
+    try {
+      const rows = await addPublications(ideaId, entries);
+      setPublications((prev) => [...rows, ...prev]);
+    } catch (err) {
+      report(err);
+    }
+  }
+
+  function editPublication(id: string, fields: Partial<Omit<PublicationRow, "id" | "idea_id" | "created_at">>) {
+    setPublications((prev) => prev.map((p) => (p.id === id ? { ...p, ...fields } : p)));
+    updatePublication(id, fields).catch(report);
+  }
+
+  function removePublication(id: string) {
+    setPublications((prev) => prev.filter((p) => p.id !== id));
+    deletePublication(id).catch(report);
+  }
+
+  const publishedIds = new Set(publications.map((p) => p.idea_id));
+
   return {
     categories,
     ideas,
     weeks,
+    publications,
+    publicationsReady,
+    publishedIds,
+    markPosted,
+    editPublication,
+    removePublication,
     loading,
     error,
     clearError: () => setError(""),

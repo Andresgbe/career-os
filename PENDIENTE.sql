@@ -333,259 +333,11 @@ create index if not exists knowledge_docs_section_idx
   on knowledge_docs (user_id, section);
 
 
-
--- ============================================================
--- BLOQUE 20 — CONTEXTO AG EN EL CONTEXTO IA DE CONTENT
---
--- Requiere el BLOQUE 19. Crea la carpeta "Proyecto AG" (la primera de la
--- pestaña Contexto IA de Content) con el documento maestro "CONTEXTO AG".
--- Se puede volver a correr: si el documento ya existe, solo reemplaza su
--- contenido. El dueño es la cuenta admin de app_profiles.
--- ============================================================
-
-insert into knowledge_folders (user_id, name, color, sort_order, section)
-select p.user_id, 'Proyecto AG', '#E8703A', -1, 'content'
-from app_profiles p
-where p.role = 'admin' and p.active
-  and not exists (
-    select 1 from knowledge_folders f
-    where f.user_id = p.user_id and f.section = 'content' and f.name = 'Proyecto AG'
-  )
-order by p.created_at
-limit 1;
-
-with owner as (
-  select user_id from app_profiles
-  where role = 'admin' and active
-  order by created_at
-  limit 1
-),
-folder as (
-  select f.id, f.user_id from knowledge_folders f
-  join owner o on o.user_id = f.user_id
-  where f.section = 'content' and f.name = 'Proyecto AG'
-  limit 1
-),
-body as (
-  select $ctx$# CONTEXTO AG — leer antes de hacer cualquier cosa
-
-Contexto completo del proyecto AG de Andrés Gil, para cualquier agente o herramienta que produzca material para él: documentos, posts, videos editados y videos animados. Si una instrucción directa de Andrés contradice este archivo, manda la instrucción de Andrés.
-
-Última actualización: 11 nov 2026.
-
----
-
-## 1. Quién es y qué es AG
-
-- **Andrés Gil**, desarrollador de software en Caracas (Venezuela). Estudia Ingeniería Informática y trabaja a la vez.
-- **AG Software Agency** es su agencia de software y automatización, a su nombre: es su marca personal.
-- **Servicios:** automatización de flujos (n8n, Make), integraciones con APIs, sistemas de contenido con IA, plataformas web y sistemas a medida.
-- **Clientes típicos:** negocios pequeños y medianos de sectores tradicionales (seguros, alimentos, educación, trading). No suelen ser técnicos.
-- **Idioma:** español neutro (Venezuela/LatAm). A Andrés se le responde en español.
-
-### Proyectos activos
-
-| Proyecto | Qué es |
-|---|---|
-| Contenido propio de AG | Posts de LinkedIn/Instagram y videos para la marca de Andrés. Sistema de publicación automática con n8n + Supabase (`ag-publicacion`). |
-| Campaña de LinkedIn (cliente: Gonzalo Trujillo) | Flujo que genera ideas de post, arma la imagen, pide aprobación por Telegram y publica. Migrándose de Make a n8n en Render. Objetivo: reclutar agentes de seguros. Propuesta COT-2026-SP01. |
-| Centro de producción de alimentos (cliente) | Sistema de control para una cocina central: inventario por almacén/cava, recepción de mercancía, requisiciones cocina→almacén, calculadora de recetas, producción y despachos por destino. Jerarquía de usuarios: chef ejecutivo, subchef, jefes de cocina. Se empieza por el control global y se agregan funciones poco a poco. |
-
----
-
-## 2. Marca (obligatoria en TODO lo de AG)
-
-### Paleta oficial
-
-| Rol | Hex | Uso |
-|---|---|---|
-| Fondo | `#F7F5F1` | Crema. Fondo de páginas, posts y escenas claras |
-| Texto / oscuro | `#0F2E36` | Texto principal, títulos, portadas y fondos oscuros |
-| Acento primario | `#4C7C82` | Líneas, bordes destacados, viñetas |
-| Acento secundario | `#E8703A` | Naranja. Totales, etiquetas, botones, acentos |
-
-Derivados en uso: superficie `#FFFFFF`, borde `#E4E0D8`, texto secundario `#5A6B6E`, primario oscuro `#3D666B`, fila suave `#EEF3F3`, naranja para texto grande sobre claro `#B4541F`. En videos animados se permite el amarillo `#ffd166` como acento.
-
-**No usar otras paletas para AG.**
-
-### Reglas de contraste
-
-- `#E8703A` nunca como texto pequeño sobre fondo claro; solo rellenos, etiquetas y texto muy grande. Sobre fondo oscuro sí funciona como texto.
-- Texto sobre relleno naranja en documentos: `#0F2E36`.
-- `#4C7C82` sobre crema solo para títulos grandes o gráficos; para texto chico usar `#3D666B`.
-
-### Tipografía
-
-- **Títulos:** Manrope 800.
-- **Cuerpo:** Inter 400/600.
-- **Datos técnicos:** monoespaciada (JetBrains Mono / IBM Plex Mono).
-- Disponibles en Google Fonts o npm (`@fontsource/manrope`, `@fontsource/inter`).
-
-### Marca gráfica
-
-- Aún no hay logo definitivo. Se usa: cuadrado naranja + "AG SOFTWARE AGENCY", o un recuadro crema redondeado con "AG" (la G en naranja).
-- Cierre de videos: fondo `#0F2E36`, recuadro "AG", "ANDRÉS GIL", "IA y tecnología, sin complicaciones", botón naranja "SÍGUEME →".
-
-### Tono
-
-- Claro antes que técnico: se explica lo que hace, no cómo se llama.
-- Concreto: entregables y precios exactos; nada de "soluciones innovadoras de vanguardia".
-- Cercano pero profesional; se tutea.
-- Honesto con los límites: lo que no incluye el alcance se dice.
-
----
-
-## 3. Documentos (propuestas, briefs, reportes)
-
-- Formato A4, fondo crema, plano y limpio (sin degradados ni sombras), entrega en PDF.
-- **Propuestas:** máximo 2 páginas, **sin tiempos estimados** (hitos por entregable y criterio de aprobación), **sin líneas de firma** (solo casilla de aceptación con el total). Numeración `COT-AAAA-XXNN`, validez 15 días. La mensualidad puede ir como "A acordar".
-- Estructura de propuesta: portada oscura con metadatos (cliente · n.º · fecha · validez) → Lo que ganas (4 beneficios) → Cómo funciona (4–5 pasos en tarjetas) → Alcance (tabla con precios, fila de total en naranja) → Hitos de entrega → Lo que necesitamos de ti | Condiciones (incluye qué NO incluye) → Próximos pasos → Aceptación.
-- Otros formatos: brief de proyecto, plan de sprint, reporte de entrega/avance.
-- Los PDF se generan desde HTML con Chromium/Playwright (`format: 'A4', printBackground: true`), con las fuentes cargadas localmente.
-
----
-
-## 4. Posts para redes (LinkedIn e Instagram)
-
-- Formato vertical 1080×1350 (4:5). Limpio y minimalista; se entiende en 2 segundos.
-- Paleta AG, tarjetas blancas con borde `#E4E0D8`, firma discreta en una esquina.
-- **Formato A — "Necesito vitamina [letra]":** humor tech; 4 cosas con la misma letra que mezclan IA y vida de emprendedor (G → Gemini, GPT, Ganancias, Gym). Título enorme arriba, cuadrícula 2×2 de tarjetas con ícono y etiqueta en negrita. Texto del post corto que remata el chiste y pregunta al lector.
-- **Formato B — infografía/carrusel:** portada-gancho, título en dos líneas y dos tonos, diagrama tipo hub, frase-resumen y llamado a comentar una palabra.
-- Los estilos van variando; Andrés irá sumando referencias.
-
----
-
-## 5. Videos con Andrés a cámara (reels verticales 9:16)
-
-### Corte
-
-- Quitar silencios, repeticiones y tomas falsas; elegir la toma más limpia de cada frase.
-- **Revisar que ninguna frase quede dos veces** (él reinicia frases: "Número 2… Número 2, me actualizo…").
-- **Eliminar murmullos o voz de fondo en los silencios** (revisar tramos de bajo volumen entre frases).
-- Estructura: gancho → problema → quién soy → valor (enumerado) → llamada a la acción → cierre AG.
-
-### Texto en pantalla
-
-1. **Un solo texto a la vez.** Nunca dos capas de texto juntas (frase grande + subtítulo). Si aparece un título o tarjeta, el subtítulo se oculta mientras dure.
-2. Las animaciones no deben chocar ni encimarse con los textos.
-3. Subtítulos abajo (zona del pecho), mayúsculas, 2–3 palabras, palabra activa resaltada, palabras clave en naranja. Corregir siempre la transcripción (nombres, "inteligencia artificial"…).
-4. Nada de paneles grandes e invasivos sobre el video (rechazó el panel tipo "ranking").
-
-### Cámara y zooms
-
-- Quiere **más zooms**: lentos, acercamientos progresivos, luego zoom hacia atrás, variando entre escenas.
-- **Límite:** evitar acercamientos fuertes en tomas donde los ojos destacan mucho. Zoom centrado por debajo de los ojos, máximo ~20 %, sin filtro de nitidez, piel ligeramente suavizada, sin filtros que oscurezcan. Sin zoom con sacudida hacia la cara.
-
-### Motion graphics
-
-- **Tarjetas a pantalla completa** que reemplazan el video un momento: fondo con textura + texto que entra con transición, y vuelta al video. Usarlas en ideas clave y enumeraciones ("Número 1: …"). Referencia: títulos tipo "DAY 2" de MrBeast, pero pueden ser más simples.
-- Transiciones animadas entre escenas (barridos de color AG, destellos).
-- Referencia de ritmo, animaciones y sonido: reels de Ibai.
-
-### Sonido
-
-- No le gustan los "whoosh/swish" repetidos cada vez que aparece un texto. Efectos pocos y con intención (entrada de tarjeta, golpe en idea clave).
-- Voz limpia y nivelada, alrededor de −14 a −16 LUFS.
-
----
-
-## 6. Videos animados con personaje (su formato favorito)
-
-Formato que le encantó (video "¿Qué modelo de Claude deberías usar?"). Quiere hacer más videos completos así.
-
-- 1080×1920, 30 fps, 30–40 s.
-- **Un mismo personaje** dibujado por código (SVG): cabeza grande, sudadera, brazos y piernas de palo con borde blanco tipo recorte. Mueve la boca con el volumen de la voz, parpadea, se balancea y cambia de pose y accesorios por escena.
-- **Una escena por idea**, alternando fondo crema y teal oscuro, con transición de deslizamiento.
-- **Cartel colgante** arriba con el título de la escena y **una sola etiqueta de texto a la vez** abajo, que cambia cuando la voz dice cada idea.
-- **Objetos que ilustran lo que se dice**, que aparecen en el momento exacto (laptop, libros, balanza, calendario, lupa, batería que se vacía, moneda, rayo).
-- Cierre: personaje saludando + recuadro AG + "SÍGUEME →".
-- **Voz IA preferida:** "Grady" de Higgsfield (modelo `seed_audio`, voice_id `e2a2d2e6-9ed2-59cd-82af-feaa27f8a678`, tipo preset). Habla rápido: bajar velocidad a 0,93×. Escribir los números en palabras.
-- Música de fondo original (sintetizada, sin copyright), volumen bajo y fijo.
-
-### Cómo se produce
-
-1. Guion: transcribir/limpiar y dividir en intro + 3–5 ideas + cierre. Por escena: título, 2–4 etiquetas cortas en mayúsculas (≤ 24 caracteres) y la palabra que dispara cada una.
-2. Voz: IA (Grady) o la voz de Andrés.
-3. Transcribir la voz con marcas de tiempo por palabra (faster-whisper) y armar una línea de tiempo: inicio de cada escena, segundo de cada etiqueta y volumen por fotograma (para la boca).
-4. Animación en una página HTML con una función `render(t)` que dibuja el fotograma del segundo `t`; se captura fotograma a fotograma con Playwright/Chromium y se codifica con ffmpeg.
-5. Revisar fotogramas sueltos antes del render completo.
-6. Mezclar voz + música con ganancia fija y entregar MP4.
-
-La plantilla del personaje y las escenas está en el Proyecto AG de Claude: `claude/personaje-animado-plantilla.html`; la guía detallada, en `claude/guia-videos-animados-personaje.md`.
-
----
-
-## 7. Audio: reglas aprendidas
-
-- **Procesado mínimo.** Filtro de graves, compresión suave y, si hace falta, reducción de ruido leve. Nada más.
-- **Nunca subir el volumen con un limitador trabajando fuerte:** deja la voz robótica y entrecortada. Usar ganancia fija y dejar el pico por debajo de −1 dB.
-- No apilar "reparadores" (saturación, eses, ruido) si el audio no lo necesita.
-- **Bajar a casi silencio las pausas entre frases** con rampa suave (ruido de cuarto, respiraciones, cortes de WhatsApp).
-- Música a volumen fijo y bajo; si sube y baja con la voz, se oye raro en las pausas.
-- Trabajar siempre desde el archivo original a calidad completa, no desde copias reducidas.
-- Las notas de voz de WhatsApp vienen muy comprimidas: pedir grabación con la app Notas de voz, a ~15 cm, en cuarto con poco eco.
-
----
-
-## 8. Herramientas y límites
-
-- **Higgsfield (por MCP):** voz IA, generación de imagen/video con IA, análisis de viralidad, efectos prefabricados y un servidor de trabajo (sandbox) con ffmpeg, Python, Node/Playwright y un editor de gráficos (Higgsedit).
-  - Sus efectos prefabricados son fijos: no se puede cambiar tamaño de paneles ni sonidos. La edición a medida se hace con ffmpeg/HTML y Higgsfield se usa como complemento (transiciones, voz).
-  - **Cuesta créditos:** voz IA (~0,9 créditos por cada 100 caracteres; un guion de 30–40 s ≈ 5 créditos) y todo lo generado con IA. **No cuesta:** render, animación por código, música sintetizada, uso del sandbox.
-  - Plan actual: gratis. Créditos restantes al 11 nov 2026: 0,3.
-  - **Antes de gastar créditos: consultar el costo, decirlo y confirmar con Andrés.** Preguntar qué voz quiere antes de generar.
-- **Automatización:** n8n (en Render), Make, Supabase, Telegram para aprobaciones.
-- Andrés quiere que sus videos pasen por Higgsfield cuando aporte algo; no asumir que "editar" significa solo cortar.
-
----
-
-## 9. Cómo trabajar con Andrés
-
-- Entregar el resultado, no un informe del proceso. Decir qué se hizo y qué debe revisar.
-- Decir con claridad lo que no se pudo verificar (por ejemplo, si no se pudo escuchar el audio).
-- No inventar datos en pantalla (niveles, cifras, usuarios, seguidores). Si algo es estimación propia, avisarlo.
-- No usar logos ni personajes de marcas ajenas; solo nombres en texto.
-- Pide cambios rápidos y seguidos: aplicar la corrección exacta que pide y devolver la versión nueva.
-- Cuando marca un fallo con el segundo exacto ("segundo 37"), ir directo a ese punto.
-
----
-
-## 10. Lista de revisión antes de entregar
-
-**Cualquier pieza**
-- [ ] ¿Paleta y tipografía AG?
-- [ ] ¿Texto corregido (nombres, términos)?
-- [ ] ¿Algo inventado sin avisar?
-
-**Video**
-- [ ] ¿Algún momento con dos textos a la vez?
-- [ ] ¿Algún gráfico tapa la cara o choca con los subtítulos?
-- [ ] ¿Frases repetidas o murmullos en los silencios?
-- [ ] ¿Zooms variados sin primeros planos de los ojos?
-- [ ] ¿Sonidos escasos? ¿Voz sin limitador, pausas limpias, música fija?
-- [ ] ¿Cierre AG?
-- [ ] ¿Se revisaron fotogramas de cada escena?
-
-**Si se usa Higgsfield**
-- [ ] ¿Se consultó el costo y Andrés lo aprobó?
-$ctx$::text as content
-),
-upd as (
-  update knowledge_docs d
-  set content = (select content from body),
-      folder_id = (select id from folder),
-      updated_at = now()
-  from owner o
-  where d.user_id = o.user_id and d.section = 'content' and d.title = 'CONTEXTO AG'
-  returning d.id
-)
-insert into knowledge_docs (user_id, folder_id, title, content, sort_order, section)
-select f.user_id, f.id, 'CONTEXTO AG', (select content from body), 0, 'content'
-from folder f
-where not exists (select 1 from upd);
-
-
-
+-- ⚠️ EN PAUSA (14 nov 2026): no correr todavía. Crea las categorías
+-- "Vende tu servicio", "IA sin humo" e "IA explicada fácil", que chocan con
+-- la propuesta de pilares (B8). La guía "Estilo de videos cortos" de este
+-- bloque ya se cargó directo en el AI context. Decidir B8 primero y
+-- rehacer este bloque con las categorías que queden.
 -- ============================================================
 -- BLOQUE 21 — 30 IDEAS DE VIDEOS + GUÍA DE ESTILO "TONO HUMANO"
 --
@@ -785,3 +537,264 @@ insert into knowledge_docs (user_id, folder_id, title, content, sort_order, sect
 select f.user_id, f.id, 'Estilo de videos cortos', (select content from body), 1, 'content'
 from folder f
 where not exists (select 1 from upd);
+
+
+-- ============================================================
+-- BLOQUE 23 — CONTENT: "NO PUBLICAR" COMO DATO (B3)
+--
+-- Las ideas marcadas no aparecen en el banco ni en "Ready to post", no se
+-- pueden programar y la IA nunca las sugiere (get_content_week las omite y
+-- plan_content_week las rechaza). Marca las 5 ideas que revelan el stack,
+-- las herramientas o el proceso con clientes. Se puede volver a correr.
+-- ============================================================
+
+alter table content_ideas
+  add column if not exists do_not_publish boolean not null default false;
+
+update content_ideas i
+set do_not_publish = true, scheduled_date = null, updated_at = now()
+from app_profiles p
+where p.role = 'admin' and p.active and i.user_id = p.user_id
+  and i.title in (
+    'Cómo uso Claude Code para programar más rápido',
+    'De la idea al lanzamiento: así entrego un proyecto a un cliente',
+    'Creé una app en un fin de semana solo con IA',
+    'Herramientas de IA que uso cada semana (y cuánto pago)',
+    'Mi stack para crear apps en 2026'
+  );
+
+
+-- ============================================================
+-- BLOQUE 24 — CONTENT: FORMATO Y ESTILO SEPARADOS (B2)
+--
+-- format = dónde se publica (reel, carrusel, post, historia, video = video
+-- largo, texto = blog). Se mantienen las claves de siempre porque las usan
+-- las filas actuales y el servidor MCP.
+-- style  = cómo se produce: animado | humano | noticia | foto ('' = sin definir).
+-- Rellena el estilo de lo que se puede deducir; lo ambiguo queda en '' para
+-- que Andrés lo defina (filtro "No style" en el Idea board). Se puede volver
+-- a correr: solo toca filas con style = ''.
+-- ============================================================
+
+alter table content_ideas
+  add column if not exists style text not null default '';
+
+alter table content_ideas drop constraint if exists content_ideas_style_check;
+alter table content_ideas add constraint content_ideas_style_check
+  check (style in ('', 'animado', 'humano', 'noticia', 'foto'));
+
+alter table content_ideas drop constraint if exists content_ideas_format_check;
+alter table content_ideas add constraint content_ideas_format_check
+  check (format in ('', 'reel', 'carrusel', 'post', 'historia', 'video', 'texto'));
+
+-- Noticias (incluye la serie de los domingos y el recap del año)
+update content_ideas set style = 'noticia'
+where style = '' and (
+  title like 'Noticias de la semana%'
+  or title in (
+    'Renuncia el CEO de NVIDIA: la carta, la presunta espía y la caída en bolsa',
+    'La empresa de Claude sale a bolsa: los números',
+    'Las supuestas prohibiciones de Claude del 12 de noviembre',
+    'Lo más importante que pasó en IA en 2026'
+  )
+);
+
+-- Andrés a cámara / material real
+update content_ideas set style = 'humano'
+where style = '' and title in (
+  'Inauguración del Caracas Culinary Campus',
+  'Automaticé mi planificación de contenido con IA',
+  'Mi setup de trabajo (escritorio, micrófonos y apps)',
+  'Cómo conseguir clientes sin tener portafolio',
+  'Le enseño a mi familia a usar IA'
+);
+
+-- Videos animados: los terminados de videos/out y los pendientes con
+-- "Estilo: …" en la descripción. "Programador en Venezuela…" queda sin
+-- definir: el plan dice reel humano y PENDIENTES.md dice animado.
+update content_ideas set style = 'animado'
+where style = ''
+  and title <> 'Programador en Venezuela vs. trabajando para afuera'
+  and (
+    description like '%Estilo:%'
+    or title in (
+      'Cómo empezar a usar la IA si no sabes hacerlo',
+      'El error más común al usar IA para trabajar',
+      'Nunca le escribas esto a la IA',
+      'Tres errores al pedirle algo a la IA',
+      '3 prompts que uso todos los días',
+      'La IA no piensa: adivina (cómo funciona por dentro)',
+      '¿La IA me va a reemplazar? La verdad',
+      'La carrera de la IA en dinero',
+      '¿Internet lo inventaron los militares? La historia real',
+      'El primer mensaje de internet fue un error',
+      'Trabajar para afuera desde Caracas',
+      'YouTube nació como una página de citas'
+    )
+  );
+
+-- Carruseles y posts son piezas de imagen
+update content_ideas set style = 'foto'
+where style = '' and format in ('carrusel', 'post');
+
+
+-- ============================================================
+-- BLOQUE 25 — CONTENT: PUBLICACIONES Y MÉTRICAS (B1)
+--
+-- Una fila por pieza y plataforma donde se publicó. Una pieza cuenta como
+-- "publicada" si tiene al menos una fila. Las métricas se cargan a mano por
+-- ahora (sin APIs de redes); null = todavía sin dato.
+-- ============================================================
+
+create table if not exists content_publications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  idea_id uuid not null references content_ideas(id) on delete cascade,
+  platform text not null check (platform in ('instagram', 'tiktok', 'linkedin', 'youtube', 'otro')),
+  published_at timestamptz not null default now(),
+  url text not null default '',
+  views integer,
+  likes integer,
+  comments integer,
+  saves integer,
+  shares integer,
+  metrics_updated_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists content_publications_idea_idx
+  on content_publications (user_id, idea_id);
+
+alter table content_publications enable row level security;
+
+drop policy if exists "nexus read" on content_publications;
+drop policy if exists "nexus insert" on content_publications;
+drop policy if exists "nexus update" on content_publications;
+drop policy if exists "nexus delete" on content_publications;
+create policy "nexus read" on content_publications for select
+  using (user_id = auth.uid() or public.nexus_can_view('content'));
+create policy "nexus insert" on content_publications for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('content')));
+create policy "nexus update" on content_publications for update
+  using (user_id = auth.uid() or public.nexus_can_edit('content'));
+create policy "nexus delete" on content_publications for delete
+  using (user_id = auth.uid());
+
+
+-- ============================================================
+-- BLOQUE 26 — MÓDULO PIPELINE: SEGUIMIENTO DE CLIENTES ("el guardián")
+--
+-- Etapas con una regla (máximo de días sin movimiento) y una plantilla de
+-- mensaje de seguimiento; oportunidades (clientes / leads) que pasan por las
+-- etapas; y un historial de lo que pasó con cada una, hecho por Andrés o por
+-- un agente (pipeline_review / pipeline_update por MCP). El guardián marca lo
+-- que se pasó de la regla y propone el mensaje; nunca envía nada solo.
+-- Crea las 4 etapas por defecto si la cuenta admin no tiene ninguna.
+-- ============================================================
+
+create table if not exists pipeline_stages (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null default '',
+  max_days integer not null default 3 check (max_days >= 0),
+  rule text not null default '',
+  message_template text not null default '',
+  color text not null default '#8b5cf6',
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists pipeline_deals (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null default '',
+  company text not null default '',
+  contact text not null default '',
+  channel text not null default 'whatsapp',
+  stage_id uuid references pipeline_stages(id) on delete set null,
+  note text not null default '',
+  value numeric,
+  currency text not null default 'USD',
+  status text not null default 'open' check (status in ('open', 'won', 'lost')),
+  last_activity_at timestamptz not null default now(),
+  suggested_message text not null default '',
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists pipeline_deals_stage_idx on pipeline_deals (user_id, stage_id, sort_order);
+
+create table if not exists pipeline_activity (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  deal_id uuid not null references pipeline_deals(id) on delete cascade,
+  kind text not null default 'note',
+  body text not null default '',
+  actor text not null default 'andres' check (actor in ('andres', 'agent')),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists pipeline_activity_deal_idx on pipeline_activity (deal_id, created_at desc);
+
+alter table pipeline_stages enable row level security;
+alter table pipeline_deals enable row level security;
+alter table pipeline_activity enable row level security;
+
+drop policy if exists "nexus read" on pipeline_stages;
+drop policy if exists "nexus insert" on pipeline_stages;
+drop policy if exists "nexus update" on pipeline_stages;
+drop policy if exists "nexus delete" on pipeline_stages;
+create policy "nexus read" on pipeline_stages for select
+  using (user_id = auth.uid() or public.nexus_can_view('pipeline'));
+create policy "nexus insert" on pipeline_stages for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('pipeline')));
+create policy "nexus update" on pipeline_stages for update
+  using (user_id = auth.uid() or public.nexus_can_edit('pipeline'));
+create policy "nexus delete" on pipeline_stages for delete
+  using (user_id = auth.uid());
+
+drop policy if exists "nexus read" on pipeline_deals;
+drop policy if exists "nexus insert" on pipeline_deals;
+drop policy if exists "nexus update" on pipeline_deals;
+drop policy if exists "nexus delete" on pipeline_deals;
+create policy "nexus read" on pipeline_deals for select
+  using (user_id = auth.uid() or public.nexus_can_view('pipeline'));
+create policy "nexus insert" on pipeline_deals for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('pipeline')));
+create policy "nexus update" on pipeline_deals for update
+  using (user_id = auth.uid() or public.nexus_can_edit('pipeline'));
+create policy "nexus delete" on pipeline_deals for delete
+  using (user_id = auth.uid());
+
+drop policy if exists "nexus read" on pipeline_activity;
+drop policy if exists "nexus insert" on pipeline_activity;
+drop policy if exists "nexus update" on pipeline_activity;
+drop policy if exists "nexus delete" on pipeline_activity;
+create policy "nexus read" on pipeline_activity for select
+  using (user_id = auth.uid() or public.nexus_can_view('pipeline'));
+create policy "nexus insert" on pipeline_activity for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('pipeline')));
+create policy "nexus update" on pipeline_activity for update
+  using (user_id = auth.uid() or public.nexus_can_edit('pipeline'));
+create policy "nexus delete" on pipeline_activity for delete
+  using (user_id = auth.uid());
+
+-- Etapas por defecto (las de la referencia), solo si no hay ninguna
+with owner as (
+  select user_id from app_profiles where role = 'admin' and active order by created_at limit 1
+),
+s(name, max_days, rule, message_template, color, sort_order) as (values
+  ('Contacto', 2, 'Más de 2 días sin respuesta',
+   'Hola {nombre}, ¿pudiste ver la información que te envié? Cuéntame si te quedó alguna duda.', '#06b6d4', 0),
+  ('Conversación', 3, 'Más de 3 días sin identificar qué necesita',
+   'Hola {nombre}, me quedé pensando en lo que me contaste. ¿Te parece si agendamos 15 minutos para ver cómo resolverlo?', '#8b5cf6', 1),
+  ('Propuesta', 3, 'Más de 3 días sin respuesta a la propuesta',
+   'Hola {nombre}, ¿pudiste revisar la propuesta? ¿Qué necesitas para avanzar?', '#f59e0b', 2),
+  ('Cierre', 2, 'Duda sin resolver por más de 2 días',
+   'Hola {nombre}, ¿quedó alguna duda pendiente para arrancar? Te ayudo a resolverla hoy.', '#10b981', 3)
+)
+insert into pipeline_stages (user_id, name, max_days, rule, message_template, color, sort_order)
+select o.user_id, s.name, s.max_days, s.rule, s.message_template, s.color, s.sort_order
+from s cross join owner o
+where not exists (select 1 from pipeline_stages p where p.user_id = o.user_id);

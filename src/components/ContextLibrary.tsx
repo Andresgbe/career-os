@@ -28,11 +28,129 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
-} from "../features/knowledge/api";
-import type { KnowledgeFolderRow, KnowledgeDocRow } from "../features/knowledge/types";
+} from "../lib/contextDocs";
+import type { ContextFolderRow, ContextDocRow } from "../lib/contextDocs";
 
 const COLORS = ["#8b5cf6", "#ec4899", "#06b6d4", "#f59e0b", "#10b981", "#ef4444", "#3b82f6", "#f97316"];
 const UNFILED = "unfiled";
+
+// UI copy in both languages. Content passes "en"; "es" stays available for
+// any untranslated screen that reuses the library.
+const STRINGS = {
+  es: {
+    locale: "es",
+    starterLabel: "Crear carpetas sugeridas",
+    emptyText: "Todavía no hay documentos de contexto.",
+    emptyFolder: "Carpeta vacía",
+    newFolderEnter: "Nombre de la carpeta, Enter para crear",
+    folders: "carpetas",
+    documents: "documentos",
+    contextWords: "palabras de contexto",
+    copied: "Copiado",
+    copyAll: "Copiar todo",
+    copyAllTitle: "Copia todos los documentos como un solo markdown",
+    folder: "Carpeta",
+    suggested: "Carpetas sugeridas",
+    adds: "Agrega",
+    inFolder: "en",
+    dismiss: "Cerrar",
+    changeColor: "Cambiar color",
+    rename: "Renombrar",
+    deleteFolder: "Eliminar carpeta",
+    docCount: (n: number) => `${n} ${n === 1 ? "documento" : "documentos"}`,
+    folderName: "Nombre de la carpeta",
+    document: "Documento",
+    emptyFolderCta: "{t.emptyFolderCta}",
+    untitled: "Sin título",
+    empty: "Vacío",
+    unfiled: "Sin carpeta",
+    pickDoc: "Elige un documento",
+    pickDocHint: "o crea uno nuevo en esta carpeta. Se escribe en markdown y se guarda solo.",
+    docTitle: "Título del documento",
+    moveTitle: "Mover a otra carpeta",
+    saving: "Guardando…",
+    unsaved: "Sin guardar",
+    saved: "Guardado",
+    modeEdit: "Editar",
+    modeSplit: "Dividido",
+    modePreview: "Vista",
+    copyDoc: "Copiar documento",
+    deleteDoc: "Eliminar documento",
+    placeholder: "# Título\n\n## Sección\n- Punto clave\n\nEscribe en markdown.",
+    counts: (w: string, c: string) => `${w} palabras · ${c} caracteres`,
+    footerHint: "Markdown · Ctrl+S guarda al instante",
+    emptyDoc: "_Documento vacío._",
+    newDoc: "Nuevo documento",
+    del: "Eliminar",
+    deleteFolderMsg: (n: string) => `¿Eliminar "${n}"? Sus documentos pasan a "Sin carpeta".`,
+    deleteDocMsg: (n: string) => `¿Eliminar "${n}"? No se puede deshacer.`,
+    ago: {
+      now: "ahora",
+      min: (n: number) => `hace ${n} min`,
+      hour: (n: number) => `hace ${n} h`,
+      yesterday: "ayer",
+      days: (n: number) => `hace ${n} días`,
+    },
+  },
+  en: {
+    locale: "en",
+    starterLabel: "Create suggested folders",
+    emptyText: "No context docs yet.",
+    emptyFolder: "Empty folder",
+    newFolderEnter: "Folder name, Enter to create",
+    folders: "folders",
+    documents: "docs",
+    contextWords: "words of context",
+    copied: "Copied",
+    copyAll: "Copy all",
+    copyAllTitle: "Copy every doc as a single markdown file",
+    folder: "Folder",
+    suggested: "Suggested folders",
+    adds: "Adds",
+    inFolder: "in",
+    dismiss: "Dismiss",
+    changeColor: "Change color",
+    rename: "Rename",
+    deleteFolder: "Delete folder",
+    docCount: (n: number) => `${n} ${n === 1 ? "doc" : "docs"}`,
+    folderName: "Folder name",
+    document: "Doc",
+    emptyFolderCta: "Empty folder. Create the first doc.",
+    untitled: "Untitled",
+    empty: "Empty",
+    unfiled: "No folder",
+    pickDoc: "Pick a doc",
+    pickDocHint: "or create a new one in this folder. It's written in markdown and saves itself.",
+    docTitle: "Doc title",
+    moveTitle: "Move to another folder",
+    saving: "Saving…",
+    unsaved: "Unsaved",
+    saved: "Saved",
+    modeEdit: "Edit",
+    modeSplit: "Split",
+    modePreview: "Preview",
+    copyDoc: "Copy doc",
+    deleteDoc: "Delete doc",
+    placeholder: "# Title\n\n## Section\n- Key point\n\nWrite in markdown.",
+    counts: (w: string, c: string) => `${w} words · ${c} characters`,
+    footerHint: "Markdown · Ctrl+S saves right away",
+    emptyDoc: "_Empty doc._",
+    newDoc: "New doc",
+    del: "Delete",
+    deleteFolderMsg: (n: string) => `Delete "${n}"? Its docs move to "No folder".`,
+    deleteDocMsg: (n: string) => `Delete "${n}"? This can't be undone.`,
+    ago: {
+      now: "just now",
+      min: (n: number) => `${n} min ago`,
+      hour: (n: number) => `${n} h ago`,
+      yesterday: "yesterday",
+      days: (n: number) => `${n} days ago`,
+    },
+  },
+};
+
+type Lang = keyof typeof STRINGS;
+type Copy = (typeof STRINGS)[Lang];
 
 // Markdown rendered read-only with the app's dark tokens.
 export const MARKDOWN_CLASS =
@@ -56,7 +174,7 @@ export interface StarterFolder {
 }
 
 interface ContextLibraryProps {
-  // "" = the general Knowledge base; a module id = that module's context
+  // A module id (e.g. "content") = that module's own context docs
   section: string;
   // Folders + template docs offered when the library is empty
   starter?: StarterFolder[];
@@ -64,6 +182,8 @@ interface ContextLibraryProps {
   emptyText?: string;
   // Explains, under the toolbar, how the AI uses these docs
   aiHint?: ReactNode;
+  // UI language of the library's own copy
+  lang?: Lang;
 }
 
 function wordCount(text: string): number {
@@ -75,15 +195,15 @@ function snippet(content: string, max = 80): string {
   return text.length > max ? text.slice(0, max) + "…" : text;
 }
 
-function ago(iso: string): string {
+function ago(iso: string, t: Copy): string {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (mins < 1) return "ahora";
-  if (mins < 60) return `hace ${mins} min`;
+  if (mins < 1) return t.ago.now;
+  if (mins < 60) return t.ago.min(mins);
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `hace ${hours} h`;
+  if (hours < 24) return t.ago.hour(hours);
   const days = Math.floor(hours / 24);
-  if (days < 30) return days === 1 ? "ayer" : `hace ${days} días`;
-  return new Date(iso).toLocaleDateString("es", { day: "numeric", month: "short" });
+  if (days < 30) return days === 1 ? t.ago.yesterday : t.ago.days(days);
+  return new Date(iso).toLocaleDateString(t.locale, { day: "numeric", month: "short" });
 }
 
 type Mode = "edit" | "split" | "preview";
@@ -96,12 +216,14 @@ type SaveState = "saved" | "dirty" | "saving";
 export default function ContextLibrary({
   section,
   starter,
-  starterLabel = "Crear carpetas sugeridas",
-  emptyText = "Todavía no hay documentos de contexto.",
+  starterLabel,
+  emptyText,
   aiHint,
+  lang = "en",
 }: ContextLibraryProps) {
-  const [folders, setFolders] = useState<KnowledgeFolderRow[]>([]);
-  const [docs, setDocs] = useState<KnowledgeDocRow[]>([]);
+  const t = STRINGS[lang];
+  const [folders, setFolders] = useState<ContextFolderRow[]>([]);
+  const [docs, setDocs] = useState<ContextDocRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -116,8 +238,8 @@ export default function ContextLibrary({
   const [newFolderName, setNewFolderName] = useState("");
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [deletingFolder, setDeletingFolder] = useState<KnowledgeFolderRow | null>(null);
-  const [deletingDoc, setDeletingDoc] = useState<KnowledgeDocRow | null>(null);
+  const [deletingFolder, setDeletingFolder] = useState<ContextFolderRow | null>(null);
+  const [deletingDoc, setDeletingDoc] = useState<ContextDocRow | null>(null);
   const [copied, setCopied] = useState<"all" | "doc" | null>(null);
 
   const report = (err: unknown) => setError(errorMessage(err));
@@ -150,7 +272,7 @@ export default function ContextLibrary({
     if (!p) return;
     setSaveState("saving");
     try {
-      const updated = await updateDoc(p.id, { title: p.title.trim() || "Sin título", content: p.content });
+      const updated = await updateDoc(p.id, { title: p.title.trim() || t.untitled, content: p.content });
       setDocs((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
       if (!pending.current) setSaveState("saved");
     } catch (err) {
@@ -172,7 +294,7 @@ export default function ContextLibrary({
   // Save what's pending when leaving the page
   useEffect(() => () => void flush(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function openDoc(doc: KnowledgeDocRow) {
+  function openDoc(doc: ContextDocRow) {
     void flush();
     setSelectedDocId(doc.id);
     setDraftTitle(doc.title);
@@ -206,8 +328,8 @@ export default function ContextLibrary({
     if (!missingStarter.length) return;
     try {
       let nextOrder = folders.length ? Math.max(...folders.map((f) => f.sort_order)) + 1 : 0;
-      const createdFolders: KnowledgeFolderRow[] = [];
-      const createdDocs: KnowledgeDocRow[] = [];
+      const createdFolders: ContextFolderRow[] = [];
+      const createdDocs: ContextDocRow[] = [];
       let firstTouched: string | null = null;
       for (const s of missingStarter) {
         let folder = s.folder;
@@ -257,7 +379,7 @@ export default function ContextLibrary({
     updateFolder(id, { name }).catch(report);
   }
 
-  function recolor(folder: KnowledgeFolderRow) {
+  function recolor(folder: ContextFolderRow) {
     const color = COLORS[(COLORS.indexOf(folder.color) + 1) % COLORS.length];
     setFolders((prev) => prev.map((f) => (f.id === folder.id ? { ...f, color } : f)));
     updateFolder(folder.id, { color }).catch(report);
@@ -290,7 +412,7 @@ export default function ContextLibrary({
   async function createDoc() {
     try {
       const folderId = selectedFolder === UNFILED ? null : selectedFolder;
-      const row = await addDoc(folderId, "Nuevo documento", "", folderDocs.length, section);
+      const row = await addDoc(folderId, t.newDoc, "", folderDocs.length, section);
       setDocs((prev) => [...prev, row]);
       openDoc(row);
       setMode("edit");
@@ -323,7 +445,7 @@ export default function ContextLibrary({
   // ---------- copy ----------
 
   const sortedFolders = folders.slice().sort((a, b) => a.sort_order - b.sort_order);
-  const folderName = (id: string | null) => folders.find((f) => f.id === id)?.name ?? "Sin carpeta";
+  const folderName = (id: string | null) => folders.find((f) => f.id === id)?.name ?? t.unfiled;
 
   async function copy(kind: "all" | "doc") {
     let text: string;
@@ -350,8 +472,8 @@ export default function ContextLibrary({
   }
 
   const previewHtml = useMemo(
-    () => marked.parse(draftContent || "_Documento vacío._", { async: false }) as string,
-    [draftContent]
+    () => marked.parse(draftContent || t.emptyDoc, { async: false }) as string,
+    [draftContent, t.emptyDoc]
   );
 
   if (loading) {
@@ -367,9 +489,9 @@ export default function ContextLibrary({
   const totalWords = docs.reduce((n, d) => n + wordCount(d.content), 0);
   const unfiledCount = docs.filter((d) => !d.folder_id).length;
   const folderCards = [
-    ...sortedFolders.map((f) => ({ id: f.id, name: f.name, color: f.color, folder: f as KnowledgeFolderRow | null })),
+    ...sortedFolders.map((f) => ({ id: f.id, name: f.name, color: f.color, folder: f as ContextFolderRow | null })),
     ...(unfiledCount > 0 || selectedFolder === UNFILED
-      ? [{ id: UNFILED, name: "Sin carpeta", color: "#71717a", folder: null as KnowledgeFolderRow | null }]
+      ? [{ id: UNFILED, name: t.unfiled, color: "#71717a", folder: null as ContextFolderRow | null }]
       : []),
   ];
 
@@ -390,7 +512,7 @@ export default function ContextLibrary({
             <FolderOpen className="w-7 h-7" />
           </span>
           <div className="space-y-2">
-            <p className="text-xl font-bold">{emptyText}</p>
+            <p className="text-xl font-bold">{emptyText ?? t.emptyText}</p>
             {aiHint && <div className="text-sm text-muted leading-relaxed">{aiHint}</div>}
           </div>
           {error && <p className="text-sm text-red-400">{error}</p>}
@@ -401,7 +523,7 @@ export default function ContextLibrary({
                 className="flex items-center gap-2 h-11 px-5 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold transition-colors"
               >
                 <Sparkles className="w-4 h-4" />
-                {starterLabel}
+                {starterLabel ?? t.starterLabel}
               </button>
             )}
             <button
@@ -409,7 +531,7 @@ export default function ContextLibrary({
               className="flex items-center gap-2 h-11 px-5 rounded-xl border border-border text-sm font-semibold text-muted hover:text-foreground transition-colors"
             >
               <Plus className="w-4 h-4" />
-              Carpeta vacía
+              {t.emptyFolder}
             </button>
           </div>
           {addingFolder && (
@@ -422,7 +544,7 @@ export default function ContextLibrary({
                 if (e.key === "Enter") submitFolder();
                 if (e.key === "Escape") setAddingFolder(false);
               }}
-              placeholder="Nombre de la carpeta, Enter para crear"
+              placeholder={t.newFolderEnter}
               className="w-full h-11 px-4 rounded-xl bg-background border border-primary text-sm outline-none"
             />
           )}
@@ -438,39 +560,39 @@ export default function ContextLibrary({
       {/* Toolbar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex items-center gap-3 text-sm text-muted flex-wrap">
-          <span><span className="text-foreground font-semibold tabular-nums">{folders.length}</span> carpetas</span>
+          <span><span className="text-foreground font-semibold tabular-nums">{folders.length}</span> {t.folders}</span>
           <span className="w-1 h-1 rounded-full bg-border" />
-          <span><span className="text-foreground font-semibold tabular-nums">{docs.length}</span> documentos</span>
+          <span><span className="text-foreground font-semibold tabular-nums">{docs.length}</span> {t.documents}</span>
           <span className="w-1 h-1 rounded-full bg-border" />
-          <span><span className="text-foreground font-semibold tabular-nums">{totalWords.toLocaleString("es")}</span> palabras de contexto</span>
+          <span><span className="text-foreground font-semibold tabular-nums">{totalWords.toLocaleString(t.locale)}</span> {t.contextWords}</span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {missingStarter.length > 0 && (
             <button
               onClick={createStarter}
               className="flex items-center gap-2 h-10 px-4 rounded-xl border border-primary/40 bg-primary/10 text-sm font-semibold text-primary-hover hover:bg-primary/15 transition-colors"
-              title={`Agrega: ${missingStarter
-                .map((s) => (s.folder ? `${s.docs.map((d) => d.title).join(", ")} (en ${s.name})` : s.name))
+              title={`${t.adds}: ${missingStarter
+                .map((s) => (s.folder ? `${s.docs.map((d) => d.title).join(", ")} (${t.inFolder} ${s.name})` : s.name))
                 .join(" · ")}`}
             >
               <Sparkles className="w-4 h-4" />
-              Carpetas sugeridas
+              {t.suggested}
             </button>
           )}
           <button
             onClick={() => copy("all")}
             className="flex items-center gap-2 h-10 px-4 rounded-xl border border-border bg-surface text-sm font-semibold text-muted hover:text-foreground hover:border-[#3a3a44] transition-colors"
-            title="Copia todos los documentos como un solo markdown"
+            title={t.copyAllTitle}
           >
             {copied === "all" ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-            {copied === "all" ? "Copiado" : "Copiar todo"}
+            {copied === "all" ? t.copied : t.copyAll}
           </button>
           <button
             onClick={() => setAddingFolder(true)}
             className="flex items-center gap-2 h-10 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold transition-colors"
           >
             <Plus className="w-4 h-4" />
-            Carpeta
+            {t.folder}
           </button>
         </div>
       </div>
@@ -485,7 +607,7 @@ export default function ContextLibrary({
       {error && (
         <div className="flex items-start justify-between gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           <span>{error}</span>
-          <button onClick={() => setError("")} className="text-red-300/70 hover:text-red-200 shrink-0">Cerrar</button>
+          <button onClick={() => setError("")} className="text-red-300/70 hover:text-red-200 shrink-0">{t.dismiss}</button>
         </div>
       )}
 
@@ -537,7 +659,7 @@ export default function ContextLibrary({
                     e.stopPropagation();
                     if (card.folder) recolor(card.folder);
                   }}
-                  title={card.folder ? "Cambiar color" : undefined}
+                  title={card.folder ? t.changeColor : undefined}
                   className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
                   style={{ backgroundColor: `${card.color}22`, color: card.color }}
                 >
@@ -552,7 +674,7 @@ export default function ContextLibrary({
                         setRenameValue(card.name);
                       }}
                       className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-white/5"
-                      title="Renombrar"
+                      title={t.rename}
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
@@ -562,7 +684,7 @@ export default function ContextLibrary({
                         setDeletingFolder(card.folder);
                       }}
                       className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-white/5"
-                      title="Eliminar carpeta"
+                      title={t.deleteFolder}
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -572,8 +694,8 @@ export default function ContextLibrary({
               <div className="relative min-w-0">
                 <p className="text-[15px] font-semibold truncate">{card.name}</p>
                 <p className="text-xs text-muted mt-0.5">
-                  {count} {count === 1 ? "documento" : "documentos"}
-                  {updated && ` · ${ago(updated)}`}
+                  {t.docCount(count)}
+                  {updated && ` · ${ago(updated, t)}`}
                 </p>
               </div>
             </div>
@@ -591,7 +713,7 @@ export default function ContextLibrary({
                 if (e.key === "Enter") submitFolder();
                 if (e.key === "Escape") setAddingFolder(false);
               }}
-              placeholder="Nombre de la carpeta"
+              placeholder={t.folderName}
               className="w-full bg-transparent text-sm font-semibold outline-none placeholder:text-muted"
             />
           </div>
@@ -610,7 +732,7 @@ export default function ContextLibrary({
               className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-muted hover:text-foreground hover:bg-white/5 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
-              Documento
+              {t.document}
             </button>
           </div>
 
@@ -619,7 +741,7 @@ export default function ContextLibrary({
               onClick={createDoc}
               className="w-full rounded-2xl border border-dashed border-[#33333b] px-4 py-8 text-sm text-muted hover:text-foreground hover:border-primary/50 transition-colors"
             >
-              Carpeta vacía. Crea el primer documento.
+              {t.emptyFolderCta}
             </button>
           ) : (
             folderDocs.map((doc) => {
@@ -642,10 +764,10 @@ export default function ContextLibrary({
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-semibold truncate">
-                        {active ? draftTitle || "Sin título" : doc.title}
+                        {active ? draftTitle || t.untitled : doc.title}
                       </span>
                       <span className="block text-[11px] text-muted truncate">
-                        {snippet(active ? draftContent : doc.content, 46) || "Vacío"}
+                        {snippet(active ? draftContent : doc.content, 46) || t.empty}
                       </span>
                     </span>
                   </span>
@@ -661,8 +783,8 @@ export default function ContextLibrary({
               <span className="w-12 h-12 rounded-2xl bg-white/5 text-muted flex items-center justify-center">
                 <FileText className="w-6 h-6" />
               </span>
-              <p className="font-semibold">Elige un documento</p>
-              <p className="text-sm text-muted max-w-xs">o crea uno nuevo en esta carpeta. Se escribe en markdown y se guarda solo.</p>
+              <p className="font-semibold">{t.pickDoc}</p>
+              <p className="text-sm text-muted max-w-xs">{t.pickDocHint}</p>
             </div>
           ) : (
             <>
@@ -672,28 +794,28 @@ export default function ContextLibrary({
                     value={draftTitle}
                     onChange={(e) => edit(e.target.value, draftContent)}
                     className="w-full bg-transparent text-xl font-bold tracking-tight outline-none placeholder:text-muted/50"
-                    placeholder="Título del documento"
+                    placeholder={t.docTitle}
                   />
                   <div className="flex items-center gap-2 mt-1 text-xs text-muted">
                     <select
                       value={selectedDoc.folder_id ?? UNFILED}
                       onChange={(e) => moveDoc(e.target.value === UNFILED ? null : e.target.value)}
                       className="bg-transparent outline-none hover:text-foreground cursor-pointer [color-scheme:dark]"
-                      title="Mover a otra carpeta"
+                      title={t.moveTitle}
                     >
                       {sortedFolders.map((f) => (
                         <option key={f.id} value={f.id}>{f.name}</option>
                       ))}
-                      <option value={UNFILED}>Sin carpeta</option>
+                      <option value={UNFILED}>{t.unfiled}</option>
                     </select>
                     <span>·</span>
                     <span className="inline-flex items-center gap-1">
                       {saveState === "saving" ? (
-                        <><Loader2 className="w-3 h-3 animate-spin" /> Guardando…</>
+                        <><Loader2 className="w-3 h-3 animate-spin" /> {t.saving}</>
                       ) : saveState === "dirty" ? (
-                        <><span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Sin guardar</>
+                        <><span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> {t.unsaved}</>
                       ) : (
-                        <><Check className="w-3 h-3 text-emerald-400" /> Guardado {ago(selectedDoc.updated_at)}</>
+                        <><Check className="w-3 h-3 text-emerald-400" /> {t.saved} {ago(selectedDoc.updated_at, t)}</>
                       )}
                     </span>
                   </div>
@@ -702,9 +824,9 @@ export default function ContextLibrary({
                 <div className="flex items-center gap-1.5">
                   <div className="flex gap-0.5 p-1 rounded-xl bg-background/60 border border-border">
                     {([
-                      { key: "edit", icon: PenLine, label: "Editar" },
-                      { key: "split", icon: Columns2, label: "Dividido" },
-                      { key: "preview", icon: Eye, label: "Vista" },
+                      { key: "edit", icon: PenLine, label: t.modeEdit },
+                      { key: "split", icon: Columns2, label: t.modeSplit },
+                      { key: "preview", icon: Eye, label: t.modePreview },
                     ] as const).map((m) => (
                       <button
                         key={m.key}
@@ -722,14 +844,14 @@ export default function ContextLibrary({
                   <button
                     onClick={() => copy("doc")}
                     className="p-2 rounded-xl text-muted hover:text-foreground hover:bg-white/5 transition-colors"
-                    title="Copiar documento"
+                    title={t.copyDoc}
                   >
                     {copied === "doc" ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                   </button>
                   <button
                     onClick={() => setDeletingDoc(selectedDoc)}
                     className="p-2 rounded-xl text-muted hover:text-red-400 hover:bg-white/5 transition-colors"
-                    title="Eliminar documento"
+                    title={t.deleteDoc}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -748,7 +870,7 @@ export default function ContextLibrary({
                         void flush();
                       }
                     }}
-                    placeholder={"# Título\n\n## Sección\n- Punto clave\n\nEscribe en markdown."}
+                    placeholder={t.placeholder}
                     className={`w-full h-full min-h-[460px] bg-background/40 px-5 py-4 text-[13.5px] font-mono leading-relaxed outline-none resize-none placeholder:text-muted/40 ${
                       mode === "split" ? "md:border-r border-border" : ""
                     }`}
@@ -764,9 +886,9 @@ export default function ContextLibrary({
 
               <div className="flex items-center justify-between px-5 py-2.5 border-t border-border text-[11px] text-muted">
                 <span className="tabular-nums">
-                  {wordCount(draftContent).toLocaleString("es")} palabras · {draftContent.length.toLocaleString("es")} caracteres
+                  {t.counts(wordCount(draftContent).toLocaleString(t.locale), draftContent.length.toLocaleString(t.locale))}
                 </span>
-                <span className="hidden sm:inline">Markdown · Ctrl+S guarda al instante</span>
+                <span className="hidden sm:inline">{t.footerHint}</span>
               </div>
             </>
           )}
@@ -775,18 +897,18 @@ export default function ContextLibrary({
 
       {deletingFolder && (
         <ConfirmDialog
-          title="Eliminar carpeta"
-          confirmLabel="Eliminar"
-          message={`¿Eliminar "${deletingFolder.name}"? Sus documentos pasan a "Sin carpeta".`}
+          title={t.deleteFolder}
+          confirmLabel={t.del}
+          message={t.deleteFolderMsg(deletingFolder.name)}
           onConfirm={confirmDeleteFolder}
           onCancel={() => setDeletingFolder(null)}
         />
       )}
       {deletingDoc && (
         <ConfirmDialog
-          title="Eliminar documento"
-          confirmLabel="Eliminar"
-          message={`¿Eliminar "${deletingDoc.title}"? No se puede deshacer.`}
+          title={t.deleteDoc}
+          confirmLabel={t.del}
+          message={t.deleteDocMsg(deletingDoc.title)}
           onConfirm={confirmDeleteDoc}
           onCancel={() => setDeletingDoc(null)}
         />

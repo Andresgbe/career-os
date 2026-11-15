@@ -7,6 +7,9 @@ import type { CategoryRow, ContentIdeaRow } from "../types";
 import { isDone } from "../types";
 import IdeaCard from "../components/IdeaCard";
 import { NO_CATEGORY_COLOR } from "../components/visuals";
+import PieceFilters from "../components/PieceFilters";
+import { NO_FILTER, isFiltering, matchesFilter } from "../components/pieceFilter";
+import type { PieceFilter } from "../components/pieceFilter";
 import type { ContentStudio } from "../useContentStudio";
 
 const UNASSIGNED = "unassigned";
@@ -21,6 +24,10 @@ interface BoardTabProps {
 export default function BoardTab({ studio, onOpenIdea }: BoardTabProps) {
   const { categories, ideas: allIdeas } = studio;
   const ideas = allIdeas.filter((i) => !isDone(i));
+  // Filtering hides cards, so dragging is paused while a filter is on (the
+  // drop positions would be computed against cards you can't see)
+  const [filter, setFilter] = useState<PieceFilter>(NO_FILTER);
+  const filtering = isFiltering(filter);
 
   const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
   const [editingColumnName, setEditingColumnName] = useState("");
@@ -40,7 +47,7 @@ export default function BoardTab({ studio, onOpenIdea }: BoardTabProps) {
   }
 
   function addNewColumn() {
-    studio.createCategory(newColumnName.trim() || "Nueva categoría");
+    studio.createCategory(newColumnName.trim() || "New category");
     setNewColumnName("");
     setAddingColumn(false);
   }
@@ -82,7 +89,7 @@ export default function BoardTab({ studio, onOpenIdea }: BoardTabProps) {
   }
 
   const columns = [
-    { id: UNASSIGNED, name: "Sin categoría", color: NO_CATEGORY_COLOR, collapsed: false, category: null as CategoryRow | null },
+    { id: UNASSIGNED, name: "No category", color: NO_CATEGORY_COLOR, collapsed: false, category: null as CategoryRow | null },
     ...categories
       .slice()
       .sort((a, b) => a.sort_order - b.sort_order)
@@ -91,11 +98,17 @@ export default function BoardTab({ studio, onOpenIdea }: BoardTabProps) {
 
   return (
     <div className="space-y-4">
+      <PieceFilters
+        value={filter}
+        onChange={setFilter}
+        count={filtering ? ideas.filter((i) => matchesFilter(i, filter)).length : undefined}
+      />
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="flex items-start gap-3.5 overflow-x-auto pb-3 -mx-4 px-4 sm:mx-0 sm:px-0">
           {columns.map((column) => {
             const items = ideas
               .filter((i) => (column.id === UNASSIGNED ? !i.category_id : i.category_id === column.id))
+              .filter((i) => matchesFilter(i, filter))
               .sort((a, b) => a.sort_order - b.sort_order);
             const cat = column.category;
 
@@ -147,7 +160,7 @@ export default function BoardTab({ studio, onOpenIdea }: BoardTabProps) {
                         setEditingColumnName(cat.name);
                       }}
                       className="flex-1 min-w-0 text-left text-[15px] font-semibold truncate"
-                      title="Renombrar"
+                      title="Rename"
                     >
                       {column.name}
                     </button>
@@ -162,14 +175,14 @@ export default function BoardTab({ studio, onOpenIdea }: BoardTabProps) {
                       <button
                         onClick={() => studio.editCategory(cat.id, { collapsed: true })}
                         className="p-1 rounded-md text-muted hover:text-foreground hover:bg-white/5 flex-shrink-0"
-                        title="Minimizar"
+                        title="Collapse"
                       >
                         <ChevronDown className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => setDeletingColumn(cat)}
                         className="p-1 rounded-md text-muted hover:text-red-400 hover:bg-white/5 flex-shrink-0"
-                        title="Eliminar categoría"
+                        title="Delete category"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -187,7 +200,7 @@ export default function BoardTab({ studio, onOpenIdea }: BoardTabProps) {
                       }`}
                     >
                       {items.map((idea, index) => (
-                        <Draggable key={idea.id} draggableId={idea.id} index={index}>
+                        <Draggable key={idea.id} draggableId={idea.id} index={index} isDragDisabled={filtering}>
                           {(dragProvided, dragSnapshot) => (
                             <div
                               ref={dragProvided.innerRef}
@@ -218,7 +231,7 @@ export default function BoardTab({ studio, onOpenIdea }: BoardTabProps) {
                             if (e.key === "Enter") submitQuickAdd();
                             if (e.key === "Escape") setQuickAddColumn(null);
                           }}
-                          placeholder="Título de la idea, Enter para guardar"
+                          placeholder="Idea title, Enter to save"
                           className="h-11 px-3.5 rounded-xl bg-background border border-primary text-sm outline-none placeholder:text-muted"
                         />
                       ) : (
@@ -230,7 +243,7 @@ export default function BoardTab({ studio, onOpenIdea }: BoardTabProps) {
                           className="flex items-center gap-2 h-11 px-3 rounded-xl text-sm text-muted hover:text-foreground hover:bg-white/5 transition-colors"
                         >
                           <Plus className="w-4 h-4" />
-                          Añadir idea
+                          Add idea
                         </button>
                       )}
                     </div>
@@ -250,7 +263,7 @@ export default function BoardTab({ studio, onOpenIdea }: BoardTabProps) {
                   if (e.key === "Enter") addNewColumn();
                   if (e.key === "Escape") setAddingColumn(false);
                 }}
-                placeholder="Nombre de la categoría"
+                placeholder="Category name"
                 className="bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary"
               />
               <div className="flex gap-2 justify-end">
@@ -258,13 +271,13 @@ export default function BoardTab({ studio, onOpenIdea }: BoardTabProps) {
                   onClick={() => setAddingColumn(false)}
                   className="px-3 py-1.5 text-xs text-muted hover:text-foreground transition-colors"
                 >
-                  Cancelar
+                  Cancel
                 </button>
                 <button
                   onClick={addNewColumn}
                   className="px-3 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors"
                 >
-                  Agregar
+                  Add
                 </button>
               </div>
             </div>
@@ -274,7 +287,7 @@ export default function BoardTab({ studio, onOpenIdea }: BoardTabProps) {
               className="w-64 h-14 flex-shrink-0 border border-dashed border-[#3f3f48] rounded-2xl flex items-center justify-center gap-2 text-sm font-medium text-muted hover:border-primary hover:text-foreground transition-colors"
             >
               <Plus className="w-4 h-4" />
-              Agregar categoría
+              Add category
             </button>
           )}
         </div>
@@ -282,9 +295,9 @@ export default function BoardTab({ studio, onOpenIdea }: BoardTabProps) {
 
       {deletingColumn && (
         <ConfirmDialog
-          title="Eliminar categoría"
-          confirmLabel="Eliminar"
-          message={`Se elimina "${deletingColumn.name}". Sus ideas pasan a "Sin categoría".`}
+          title="Delete category"
+          confirmLabel="Delete"
+          message={`"${deletingColumn.name}" will be deleted. Its ideas move to "No category".`}
           onConfirm={() => {
             studio.removeCategory(deletingColumn.id);
             setDeletingColumn(null);
@@ -295,9 +308,9 @@ export default function BoardTab({ studio, onOpenIdea }: BoardTabProps) {
 
       {deletingIdea && (
         <ConfirmDialog
-          title="Eliminar idea"
-          confirmLabel="Eliminar"
-          message={`¿Eliminar "${deletingIdea.title}"? No se puede deshacer.`}
+          title="Delete idea"
+          confirmLabel="Delete"
+          message={`Delete "${deletingIdea.title}"? This can't be undone.`}
           onConfirm={() => {
             studio.removeIdea(deletingIdea.id);
             setDeletingIdea(null);

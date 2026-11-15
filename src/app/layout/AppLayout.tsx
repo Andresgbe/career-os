@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, LogOut, Search } from "lucide-react";
+import { Menu, X, LogOut, Search, Brain } from "lucide-react";
 import { APP_NAME } from "../../lib/constants";
 import { useAuth } from "../../hooks/useAuth";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -11,7 +11,11 @@ import CommandPalette from "./CommandPalette";
 import { getWorkerLastSeen } from "../../features/chat/api";
 import { BoardProvider } from "../../features/dashboard/BoardContext";
 
-const WIDE_ROUTES = ["/content"];
+// Pages that get the wider container: the dashboard (side cards + chat) and
+// the content planner's 7-day grid. "/" matches only the dashboard itself.
+const WIDE_ROUTES = ["/", "/content", "/brain", "/pipeline"];
+const isWide = (pathname: string) =>
+  WIDE_ROUTES.some((p) => (p === "/" ? pathname === "/" : pathname.startsWith(p)));
 
 export default function AppLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -92,6 +96,21 @@ export default function AppLayout() {
             </Link>
           )}
           <ModuleNavGroups variant="topbar" />
+          {/* BRAIN: fixed right after Admin (always the nav's last item).
+              Not a module, so it can't be regrouped or moved. */}
+          {isAdmin && (
+            <Link
+              to="/brain"
+              className={`flex items-center gap-1.5 ml-1 px-3 py-1.5 rounded-lg text-[13px] font-bold tracking-[0.08em] whitespace-nowrap shrink-0 transition-all ${
+                location.pathname.startsWith("/brain")
+                  ? "bg-gradient-to-r from-primary to-fuchsia-500 text-white shadow-[0_6px_18px_-8px_rgba(139,92,246,0.9)]"
+                  : "border border-primary/40 bg-primary/10 text-primary-hover hover:bg-primary/20"
+              }`}
+            >
+              <Brain className="w-4 h-4" />
+              BRAIN
+            </Link>
+          )}
         </nav>
 
           {/* Spacer */}
@@ -178,6 +197,20 @@ export default function AppLayout() {
                 variant="drawer"
                 onNavigate={() => setDrawerOpen(false)}
               />
+              {isAdmin && (
+                <Link
+                  to="/brain"
+                  onClick={() => setDrawerOpen(false)}
+                  className={`flex items-center gap-2 mt-2 px-3 py-2 rounded text-sm font-bold tracking-[0.08em] transition-colors ${
+                    location.pathname.startsWith("/brain")
+                      ? "bg-gradient-to-r from-primary to-fuchsia-500 text-white"
+                      : "border border-primary/40 bg-primary/10 text-primary-hover"
+                  }`}
+                >
+                  <Brain className="w-4 h-4" />
+                  BRAIN
+                </Link>
+              )}
             </nav>
 
               {/* Drawer footer: user + logout */}
@@ -214,7 +247,7 @@ export default function AppLayout() {
         {/* Wide pages (the content planner's 7-day grid) get more room */}
         <div
           className={`mx-auto w-full ${
-            WIDE_ROUTES.some((p) => location.pathname.startsWith(p)) ? "max-w-[1480px]" : "max-w-6xl"
+            isWide(location.pathname) ? "max-w-[1480px]" : "max-w-6xl"
           }`}
         >
           <Outlet />

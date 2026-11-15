@@ -56,12 +56,12 @@ export default function CategoriesTab({ studio }: { studio: ContentStudio }) {
     <div className="grid lg:grid-cols-[380px_1fr] gap-5 items-start">
       <section className="rounded-3xl border border-border bg-surface p-6 space-y-5">
         <div>
-          <h2 className="text-lg font-bold">Nueva categoría</h2>
-          <p className="text-sm text-muted mt-1">Cada categoría es una columna del tablero de ideas.</p>
+          <h2 className="text-lg font-bold">New category</h2>
+          <p className="text-sm text-muted mt-1">Each category is a column on the idea board.</p>
         </div>
         <input
           type="text"
-          placeholder="Nombre (ej. Tutoriales, Opinión, Behind the scenes)"
+          placeholder="Name (e.g. Tutorials, Opinion, Behind the scenes)"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleAdd()}
@@ -74,7 +74,7 @@ export default function CategoriesTab({ studio }: { studio: ContentStudio }) {
             style={{ backgroundColor: newColor + "26", color: newColor }}
           >
             <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: newColor }} />
-            {newName.trim() || "Vista previa"}
+            {newName.trim() || "Preview"}
           </span>
           <button
             onClick={handleAdd}
@@ -82,18 +82,18 @@ export default function CategoriesTab({ studio }: { studio: ContentStudio }) {
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold transition-colors disabled:opacity-40"
           >
             <Plus className="w-4 h-4" />
-            Agregar
+            Add
           </button>
         </div>
       </section>
 
       <section className="rounded-3xl border border-border bg-surface p-6 space-y-4">
         <h2 className="text-lg font-bold">
-          Tus categorías <span className="text-muted font-normal">· {categories.length}</span>
+          Your categories <span className="text-muted font-normal">· {categories.length}</span>
         </h2>
 
         {sorted.length === 0 ? (
-          <p className="text-sm text-muted">Aún no hay categorías. Crea una para ordenar tus ideas.</p>
+          <p className="text-sm text-muted">No categories yet. Create one to organize your ideas.</p>
         ) : (
           <ul className="grid sm:grid-cols-2 gap-2.5">
             {sorted.map((cat) => {
@@ -121,10 +121,10 @@ export default function CategoriesTab({ studio }: { studio: ContentStudio }) {
                       <div className="flex items-center justify-between gap-2">
                         <ColorPicker value={editColor} onChange={setEditColor} />
                         <div className="flex items-center gap-1 shrink-0">
-                          <button onClick={saveEdit} className="p-1.5 rounded-lg text-emerald-400 hover:bg-surface-hover" title="Guardar">
+                          <button onClick={saveEdit} className="p-1.5 rounded-lg text-emerald-400 hover:bg-surface-hover" title="Save">
                             <Check className="w-4 h-4" />
                           </button>
-                          <button onClick={() => setEditId(null)} className="p-1.5 rounded-lg text-muted hover:bg-surface-hover" title="Cancelar">
+                          <button onClick={() => setEditId(null)} className="p-1.5 rounded-lg text-muted hover:bg-surface-hover" title="Cancel">
                             <X className="w-4 h-4" />
                           </button>
                         </div>
@@ -135,7 +135,7 @@ export default function CategoriesTab({ studio }: { studio: ContentStudio }) {
                       <div className="flex-1 min-w-0 pl-1.5">
                         <p className="text-sm font-semibold truncate">{cat.name}</p>
                         <p className="text-xs text-muted">
-                          {inCat.length} {inCat.length === 1 ? "idea" : "ideas"} · {done} terminadas
+                          {inCat.length} {inCat.length === 1 ? "idea" : "ideas"} · {done} finished
                         </p>
                       </div>
                       <button
@@ -145,14 +145,14 @@ export default function CategoriesTab({ studio }: { studio: ContentStudio }) {
                           setEditColor(cat.color);
                         }}
                         className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-primary-hover transition-colors"
-                        title="Editar"
+                        title="Edit"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => setDeleting(cat)}
                         className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-red-400 transition-colors"
-                        title="Eliminar"
+                        title="Delete"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -167,9 +167,9 @@ export default function CategoriesTab({ studio }: { studio: ContentStudio }) {
 
       {deleting && (
         <ConfirmDialog
-          title="Eliminar categoría"
-          confirmLabel="Eliminar"
-          message={`Se elimina "${deleting.name}". Sus ideas pasan a "Sin categoría".`}
+          title="Delete category"
+          confirmLabel="Delete"
+          message={`"${deleting.name}" will be deleted. Its ideas move to "No category".`}
           onConfirm={() => {
             studio.removeCategory(deleting.id);
             setDeleting(null);

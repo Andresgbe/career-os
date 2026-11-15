@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
   ChevronLeft,
   ChevronRight,
+  History,
+  X,
   Inbox,
   Plus,
   Sparkles,
   Check,
   Copy,
   CalendarDays,
+  CalendarRange,
+  CircleCheck,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
@@ -25,12 +30,18 @@ import {
   weekRangeLabel,
   dayShort,
   monthShort,
+  monthKeyOf,
+  monthLabel,
+  shiftMonth,
 } from "../types";
 import WeekCard from "../components/WeekCard";
+import MonthCalendar from "../components/MonthCalendar";
 import PieceCard from "../components/PieceCard";
 import type { ContentStudio } from "../useContentStudio";
+import { metricsSummary } from "../stats";
 
 const BANK = "bank";
+const READY = "ready";
 const DAY = "day:";
 const STRIP_SIZE = 8;
 
@@ -58,13 +69,37 @@ export default function PlannerTab({
   const today = todayISO();
   const currentWeek = weekKeyOf(new Date());
 
-  // The strip shows STRIP_SIZE weeks starting one before the selected one
-  const [stripStart, setStripStart] = useState(() => shiftWeek(selectedWeek, -1));
+  // The strip only looks forward: the current week and the ones after it.
+  // Past weeks live in the "Last weeks" modal.
+  const laterOf = (a: string, b: string) => (a > b ? a : b);
+  const [stripStart, setStripStart] = useState(currentWeek);
   const stripWeeks = Array.from({ length: STRIP_SIZE }, (_, i) => shiftWeek(stripStart, i));
-  if (!stripWeeks.includes(selectedWeek)) {
-    // Selected from outside (e.g. "Planificar semana") — bring it into view
-    setStripStart(shiftWeek(selectedWeek, -1));
+  if (selectedWeek >= currentWeek && !stripWeeks.includes(selectedWeek)) {
+    // A future week selected from outside — bring it into view
+    setStripStart(laterOf(shiftWeek(selectedWeek, -1), currentWeek));
   }
+  const [pastOpen, setPastOpen] = useState(false);
+
+  // Week view (strip + 7 days) or Google-Calendar-style month view. The
+  // choice is remembered per browser.
+  const [view, setViewState] = useState<"week" | "month">(() => {
+    try {
+      return localStorage.getItem("content-planner-view") === "month" ? "month" : "week";
+    } catch {
+      return "week";
+    }
+  });
+  function setView(next: "week" | "month") {
+    setViewState(next);
+    try {
+      localStorage.setItem("content-planner-view", next);
+    } catch {
+      /* storage blocked */
+    }
+  }
+  const [monthKey, setMonthKey] = useState(() => monthKeyOf(new Date()));
+  const thisMonth = monthKeyOf(new Date());
+  const viewingPast = selectedWeek < currentWeek;
 
   const stripRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -81,29 +116,41 @@ export default function PlannerTab({
 
   const days = weekDays(selectedWeek).map(toISODate);
   const piecesOn = (date: string) => ideas.filter((i) => i.scheduled_date === date).sort(byDayOrder);
+  // Ideas still in production with no date, and finished pieces with no date
+  // ("Ready to post"). Pieces marked do-not-publish are in neither.
   const bank = ideas
-    .filter((i) => !i.scheduled_date && !isDone(i))
+    .filter((i) => !i.scheduled_date && !isDone(i) && !i.do_not_publish)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const ready = ideas
+    .filter((i) => !i.scheduled_date && isDone(i) && !i.do_not_publish)
+    .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 
   const selectedPieces = piecesOfWeek(selectedWeek);
   const selectedDone = selectedPieces.filter(isDone).length;
   const week = weekRow(selectedWeek);
   const categoryOf = (id: string | null) => categories.find((c) => c.id === id);
 
-  // A finished piece can move between days but not back to the bank, which
-  // only holds ideas still in production
+  // A finished piece goes back to "Ready to post", an unfinished one to the
+  // bank — each strip only accepts its own kind
   const [draggingDone, setDraggingDone] = useState(false);
+
+  function handleDragStart(start: { draggableId: string }) {
+    const idea = ideas.find((i) => i.id === start.draggableId);
+    setDraggingDone(!!idea && isDone(idea));
+  }
 
   function handleDragEnd(result: DropResult) {
     setDraggingDone(false);
     const { source, destination, draggableId } = result;
     if (!destination) return;
     if (source.droppableId === destination.droppableId && source.index === destination.index) return;
-    // The bank is sorted by date added, there's no manual order to keep
-    if (source.droppableId === BANK && destination.droppableId === BANK) return;
+    // The strips are sorted by date, there's no manual order to keep
+    const isStrip = (id: string) => id === BANK || id === READY;
+    if (isStrip(source.droppableId) && source.droppableId === destination.droppableId) return;
 
-    const dateOf = (id: string) => (id === BANK ? null : id.slice(DAY.length));
-    const listOf = (id: string) => (id === BANK ? bank.slice() : piecesOn(id.slice(DAY.length)));
+    const dateOf = (id: string) => (isStrip(id) ? null : id.slice(DAY.length));
+    const listOf = (id: string) =>
+      id === BANK ? bank.slice() : id === READY ? ready.slice() : piecesOn(id.slice(DAY.length));
 
     const moved = ideas.find((i) => i.id === draggableId);
     if (!moved) return;
@@ -126,202 +173,59 @@ export default function PlannerTab({
     studio.applySchedule(updates);
   }
 
-  return (
-    <div className="space-y-6">
-      {/* ===== Week strip ===== */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-            {STRIP_SIZE} semanas · planificación
-          </h2>
-          <div className="flex items-center gap-1.5">
-            {selectedWeek !== currentWeek && (
-              <button
-                onClick={() => onSelectWeek(currentWeek)}
-                className="h-9 px-3 rounded-xl border border-border bg-surface text-xs font-semibold text-muted hover:text-foreground hover:border-[#3a3a44] transition-colors"
-              >
-                Semana actual
-              </button>
-            )}
-            <button
-              onClick={() => setStripStart((s) => shiftWeek(s, -4))}
-              className="w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center text-muted hover:text-foreground hover:border-[#3a3a44] transition-colors"
-              aria-label="Semanas anteriores"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setStripStart((s) => shiftWeek(s, 4))}
-              className="w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center text-muted hover:text-foreground hover:border-[#3a3a44] transition-colors"
-              aria-label="Semanas siguientes"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        <div
-          ref={stripRef}
-          className="flex gap-3.5 overflow-x-auto snap-x pb-3 pt-1 -mx-4 px-4 sm:mx-0 sm:px-0"
-        >
-          {stripWeeks.map((key) => (
-            <WeekCard
-              key={key}
-              weekKey={key}
-              week={weekRow(key)}
-              pieces={piecesOfWeek(key)}
-              categories={categories}
-              isCurrent={key === currentWeek}
-              isPast={key < currentWeek}
-              selected={key === selectedWeek}
-              onSelect={() => onSelectWeek(key)}
-            />
-          ))}
-        </div>
-      </section>
-
-      {/* ===== Selected week ===== */}
-      <section className="relative rounded-3xl border border-border bg-surface overflow-hidden">
-        <span className="absolute -top-32 -left-24 w-96 h-96 rounded-full bg-primary/15 blur-3xl pointer-events-none" />
-        <span className="absolute -bottom-40 right-0 w-96 h-96 rounded-full bg-fuchsia-500/10 blur-3xl pointer-events-none" />
-
-        <div className="relative p-5 sm:p-7 space-y-6">
-          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5">
-            <div className="space-y-2 min-w-0">
-              <p className="font-mono text-xs tracking-wider text-primary-hover">
-                {selectedWeek}
-                {selectedWeek === currentWeek && " · SEMANA ACTUAL"}
-              </p>
-              <h2 className="text-[28px] sm:text-4xl font-extrabold tracking-tight leading-[1.05]">
-                Semana {weekNumber(selectedWeek)}{" "}
-                <span className="text-muted font-bold">— {weekRangeLabel(selectedWeek)}</span>
-              </h2>
-              <div className="flex items-center gap-3 pt-1">
-                <div className="w-44 h-1.5 rounded-full bg-white/10 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-400 transition-all"
-                    style={{ width: `${selectedPieces.length ? (selectedDone / selectedPieces.length) * 100 : 0}%` }}
-                  />
-                </div>
-                <span className="text-sm text-muted tabular-nums">
-                  <span className="text-foreground font-semibold">{selectedDone}</span> de {selectedPieces.length} piezas listas
+  // "Ready to post" + the idea bank, shared by the week and month views
+  const bankPanel = (
+    <div className="space-y-3">
+            <div className="rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.04] p-3.5 space-y-3">
+              <div className="flex items-center gap-2.5 px-0.5">
+                <span className="w-8 h-8 rounded-xl bg-emerald-400/15 flex items-center justify-center text-emerald-300">
+                  <CircleCheck className="w-4 h-4" />
                 </span>
+                <div>
+                  <p className="text-sm font-semibold">
+                    Ready to post <span className="text-muted font-normal tabular-nums">· {ready.length}</span>
+                  </p>
+                  <p className="text-xs text-muted">Finished pieces without a date. Drag one onto a day to schedule it.</p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex gap-1 p-1 rounded-2xl bg-background/60 border border-border self-start lg:self-auto">
-              {WEEK_STATUSES.map((s) => {
-                const active = (week?.status ?? "draft") === s.key && !!week;
-                return (
-                  <button
-                    key={s.key}
-                    onClick={() => studio.saveWeek(selectedWeek, { status: s.key as WeekStatus })}
-                    className={`px-3.5 py-2 rounded-xl text-[13px] font-semibold transition-colors ${
-                      active
-                        ? s.key === "approved"
-                          ? "bg-emerald-400/15 text-emerald-300"
-                          : s.key === "done"
-                          ? "bg-primary/20 text-primary-hover"
-                          : "bg-surface-hover text-foreground"
-                        : "text-muted hover:text-foreground"
+              <Droppable droppableId={READY} direction="horizontal" isDropDisabled={!draggingDone}>
+                {(provided, snapshot) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    className={`flex gap-2.5 overflow-x-auto pb-2 min-h-[84px] rounded-xl transition-colors ${
+                      snapshot.isDraggingOver ? "bg-emerald-400/10" : ""
                     }`}
                   >
-                    {s.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <WeekBrief key={selectedWeek} weekKey={selectedWeek} week={week} studio={studio} />
-
-          <DragDropContext
-            onDragStart={(start) => {
-              const idea = ideas.find((i) => i.id === start.draggableId);
-              setDraggingDone(!!idea && isDone(idea));
-            }}
-            onDragEnd={handleDragEnd}
-          >
-            {/* Days */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-2.5">
-              {days.map((date) => {
-                const d = new Date(`${date}T00:00:00`);
-                const isToday = date === today;
-                const isPastDay = date < today;
-                const list = piecesOn(date);
-                return (
-                  <div
-                    key={date}
-                    className={`flex flex-col rounded-2xl border p-2.5 min-h-[200px] transition-colors ${
-                      isToday
-                        ? "border-primary/60 bg-primary/[0.06]"
-                        : "border-border bg-background/50"
-                    } ${isPastDay && !isToday ? "opacity-75" : ""}`}
-                  >
-                    <div className="flex items-start justify-between px-1 pb-2.5">
-                      <div>
-                        <p className={`text-[10.5px] font-bold uppercase tracking-[0.14em] ${isToday ? "text-primary-hover" : "text-muted"}`}>
-                          {dayShort(d)}
-                        </p>
-                        <p className="flex items-baseline gap-1">
-                          <span className="text-2xl font-extrabold tabular-nums leading-none">{d.getDate()}</span>
-                          <span className="text-xs text-muted">{monthShort(d)}</span>
-                        </p>
-                      </div>
-                      {isToday ? (
-                        <span className="px-1.5 py-0.5 rounded-md bg-primary text-white text-[9.5px] font-bold tracking-wider">HOY</span>
-                      ) : (
-                        list.length > 0 && (
-                          <span className="text-[11px] text-muted tabular-nums">{list.length}</span>
-                        )
-                      )}
-                    </div>
-
-                    <Droppable droppableId={`${DAY}${date}`}>
-                      {(provided, snapshot) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.droppableProps}
-                          className={`flex-1 flex flex-col gap-2 rounded-xl min-h-[60px] transition-colors ${
-                            snapshot.isDraggingOver ? "bg-primary/10 outline outline-1 outline-dashed outline-primary/50" : ""
-                          }`}
-                        >
-                          {list.map((idea, index) => (
-                            <Draggable key={idea.id} draggableId={idea.id} index={index}>
-                              {(drag, dragSnap) => (
-                                <div
-                                  ref={drag.innerRef}
-                                  {...drag.draggableProps}
-                                  {...drag.dragHandleProps}
-                                  className={dragSnap.isDragging ? "shadow-2xl rotate-[1.5deg]" : ""}
-                                >
-                                  <PieceCard
-                                    idea={idea}
-                                    category={categoryOf(idea.category_id)}
-                                    onClick={() => onOpenIdea(idea.id)}
-                                  />
-                                </div>
-                              )}
-                            </Draggable>
-                          ))}
-                          {provided.placeholder}
-                        </div>
-                      )}
-                    </Droppable>
-
-                    <button
-                      onClick={() => onNewIdea({ scheduled_date: date })}
-                      className="mt-2 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs text-muted hover:text-foreground hover:bg-white/5 transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Pieza
-                    </button>
+                    {ready.map((idea, index) => (
+                      <Draggable key={idea.id} draggableId={idea.id} index={index}>
+                        {(drag) => (
+                          <div
+                            ref={drag.innerRef}
+                            {...drag.draggableProps}
+                            {...drag.dragHandleProps}
+                            className="w-[210px] shrink-0"
+                          >
+                            <PieceCard
+                              idea={idea}
+                              category={categoryOf(idea.category_id)}
+                              onClick={() => onOpenIdea(idea.id)}
+                            />
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                    {ready.length === 0 && (
+                      <p className="self-center text-sm text-muted px-2">
+                        Nothing waiting: every finished piece already has a date.
+                      </p>
+                    )}
                   </div>
-                );
-              })}
+                )}
+              </Droppable>
             </div>
-
-            {/* Idea bank */}
             <div className="rounded-2xl border border-border bg-background/40 p-3.5 space-y-3">
               <div className="flex items-center justify-between gap-3 flex-wrap px-0.5">
                 <div className="flex items-center gap-2.5">
@@ -330,9 +234,9 @@ export default function PlannerTab({
                   </span>
                   <div>
                     <p className="text-sm font-semibold">
-                      Banco de ideas <span className="text-muted font-normal tabular-nums">· {bank.length}</span>
+                      Idea bank <span className="text-muted font-normal tabular-nums">· {bank.length}</span>
                     </p>
-                    <p className="text-xs text-muted">Arrastra una idea a un día para programarla, o devuélvela aquí.</p>
+                    <p className="text-xs text-muted">Drag an idea onto a day to schedule it, or drop it back here.</p>
                   </div>
                 </div>
                 <button
@@ -340,7 +244,7 @@ export default function PlannerTab({
                   className="flex items-center gap-1.5 h-9 px-3 rounded-xl border border-border text-xs font-semibold text-muted hover:text-foreground hover:border-[#3a3a44] transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Nueva idea
+                  New idea
                 </button>
               </div>
 
@@ -374,16 +278,447 @@ export default function PlannerTab({
                     {provided.placeholder}
                     {bank.length === 0 && (
                       <p className="self-center text-sm text-muted px-2">
-                        El banco está vacío: todas tus ideas en producción ya tienen fecha.
+                        The bank is empty: every idea in production already has a date.
                       </p>
                     )}
                   </div>
                 )}
               </Droppable>
             </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* ===== View toggle + navigation ===== */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex gap-0.5 p-1 rounded-xl bg-surface border border-border">
+            {([
+              { key: "week", label: "Week", icon: CalendarRange },
+              { key: "month", label: "Month", icon: CalendarDays },
+            ] as const).map((v) => (
+              <button
+                key={v.key}
+                onClick={() => setView(v.key)}
+                className={`flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
+                  view === v.key ? "bg-surface-hover text-foreground" : "text-muted hover:text-foreground"
+                }`}
+              >
+                <v.icon className={`w-3.5 h-3.5 ${view === v.key ? "text-primary-hover" : ""}`} />
+                {v.label}
+              </button>
+            ))}
+          </div>
+          {view === "month" ? (
+            <h2 className="text-xl font-extrabold tracking-tight">{monthLabel(monthKey)}</h2>
+          ) : (
+            viewingPast && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-400/10 text-amber-300 text-[11px] font-semibold">
+                <History className="w-3 h-3" />
+                Viewing {weekNumber(selectedWeek)} · past week
+              </span>
+            )
+          )}
+        </div>
+        {view === "week" ? (
+          <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setPastOpen(true)}
+                className={`flex items-center gap-2 h-9 px-3.5 rounded-xl border text-xs font-bold uppercase tracking-wider transition-colors ${
+                  viewingPast
+                    ? "border-amber-400/40 bg-amber-400/10 text-amber-300"
+                    : "border-border bg-surface text-muted hover:text-foreground hover:border-[#3a3a44]"
+                }`}
+              >
+                <History className="w-3.5 h-3.5" />
+                Last weeks
+              </button>
+              {selectedWeek !== currentWeek && (
+                <button
+                  onClick={() => {
+                    setStripStart(currentWeek);
+                    onSelectWeek(currentWeek);
+                  }}
+                  className="h-9 px-3 rounded-xl border border-border bg-surface text-xs font-semibold text-muted hover:text-foreground hover:border-[#3a3a44] transition-colors"
+                >
+                  This week
+                </button>
+              )}
+              <button
+                onClick={() => setStripStart((s) => laterOf(shiftWeek(s, -4), currentWeek))}
+                disabled={stripStart <= currentWeek}
+                className="w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center text-muted hover:text-foreground hover:border-[#3a3a44] transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                aria-label="Back toward this week"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setStripStart((s) => shiftWeek(s, 4))}
+                className="w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center text-muted hover:text-foreground hover:border-[#3a3a44] transition-colors"
+                aria-label="Later weeks"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            {monthKey !== thisMonth && (
+              <button
+                onClick={() => setMonthKey(thisMonth)}
+                className="h-9 px-3 rounded-xl border border-border bg-surface text-xs font-semibold text-muted hover:text-foreground hover:border-[#3a3a44] transition-colors"
+              >
+                Today
+              </button>
+            )}
+            <button
+              onClick={() => setMonthKey((m) => shiftMonth(m, -1))}
+              className="w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center text-muted hover:text-foreground hover:border-[#3a3a44] transition-colors"
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setMonthKey((m) => shiftMonth(m, 1))}
+              className="w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center text-muted hover:text-foreground hover:border-[#3a3a44] transition-colors"
+              aria-label="Next month"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {view === "month" && (
+        <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="space-y-4">
+            <MonthCalendar
+              monthKey={monthKey}
+              today={today}
+              piecesOn={piecesOn}
+              categories={categories}
+              droppablePrefix={DAY}
+              onOpenIdea={onOpenIdea}
+              onNewIdea={(date) => onNewIdea({ scheduled_date: date })}
+              onOpenWeek={(key) => {
+                onSelectWeek(key);
+                setView("week");
+              }}
+            />
+            {bankPanel}
+          </div>
+        </DragDropContext>
+      )}
+
+      {view === "week" && (
+        <>
+      {/* ===== Week strip ===== */}
+      <section className="space-y-3">
+        <div
+          ref={stripRef}
+          className="flex gap-3.5 overflow-x-auto snap-x pb-3 pt-1 -mx-4 px-4 sm:mx-0 sm:px-0"
+        >
+          {stripWeeks.map((key) => (
+            <WeekCard
+              key={key}
+              weekKey={key}
+              week={weekRow(key)}
+              pieces={piecesOfWeek(key)}
+              categories={categories}
+              isCurrent={key === currentWeek}
+              isPast={false}
+              selected={key === selectedWeek}
+              onSelect={() => onSelectWeek(key)}
+            />
+          ))}
+        </div>
+      </section>
+
+      {pastOpen && (
+        <PastWeeksModal
+          currentWeek={currentWeek}
+          selectedWeek={selectedWeek}
+          weeks={weeks}
+          scheduledDates={scheduled.map((i) => i.scheduled_date!)}
+          renderCard={(key) => (
+            <WeekCard
+              key={key}
+              fluid
+              weekKey={key}
+              week={weekRow(key)}
+              pieces={piecesOfWeek(key)}
+              categories={categories}
+              isCurrent={false}
+              isPast={false}
+              selected={key === selectedWeek}
+              onSelect={() => {
+                onSelectWeek(key);
+                setPastOpen(false);
+              }}
+            />
+          )}
+          onClose={() => setPastOpen(false)}
+        />
+      )}
+
+      {/* ===== Selected week ===== */}
+      <section className="relative rounded-3xl border border-border bg-surface overflow-hidden">
+        <span className="absolute -top-32 -left-24 w-96 h-96 rounded-full bg-primary/15 blur-3xl pointer-events-none" />
+        <span className="absolute -bottom-40 right-0 w-96 h-96 rounded-full bg-fuchsia-500/10 blur-3xl pointer-events-none" />
+
+        <div className="relative p-5 sm:p-7 space-y-6">
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5">
+            <div className="space-y-2 min-w-0">
+              <p className="font-mono text-xs tracking-wider text-primary-hover">
+                {selectedWeek}
+                {selectedWeek === currentWeek && " · THIS WEEK"}
+              </p>
+              <h2 className="text-[28px] sm:text-4xl font-extrabold tracking-tight leading-[1.05]">
+                Week {weekNumber(selectedWeek)}{" "}
+                <span className="text-muted font-bold">— {weekRangeLabel(selectedWeek)}</span>
+              </h2>
+              <div className="flex items-center gap-3 pt-1">
+                <div className="w-44 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-400 transition-all"
+                    style={{ width: `${selectedPieces.length ? (selectedDone / selectedPieces.length) * 100 : 0}%` }}
+                  />
+                </div>
+                <span className="text-sm text-muted tabular-nums">
+                  <span className="text-foreground font-semibold">{selectedDone}</span> of {selectedPieces.length} pieces ready
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-1 p-1 rounded-2xl bg-background/60 border border-border self-start lg:self-auto">
+              {WEEK_STATUSES.map((s) => {
+                const active = (week?.status ?? "draft") === s.key && !!week;
+                return (
+                  <button
+                    key={s.key}
+                    onClick={() => studio.saveWeek(selectedWeek, { status: s.key as WeekStatus })}
+                    className={`px-3.5 py-2 rounded-xl text-[13px] font-semibold transition-colors ${
+                      active
+                        ? s.key === "approved"
+                          ? "bg-emerald-400/15 text-emerald-300"
+                          : s.key === "done"
+                          ? "bg-primary/20 text-primary-hover"
+                          : "bg-surface-hover text-foreground"
+                        : "text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <WeekBrief key={selectedWeek} weekKey={selectedWeek} week={week} studio={studio} />
+
+          <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            {/* Days */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-2.5">
+              {days.map((date) => {
+                const d = new Date(`${date}T00:00:00`);
+                const isToday = date === today;
+                const isPastDay = date < today;
+                const list = piecesOn(date);
+                return (
+                  <div
+                    key={date}
+                    className={`flex flex-col rounded-2xl border p-2.5 min-h-[200px] transition-colors ${
+                      isToday
+                        ? "border-primary/60 bg-primary/[0.06]"
+                        : "border-border bg-background/50"
+                    } ${isPastDay && !isToday ? "opacity-75" : ""}`}
+                  >
+                    <div className="flex items-start justify-between px-1 pb-2.5">
+                      <div>
+                        <p className={`text-[10.5px] font-bold uppercase tracking-[0.14em] ${isToday ? "text-primary-hover" : "text-muted"}`}>
+                          {dayShort(d)}
+                        </p>
+                        <p className="flex items-baseline gap-1">
+                          <span className="text-2xl font-extrabold tabular-nums leading-none">{d.getDate()}</span>
+                          <span className="text-xs text-muted">{monthShort(d)}</span>
+                        </p>
+                      </div>
+                      {isToday ? (
+                        <span className="px-1.5 py-0.5 rounded-md bg-primary text-white text-[9.5px] font-bold tracking-wider">TODAY</span>
+                      ) : (
+                        list.length > 0 && (
+                          <span className="text-[11px] text-muted tabular-nums">{list.length}</span>
+                        )
+                      )}
+                    </div>
+
+                    <Droppable droppableId={`${DAY}${date}`}>
+                      {(provided, snapshot) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.droppableProps}
+                          className={`flex-1 flex flex-col gap-2 rounded-xl min-h-[60px] transition-colors ${
+                            snapshot.isDraggingOver ? "bg-primary/10 outline outline-1 outline-dashed outline-primary/50" : ""
+                          }`}
+                        >
+                          {list.map((idea, index) => (
+                            <Draggable key={idea.id} draggableId={idea.id} index={index}>
+                              {(drag, dragSnap) => (
+                                <div
+                                  ref={drag.innerRef}
+                                  {...drag.draggableProps}
+                                  {...drag.dragHandleProps}
+                                  className={dragSnap.isDragging ? "shadow-2xl rotate-[1.5deg]" : ""}
+                                >
+                                  <PieceCard
+                                    idea={idea}
+                                    category={categoryOf(idea.category_id)}
+                                    onClick={() => onOpenIdea(idea.id)}
+                                    posted={studio.publishedIds.has(idea.id)}
+                                  />
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
+                        </div>
+                      )}
+                    </Droppable>
+
+                    <button
+                      onClick={() => onNewIdea({ scheduled_date: date })}
+                      className="mt-2 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs text-muted hover:text-foreground hover:bg-white/5 transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Piece
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {bankPanel}
           </DragDropContext>
         </div>
       </section>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ===== Past weeks, opened from "Last weeks" =====
+
+const PAST_PAGE = 12;
+
+function PastWeeksModal({
+  currentWeek,
+  selectedWeek,
+  weeks,
+  scheduledDates,
+  renderCard,
+  onClose,
+}: {
+  currentWeek: string;
+  selectedWeek: string;
+  weeks: ContentWeekRow[];
+  scheduledDates: string[];
+  renderCard: (weekKey: string) => ReactNode;
+  onClose: () => void;
+}) {
+  const [count, setCount] = useState(PAST_PAGE);
+  const [onlyWithContent, setOnlyWithContent] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // Weeks before this one that have a plan or pieces, however old
+  const withContent = new Set(
+    [...weeks.map((w) => w.week_key), ...scheduledDates.map(weekKeyOfISO)].filter((k) => k < currentWeek)
+  );
+  // The last `count` weeks, plus any older week with content, newest first
+  const recent = Array.from({ length: count }, (_, i) => shiftWeek(currentWeek, -(i + 1)));
+  const oldest = recent[recent.length - 1];
+  const list = [...new Set([...recent, ...[...withContent].filter((k) => k < oldest)])]
+    .filter((k) => !onlyWithContent || withContent.has(k))
+    .sort((a, b) => b.localeCompare(a));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-8" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" />
+      <div
+        className="relative w-full max-w-6xl max-h-[88vh] flex flex-col rounded-3xl border border-border bg-surface shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 px-5 sm:px-7 pt-6 pb-4 border-b border-border">
+          <div>
+            <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
+              <History className="w-3.5 h-3.5" />
+              History
+            </p>
+            <h2 className="text-2xl font-extrabold tracking-tight mt-1">Last weeks</h2>
+            <p className="text-sm text-muted mt-1">
+              {withContent.size} {withContent.size === 1 ? "week" : "weeks"} with a plan or pieces. Click one to open
+              it in the planner.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setOnlyWithContent((v) => !v)}
+              className={`hidden sm:flex items-center gap-2 h-9 px-3 rounded-xl border text-xs font-semibold transition-colors ${
+                onlyWithContent
+                  ? "border-primary/50 bg-primary/15 text-foreground"
+                  : "border-border text-muted hover:text-foreground"
+              }`}
+            >
+              <span
+                className={`w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center ${
+                  onlyWithContent ? "bg-primary border-primary" : "border-muted/60"
+                }`}
+              >
+                {onlyWithContent && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3.5} />}
+              </span>
+              Only with content
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-5 space-y-5">
+          {list.length === 0 ? (
+            <p className="text-sm text-muted text-center py-12">No past week has a plan or pieces yet.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
+              {list.map((key) => renderCard(key))}
+            </div>
+          )}
+          {!onlyWithContent && (
+            <div className="flex justify-center">
+              <button
+                onClick={() => setCount((c) => c + PAST_PAGE)}
+                className="h-10 px-4 rounded-xl border border-border text-sm font-semibold text-muted hover:text-foreground hover:border-[#3a3a44] transition-colors"
+              >
+                Show {PAST_PAGE} more weeks
+              </button>
+            </div>
+          )}
+        </div>
+        {selectedWeek < currentWeek && (
+          <div className="px-5 sm:px-7 py-3 border-t border-border text-xs text-muted">
+            Open now: <span className="text-foreground font-semibold">{weekNumber(selectedWeek)}</span> ·{" "}
+            {weekRangeLabel(selectedWeek)}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -413,16 +748,20 @@ function WeekBrief({
   // Claude plans the week through the NEXUS MCP server (get_content_week /
   // plan_content_week). This copies a ready-to-paste instruction for it.
   async function copyPrompt() {
-    const lines = [`Planea mi semana de contenido ${weekKey} (${weekRangeLabel(weekKey)}) en NEXUS.`];
-    if (title.trim()) lines.push(`Tema de la semana: ${title.trim()}`);
+    const lines = [`Plan my content week ${weekKey} (${weekRangeLabel(weekKey)}) in NEXUS.`];
+    if (title.trim()) lines.push(`Theme of the week: ${title.trim()}`);
     if (goal.trim()) lines.push(`Brief:\n${goal.trim()}`);
     lines.push(
       "",
-      "Primero lee mi contexto de contenido con get_content_context (voz, audiencia, pilares, aprendizajes). " +
-        `Luego usa get_content_week con week_key "${weekKey}" para ver lo que ya está programado y el banco de ideas. ` +
-        "Después usa plan_content_week para programar las piezas día por día (con hook, formato, descripción y guion), " +
-        "reutilizando ideas del banco cuando encajen. Déjala en estado borrador para que yo la apruebe."
+      "First read my content context with get_content_context (voice, audience, pillars, learnings). " +
+        `Then use get_content_week with week_key "${weekKey}" to see what is already scheduled and the idea bank. ` +
+        "Then use plan_content_week to schedule the pieces day by day (with hook, format, description and script), " +
+        "reusing finished pieces and ideas from the bank when they fit. Follow my weekly rhythm (Mon animated video, " +
+        "Wed carousel, Thu animated video, Sat human reel, Sun weekly news). Never schedule ideas marked do_not_publish. " +
+        "Write the content itself in Spanish, as the context says. Leave the week as a draft for me to approve."
     );
+    const metrics = metricsSummary(studio.publications, studio.ideas);
+    if (metrics) lines.push("", metrics, "Lean on what performs best.");
     try {
       await navigator.clipboard.writeText(lines.join("\n"));
       setCopied(true);
@@ -435,42 +774,42 @@ function WeekBrief({
   return (
     <div className="grid lg:grid-cols-[1fr_1.4fr_auto] gap-3">
       <div className="rounded-2xl border border-border bg-background/50 p-3.5 space-y-1.5">
-        <label className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-muted">Tema de la semana</label>
+        <label className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-muted">Theme of the week</label>
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onBlur={() => save({ title: title.trim() })}
           onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-          placeholder="Ej. Semana de lanzamiento"
+          placeholder="e.g. Launch week"
           className="w-full bg-transparent text-lg font-semibold outline-none placeholder:text-muted/50"
         />
       </div>
       <div className="rounded-2xl border border-border bg-background/50 p-3.5 space-y-1.5">
         <label className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-muted">
           <Sparkles className="w-3 h-3 text-primary-hover" />
-          Brief · objetivo, audiencia, ángulo
+          Brief · goal, audience, angle
         </label>
         <textarea
           rows={2}
           value={goal}
           onChange={(e) => setGoal(e.target.value)}
           onBlur={() => save({ goal })}
-          placeholder="Qué quieres lograr esta semana. Esto es lo que lee la IA para planear."
+          placeholder="What you want this week to achieve. This is what the AI reads to plan."
           className="w-full bg-transparent text-sm outline-none resize-none placeholder:text-muted/50 leading-relaxed"
         />
       </div>
       <button
         onClick={copyPrompt}
         className="group relative flex lg:flex-col items-center justify-center gap-2 px-5 py-3.5 rounded-2xl text-sm font-semibold text-white overflow-hidden bg-gradient-to-br from-primary to-fuchsia-500 hover:brightness-110 transition-all lg:w-44"
-        title="Copia una instrucción para pegar en Claude (usa las herramientas de NEXUS)"
+        title="Copies an instruction to paste into Claude (it uses the NEXUS tools)"
       >
         {copied ? <Check className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
         <span className="text-center leading-tight">
-          {copied ? "Prompt copiado" : "Planear con IA"}
+          {copied ? "Prompt copied" : "Plan with AI"}
         </span>
         <span className="hidden lg:flex items-center gap-1 text-[10.5px] font-medium text-white/75">
           {copied ? <CalendarDays className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-          {copied ? "pégalo en Claude" : "copia el prompt"}
+          {copied ? "paste it into Claude" : "copies the prompt"}
         </span>
       </button>
     </div>

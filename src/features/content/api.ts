@@ -4,6 +4,7 @@ import type {
   ContentIdeaRow,
   ContentWeekRow,
   IdeaFields,
+  PublicationRow,
   WeekStatus,
 } from "./types";
 
@@ -29,8 +30,11 @@ function normalizeIdea(row: Record<string, unknown>): ContentIdeaRow {
     script: r.script ?? "",
     hook: r.hook ?? "",
     format: r.format ?? "",
+    style: r.style ?? "",
     scheduled_date: r.scheduled_date ?? null,
     schedule_order: r.schedule_order ?? 0,
+    // Column added by BLOQUE 23 of PENDIENTE.sql; false until it exists
+    do_not_publish: r.do_not_publish ?? false,
   };
 }
 
@@ -208,4 +212,49 @@ export async function upsertContentWeek(
     .single();
   if (error) throw error;
   return data as ContentWeekRow;
+}
+
+// ============================================
+// PUBLICATIONS (content_publications)
+// ============================================
+
+export async function getPublications(): Promise<PublicationRow[]> {
+  const { data, error } = await supabase
+    .from("content_publications")
+    .select("*")
+    .order("published_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as PublicationRow[];
+}
+
+export async function addPublications(
+  ideaId: string,
+  entries: { platform: string; published_at: string; url: string }[]
+): Promise<PublicationRow[]> {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("content_publications")
+    .insert(entries.map((e) => ({ user_id: user.id, idea_id: ideaId, ...e })))
+    .select("*");
+  if (error) throw error;
+  return (data ?? []) as PublicationRow[];
+}
+
+export async function updatePublication(
+  id: string,
+  fields: Partial<Omit<PublicationRow, "id" | "idea_id" | "created_at">>
+): Promise<PublicationRow> {
+  const { data, error } = await supabase
+    .from("content_publications")
+    .update(fields)
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as PublicationRow;
+}
+
+export async function deletePublication(id: string): Promise<void> {
+  const { error } = await supabase.from("content_publications").delete().eq("id", id);
+  if (error) throw error;
 }

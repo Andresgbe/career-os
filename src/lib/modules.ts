@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Bike, Stethoscope, Video, GraduationCap, Laptop, Landmark, KeyRound, BookMarked, ShieldCheck } from "lucide-react";
+import { Bike, Stethoscope, Video, GraduationCap, Laptop, Landmark, KeyRound, ShieldCheck, Brain, Radar } from "lucide-react";
 
 export interface ModuleDef {
   id: string;
@@ -40,6 +40,12 @@ export const MODULES: ModuleDef[] = [
     icon: Laptop,
   },
   {
+    id: "pipeline",
+    name: "Pipeline",
+    path: "/pipeline",
+    icon: Radar,
+  },
+  {
     id: "finance",
     name: "Finance",
     path: "/finance",
@@ -50,12 +56,6 @@ export const MODULES: ModuleDef[] = [
     name: "Passwords",
     path: "/passwords",
     icon: KeyRound,
-  },
-  {
-    id: "knowledge",
-    name: "Knowledge",
-    path: "/knowledge",
-    icon: BookMarked,
   },
   // Future modules go here
 ];
@@ -68,4 +68,15 @@ export const ADMIN_MODULE: ModuleDef = {
   name: "Admin",
   path: "/admin",
   icon: ShieldCheck,
+};
+
+// BRAIN tampoco es un módulo: es una página fija, solo del admin, que va
+// siempre al lado de Admin en la barra. No entra en MODULES para que no se
+// pueda mover, agrupar ni dar permisos sobre ella. La leen los agentes por
+// MCP (herramientas `brain` / `brain_write`).
+export const BRAIN_MODULE: ModuleDef = {
+  id: "brain",
+  name: "BRAIN",
+  path: "/brain",
+  icon: Brain,
 };

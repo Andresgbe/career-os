@@ -1,6 +1,6 @@
-import { Check } from "lucide-react";
+import { Check, Send } from "lucide-react";
 import type { CategoryRow, ContentIdeaRow } from "../types";
-import { STATUS_STEPS, formatLabel, isDone } from "../types";
+import { STATUS_STEPS, formatLabel, isDone, styleOf } from "../types";
 import FormatIcon from "./FormatIcon";
 import { NO_CATEGORY_COLOR } from "./visuals";
 
@@ -10,10 +10,12 @@ export default function PieceCard({
   idea,
   category,
   onClick,
+  posted = false,
 }: {
   idea: ContentIdeaRow;
   category?: CategoryRow;
   onClick: () => void;
+  posted?: boolean;
 }) {
   const accent = category?.color ?? NO_CATEGORY_COLOR;
   const done = isDone(idea);
@@ -33,8 +35,16 @@ export default function PieceCard({
         <span style={{ color: accent }}>
           <FormatIcon format={idea.format} className="w-3 h-3" />
         </span>
-        <span className="truncate">{formatLabel(idea.format) || category?.name || "Idea"}</span>
-        {done && (
+        <span className="truncate">
+          {[formatLabel(idea.format), styleOf(idea.style)?.label].filter(Boolean).join(" · ") || category?.name || "Idea"}
+        </span>
+        {posted && (
+          <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-400/15 text-emerald-300 text-[9.5px] font-bold">
+            <Send className="w-2.5 h-2.5" />
+            POSTED
+          </span>
+        )}
+        {done && !posted && (
           <span className="ml-auto w-4 h-4 shrink-0 rounded-full bg-emerald-400 text-background flex items-center justify-center">
             <Check className="w-2.5 h-2.5" strokeWidth={3.5} />
           </span>
@@ -44,7 +54,7 @@ export default function PieceCard({
       <p className="text-[13px] font-semibold leading-snug line-clamp-3 break-words">{idea.title}</p>
 
       {!done && (
-        <div className="flex gap-1" title={STATUS_STEPS.map((s) => `${s.label}: ${idea[s.key] ? "sí" : "no"}`).join(" · ")}>
+        <div className="flex gap-1" title={STATUS_STEPS.map((s) => `${s.label}: ${idea[s.key] ? "yes" : "no"}`).join(" · ")}>
           {STATUS_STEPS.map((s) => (
             <span
               key={s.key}

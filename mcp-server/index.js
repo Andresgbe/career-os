@@ -11,9 +11,11 @@ import { createClient } from "@supabase/supabase-js";
 import * as z from "zod";
 import dotenv from "dotenv";
 
+import { registerCrudTools } from "./crud.js";
+
 // Load .env sitting next to this file — the server's working directory is
 // wherever Claude Code launched it from, which is usually not this folder.
-dotenv.config({ path: new URL(".env", import.meta.url) });
+dotenv.config({ path: new URL(".env", import.meta.url), quiet: true });
 
 // ============================================
 // SUPABASE
@@ -122,6 +124,7 @@ const SECTIONS = [
   "content",
   "grades",
   "projects",
+  "pipeline",
   "finance",
   "passwords",
 ];
@@ -161,15 +164,15 @@ server.registerTool(
         soft("projects", supabase.from("personal_projects").select("*")),
       ]);
 
-    // Index of the knowledge base, so Claude knows what personal context
-    // exists and can pull the full text with the `knowledge` tool.
+    // Index of BRAIN, so Claude knows what context exists and pulls the
+    // full text with the `brain` tool.
     const kbFolders = await soft(
       "knowledge_folders",
-      supabase.from("knowledge_folders").select("id,name").order("sort_order")
+      supabase.from("knowledge_folders").select("id,name,section").order("sort_order")
     );
     const kbDocs = await soft(
       "knowledge_docs",
-      supabase.from("knowledge_docs").select("title,folder_id")
+      supabase.from("knowledge_docs").select("title,folder_id,section")
     );
 
     const notes = [schedule, ideas, evals, subjects, projects]
@@ -208,20 +211,20 @@ server.registerTool(
       }));
 
     const kbFolderName = new Map((kbFolders.data ?? []).map((f) => [f.id, f.name]));
-    const baseDeConocimiento = {};
-    for (const d of kbDocs.data ?? []) {
+    const brainIndex = {};
+    for (const d of (kbDocs.data ?? []).filter((x) => x.section === "brain")) {
       const key = d.folder_id ? kbFolderName.get(d.folder_id) ?? "?" : "Sin carpeta";
-      (baseDeConocimiento[key] ??= []).push(d.title);
+      (brainIndex[key] ??= []).push(d.title);
     }
 
     return ok({
       hoy: today,
-      base_de_conocimiento: Object.keys(baseDeConocimiento).length
+      brain: Object.keys(brainIndex).length
         ? {
-            ...baseDeConocimiento,
-            nota: 'Usa la herramienta "knowledge" para leer el contenido completo.',
+            ...brainIndex,
+            nota: 'Contexto principal de Andrés (quién es, salud, agencia, universidad, finanzas...). Abre lo que necesites con la herramienta "brain" antes de trabajar.',
           }
-        : "vacía",
+        : "vacío",
       clases_de_hoy: todaysClasses,
       evaluaciones_proximas: upcomingEvals,
       ideas_de_contenido_abiertas: openIdeas.slice(0, 15),
@@ -317,6 +320,7 @@ server.registerTool(
         grabado: !!i.recorded,
         editado: !!i.edited,
         tiene_script: !!(i.script && i.script.trim()),
+        no_publicar: !!i.do_not_publish,
         hook: i.hook || null,
         formato: i.format || null,
         fecha: i.scheduled_date ?? null,
@@ -383,6 +387,30 @@ server.registerTool(
 // ============================================
 
 const FORMAT_KEYS = ["reel", "carrusel", "post", "historia", "video", "texto"];
+const STYLE_KEYS = ["animado", "humano", "noticia", "foto"];
+
+// Average views / saves per post, by format and by style, over publications
+// that have the number (metrics are entered by hand in NEXUS).
+function metricsByGroup(pubs, ideas) {
+  const withViews = pubs.filter((p) => typeof p.views === "number");
+  if (!withViews.length) return "sin datos todavía";
+  const ideaOf = new Map(ideas.map((i) => [i.id, i]));
+  const avg = (rows, k) => {
+    const v = rows.map((r) => r[k]).filter((x) => typeof x === "number");
+    return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null;
+  };
+  const group = (field) => {
+    const g = {};
+    for (const p of pubs) {
+      const key = ideaOf.get(p.idea_id)?.[field] || "sin definir";
+      (g[key] ??= []).push(p);
+    }
+    return Object.fromEntries(
+      Object.entries(g).map(([k, rows]) => [k, { posts: rows.length, vistas_prom: avg(rows, "views"), guardados_prom: avg(rows, "saves") }])
+    );
+  };
+  return { por_formato: group("format"), por_estilo: group("style") };
+}
 const pad2 = (n) => String(n).padStart(2, "0");
 const isoDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const parseDate = (s) => {
@@ -429,14 +457,18 @@ server.registerTool(
     const key = week_key ?? weekKeyOfDate(parseDate(caracasToday().date));
     const dates = weekDates(key);
 
-    const [{ data: cats }, { data: ideas, error }, weekRes] = await Promise.all([
+    const [{ data: cats }, { data: ideas, error }, weekRes, pubRes] = await Promise.all([
       supabase.from("content_categories").select("id,name"),
       supabase.from("content_ideas").select("*"),
       soft(
         "content_weeks",
         supabase.from("content_weeks").select("*").eq("week_key", key).maybeSingle()
       ),
+      soft("content_publications", supabase.from("content_publications").select("*")),
     ]);
+    const pubs = pubRes.error ? [] : pubRes.data;
+    const postedOn = new Map();
+    for (const p of pubs) postedOn.set(p.idea_id, [...(postedOn.get(p.idea_id) ?? []), p.platform]);
     if (error) throw new Error(error.message);
     const catName = new Map((cats ?? []).map((c) => [c.id, c.name]));
     const piece = (i) => ({
@@ -444,6 +476,8 @@ server.registerTool(
       title: i.title,
       hook: i.hook || null,
       formato: i.format || null,
+      estilo: i.style || null,
+      publicada_en: postedOn.get(i.id) ?? [],
       categoria: i.category_id ? catName.get(i.category_id) ?? null : null,
       descripcion: i.description || null,
       guion: !!i.script_done,
@@ -468,10 +502,16 @@ server.registerTool(
           .sort((a, b) => (a.schedule_order ?? 0) - (b.schedule_order ?? 0))
           .map(piece),
       })),
+      // Pieces marked do_not_publish never show up here (they reveal his
+      // stack or client process).
+      listas_para_publicar: all
+        .filter((i) => !i.scheduled_date && i.script_done && i.recorded && i.edited && !i.do_not_publish)
+        .map(piece),
       banco_de_ideas: all
-        .filter((i) => !i.scheduled_date && !(i.script_done && i.recorded && i.edited))
+        .filter((i) => !i.scheduled_date && !(i.script_done && i.recorded && i.edited) && !i.do_not_publish)
         .map(piece),
       categorias: [...catName.values()],
+      metricas: metricsByGroup(pubs, all),
       formatos: FORMAT_KEYS,
     });
   })
@@ -498,6 +538,7 @@ server.registerTool(
             title: z.string().optional().describe("Obligatorio si no hay idea_id"),
             hook: z.string().optional(),
             format: z.enum(FORMAT_KEYS).optional(),
+            style: z.enum(STYLE_KEYS).optional().describe("Cómo se produce: animado | humano | noticia | foto"),
             description: z.string().optional(),
             script: z.string().optional(),
             category: z.string().optional().describe("Nombre de una categoría existente"),
@@ -519,6 +560,18 @@ server.registerTool(
     }
     if (list.some((p) => !p.idea_id && !p.title)) {
       return fail("Cada pieza nueva necesita title.");
+    }
+    const ids = list.map((p) => p.idea_id).filter(Boolean);
+    if (ids.length) {
+      const { data: rows, error } = await supabase.from("content_ideas").select("*").in("id", ids);
+      if (error) throw new Error(error.message);
+      const blocked = (rows ?? []).filter((r) => r.do_not_publish);
+      if (blocked.length) {
+        return fail(
+          "Estas ideas están marcadas como 'no publicar' y no se pueden programar: " +
+            blocked.map((r) => r.title).join(", ")
+        );
+      }
     }
 
     const weekFields = {};
@@ -565,6 +618,7 @@ server.registerTool(
       if (p.title !== undefined) fields.title = p.title;
       if (p.hook !== undefined) fields.hook = p.hook;
       if (p.format !== undefined) fields.format = p.format;
+      if (p.style !== undefined) fields.style = p.style;
       if (p.description !== undefined) fields.description = p.description;
       if (p.script !== undefined) fields.script = p.script;
       const category = catId(p.category);
@@ -747,6 +801,388 @@ server.registerTool(
   })
 );
 
+// ============================================
+// BRAIN
+// The fixed BRAIN page in NEXUS: knowledge_folders / knowledge_docs rows
+// with section = 'brain'. It's the single source of context agents read
+// before working. Filtered client-side, like the content context.
+// ============================================
+
+const BRAIN_SECTION = "brain";
+
+async function loadBrain(supabase) {
+  const [{ data: folders, error: fErr }, { data: docs, error: dErr }] =
+    await Promise.all([
+      supabase.from("knowledge_folders").select("*").order("sort_order"),
+      supabase.from("knowledge_docs").select("*").order("sort_order"),
+    ]);
+  if (fErr) throw new Error(fErr.message);
+  if (dErr) throw new Error(dErr.message);
+  return {
+    folders: (folders ?? []).filter((f) => f.section === BRAIN_SECTION),
+    docs: (docs ?? []).filter((d) => d.section === BRAIN_SECTION),
+  };
+}
+
+const wordCount = (t) => (t && t.trim() ? t.trim().split(/\s+/).length : 0);
+
+server.registerTool(
+  "brain",
+  {
+    description:
+      "BRAIN: la fuente única de contexto de Andrés (documentos markdown en " +
+      "carpetas: quién es, su negocio AG, clientes, procesos, reglas para " +
+      "agentes). LÉELO ANTES DE TRABAJAR en vez de preguntarle lo que ya está " +
+      "escrito. Sin argumentos devuelve el índice (barato); luego pide solo lo " +
+      "que necesites: doc (título exacto o parcial), folder (carpeta completa), " +
+      "search (texto en títulos y contenido) o full:true (todo, úsalo poco).",
+    inputSchema: z.object({
+      doc: z.string().optional().describe("Título exacto o parcial de un documento"),
+      folder: z.string().optional().describe("Nombre de carpeta: devuelve todos sus documentos completos"),
+      search: z.string().optional().describe("Busca en títulos y contenido; devuelve coincidencias con un fragmento"),
+      full: z.boolean().optional().describe("Devuelve TODO BRAIN completo"),
+    }),
+  },
+  tool(async ({ doc, folder, search, full }) => {
+    const { supabase } = await getSession();
+    const { folders, docs } = await loadBrain(supabase);
+    const folderName = new Map(folders.map((f) => [f.id, f.name]));
+    const asDoc = (d) => ({
+      titulo: d.title,
+      carpeta: d.folder_id ? folderName.get(d.folder_id) ?? "?" : "Sin carpeta",
+      contenido: d.content,
+      actualizado: d.updated_at,
+    });
+
+    if (folders.length === 0 && docs.length === 0) {
+      return ok("BRAIN está vacío. Pídele a Andrés que lo llene desde la página BRAIN de NEXUS, o propón crear documentos con brain_write.");
+    }
+
+    if (doc) {
+      const needle = doc.toLowerCase();
+      const exact = docs.filter((d) => d.title.toLowerCase() === needle);
+      const found = exact.length ? exact : docs.filter((d) => d.title.toLowerCase().includes(needle));
+      if (!found.length) {
+        throw new Error(`No hay documento que coincida con "${doc}". Títulos: ${docs.map((d) => d.title).join(", ")}`);
+      }
+      return ok(found.map(asDoc));
+    }
+
+    if (folder) {
+      const match = folders.find((f) => f.name.toLowerCase() === folder.toLowerCase()) ??
+        folders.find((f) => f.name.toLowerCase().includes(folder.toLowerCase()));
+      if (!match) {
+        throw new Error(`No existe la carpeta "${folder}". Carpetas: ${folders.map((f) => f.name).join(", ")}`);
+      }
+      return ok(docs.filter((d) => d.folder_id === match.id).map(asDoc));
+    }
+
+    if (search) {
+      const needle = search.toLowerCase();
+      const hits = docs
+        .filter((d) => d.title.toLowerCase().includes(needle) || (d.content ?? "").toLowerCase().includes(needle))
+        .map((d) => {
+          const flat = (d.content ?? "").replace(/\s+/g, " ");
+          const at = flat.toLowerCase().indexOf(needle);
+          const fragment = at === -1 ? flat.slice(0, 160) : flat.slice(Math.max(0, at - 80), at + needle.length + 80);
+          return {
+            titulo: d.title,
+            carpeta: d.folder_id ? folderName.get(d.folder_id) ?? "?" : "Sin carpeta",
+            fragmento: fragment,
+          };
+        });
+      return ok({ busqueda: search, resultados: hits, nota: hits.length ? 'Abre el que necesites con doc: "<título>".' : "Sin coincidencias." });
+    }
+
+    if (full) return ok(docs.map(asDoc));
+
+    // Index only, so the first call stays cheap
+    const index = (fid) =>
+      docs
+        .filter((d) => (d.folder_id ?? null) === fid)
+        .map((d) => ({ titulo: d.title, palabras: wordCount(d.content), actualizado: d.updated_at }));
+    return ok({
+      carpetas: folders.map((f) => ({ carpeta: f.name, documentos: index(f.id) })),
+      ...(docs.some((d) => !d.folder_id) ? { sin_carpeta: index(null) } : {}),
+      nota: 'Pide el contenido con doc: "<título>", folder: "<carpeta>" o search: "<texto>".',
+    });
+  })
+);
+
+server.registerTool(
+  "brain_write",
+  {
+    description:
+      "Crea o actualiza un documento de BRAIN. Si ya existe un documento con " +
+      "ese título lo sobrescribe (o le agrega al final con append); si no, lo " +
+      "crea en la carpeta indicada, creando la carpeta si hace falta. Úsalo " +
+      "solo para contexto duradero y dile a Andrés qué guardaste.",
+    inputSchema: z.object({
+      title: z.string(),
+      content: z.string().describe("Contenido en markdown"),
+      folder: z.string().optional().describe("Carpeta destino por nombre"),
+      append: z.boolean().optional().describe("Agrega al final en vez de sobrescribir"),
+    }),
+  },
+  tool(async ({ title, content, folder, append }) => {
+    const { supabase, userId } = await getSession();
+    const { folders, docs } = await loadBrain(supabase);
+
+    const existing = docs.find((d) => d.title.toLowerCase() === title.toLowerCase());
+    if (existing) {
+      const next = append ? `${existing.content}\n\n${content}`.trim() : content;
+      const { error } = await supabase
+        .from("knowledge_docs")
+        .update({ content: next, updated_at: new Date().toISOString() })
+        .eq("id", existing.id);
+      if (error) throw new Error(error.message);
+      return ok(`Documento de BRAIN "${existing.title}" ${append ? "ampliado" : "actualizado"}.`);
+    }
+
+    let folderId = null;
+    if (folder) {
+      const match = folders.find((f) => f.name.toLowerCase() === folder.toLowerCase());
+      if (match) {
+        folderId = match.id;
+      } else {
+        const { data, error } = await supabase
+          .from("knowledge_folders")
+          .insert({
+            user_id: userId,
+            name: folder,
+            color: "#8b5cf6",
+            sort_order: folders.length,
+            section: BRAIN_SECTION,
+          })
+          .select("id")
+          .single();
+        if (error) throw new Error(error.message);
+        folderId = data.id;
+      }
+    }
+
+    const { error } = await supabase.from("knowledge_docs").insert({
+      user_id: userId,
+      folder_id: folderId,
+      title,
+      content,
+      sort_order: docs.filter((d) => d.folder_id === folderId).length,
+      section: BRAIN_SECTION,
+    });
+    if (error) throw new Error(error.message);
+    return ok(`Documento de BRAIN "${title}" creado${folder ? ` en ${folder}` : ""}.`);
+  })
+);
+
+// ============================================
+// PIPELINE — client follow-up ("el guardián del pipeline")
+// Stages have a rule (max days without movement) and a follow-up template;
+// the guardian flags deals past their rule. Agents review and edit deals
+// here, and every change is logged in pipeline_activity with actor 'agent'.
+// Agents NEVER send messages: they propose (suggested_message) and Andrés
+// approves and sends.
+// ============================================
+
+const DAY_MS = 86400000;
+const daysSinceIso = (iso) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / DAY_MS));
+
+function dealHealth(deal, stage) {
+  if (!stage || deal.status !== "open") return "a tiempo";
+  const days = daysSinceIso(deal.last_activity_at);
+  if (days > stage.max_days) return "necesita atención";
+  if (days >= Math.max(1, stage.max_days)) return "vigilar";
+  return "a tiempo";
+}
+
+function proposedFollowUp(deal, stage) {
+  if ((deal.suggested_message ?? "").trim()) return deal.suggested_message;
+  const first = (deal.name ?? "").trim().split(/\s+/)[0] ?? "";
+  return (stage?.message_template ?? "").replace(/\{nombre\}/gi, first);
+}
+
+async function loadPipeline(supabase) {
+  const [{ data: stages, error: e1 }, { data: deals, error: e2 }] = await Promise.all([
+    supabase.from("pipeline_stages").select("*").order("sort_order"),
+    supabase.from("pipeline_deals").select("*").order("sort_order"),
+  ]);
+  if (e1 || e2) throw new Error((e1 || e2).message);
+  return { stages: stages ?? [], deals: deals ?? [] };
+}
+
+server.registerTool(
+  "pipeline_review",
+  {
+    description:
+      "Revisión del guardián del pipeline de clientes de Andrés (módulo Pipeline de NEXUS). " +
+      "Devuelve las etapas con su regla (máximo de días sin movimiento) y cada oportunidad abierta " +
+      "con días sin movimiento, estado (a tiempo / vigilar / necesita atención), cuántos días se pasó " +
+      "y el mensaje de seguimiento propuesto. Úsalo antes de pipeline_update. Nunca envíes mensajes " +
+      "a clientes: propón el texto y Andrés decide.",
+    inputSchema: z.object({
+      include_closed: z.boolean().optional().describe("Incluir oportunidades ganadas/perdidas"),
+    }),
+  },
+  tool(async ({ include_closed }) => {
+    const { supabase } = await getSession();
+    const { stages, deals } = await loadPipeline(supabase);
+    const stageById = new Map(stages.map((s) => [s.id, s]));
+    const rows = deals
+      .filter((d) => include_closed || d.status === "open")
+      .map((d) => {
+        const st = stageById.get(d.stage_id);
+        const days = daysSinceIso(d.last_activity_at);
+        return {
+          id: d.id,
+          cliente: d.name,
+          empresa: d.company || null,
+          contacto: d.contact || null,
+          canal: d.channel,
+          etapa: st?.name ?? null,
+          estado: d.status === "open" ? dealHealth(d, st) : d.status === "won" ? "ganada" : "perdida",
+          dias_sin_movimiento: days,
+          se_paso_por: st ? Math.max(0, days - st.max_days) : 0,
+          ultima_novedad: d.note || null,
+          valor: d.value === null ? null : `${d.value} ${d.currency}`,
+          mensaje_propuesto: d.status === "open" ? proposedFollowUp(d, st) : null,
+        };
+      })
+      .sort((a, b) => b.se_paso_por - a.se_paso_por);
+    return ok({
+      etapas: stages.map((s) => ({ etapa: s.name, maximo_dias: s.max_days, regla: s.rule })),
+      resumen: {
+        necesita_atencion: rows.filter((r) => r.estado === "necesita atención").length,
+        vigilar: rows.filter((r) => r.estado === "vigilar").length,
+        abiertas: deals.filter((d) => d.status === "open").length,
+      },
+      oportunidades: rows,
+    });
+  })
+);
+
+server.registerTool(
+  "pipeline_update",
+  {
+    description:
+      "Crea o modifica una oportunidad del pipeline de clientes. Identifícala con deal_id o por nombre " +
+      "(name, exacto o parcial). Con create:true la crea si no existe. Puedes cambiar la etapa (por nombre), " +
+      "la nota de lo último que pasó, contacto, canal, valor, el mensaje de seguimiento sugerido, marcarla " +
+      "ganada/perdida, o reiniciar el reloj (touched:true) cuando hubo movimiento real con el cliente. " +
+      "Todo queda en el historial como hecho por un agente. NO envía mensajes.",
+    inputSchema: z.object({
+      deal_id: z.string().optional(),
+      name: z.string().optional().describe("Nombre del cliente; para buscar o para crear"),
+      create: z.boolean().optional().describe("Crear la oportunidad si no existe"),
+      stage: z.string().optional().describe("Nombre de la etapa destino"),
+      note: z.string().optional().describe("Lo último que pasó, ej. 'Pidió la propuesta'"),
+      company: z.string().optional(),
+      contact: z.string().optional().describe("Teléfono, email o @usuario"),
+      channel: z.enum(["whatsapp", "email", "instagram", "linkedin", "llamada", "otro"]).optional(),
+      value: z.number().optional(),
+      currency: z.string().optional(),
+      suggested_message: z.string().optional().describe("Mensaje de seguimiento propuesto (Andrés decide si lo envía)"),
+      touched: z.boolean().optional().describe("Hubo movimiento real hoy: reinicia el contador de días"),
+      status: z.enum(["open", "won", "lost"]).optional(),
+      log: z.string().optional().describe("Nota extra para el historial"),
+    }),
+  },
+  tool(async (args) => {
+    const { supabase, userId } = await getSession();
+    const { stages, deals } = await loadPipeline(supabase);
+    const stageByName = (n) =>
+      stages.find((s) => s.name.toLowerCase() === n.toLowerCase()) ??
+      stages.find((s) => s.name.toLowerCase().includes(n.toLowerCase()));
+
+    let deal = args.deal_id ? deals.find((d) => d.id === args.deal_id) : null;
+    if (!deal && args.name) {
+      const needle = args.name.toLowerCase();
+      const exact = deals.filter((d) => d.name.toLowerCase() === needle);
+      const partial = deals.filter((d) => d.name.toLowerCase().includes(needle));
+      const found = exact.length ? exact : partial;
+      if (found.length > 1) {
+        return fail(`"${args.name}" coincide con varias: ${found.map((d) => `${d.name} (${d.id})`).join(", ")}. Usa deal_id.`);
+      }
+      deal = found[0] ?? null;
+    }
+
+    let stageId;
+    if (args.stage) {
+      const st = stageByName(args.stage);
+      if (!st) return fail(`No existe la etapa "${args.stage}". Etapas: ${stages.map((s) => s.name).join(", ")}`);
+      stageId = st.id;
+    }
+
+    const fields = {};
+    for (const k of ["note", "company", "contact", "channel", "value", "currency", "suggested_message", "status"]) {
+      if (args[k] !== undefined) fields[k] = args[k];
+    }
+    if (stageId) fields.stage_id = stageId;
+    const now = new Date().toISOString();
+    // Moving to another stage or a real touch restarts the clock
+    if (args.touched || (stageId && deal && stageId !== deal.stage_id)) fields.last_activity_at = now;
+
+    const changes = [];
+    if (!deal) {
+      if (!args.create || !args.name) {
+        return fail(`No encontré la oportunidad${args.name ? ` "${args.name}"` : ""}. Usa create:true con name para crearla.`);
+      }
+      const sid = stageId ?? stages[0]?.id ?? null;
+      const { data, error } = await supabase
+        .from("pipeline_deals")
+        .insert({
+          user_id: userId,
+          name: args.name,
+          ...fields,
+          stage_id: sid,
+          last_activity_at: fields.last_activity_at ?? now,
+          sort_order: deals.filter((d) => d.stage_id === sid).length,
+        })
+        .select("*")
+        .single();
+      if (error) throw new Error(error.message);
+      deal = data;
+      changes.push(`Creada en ${stages.find((s) => s.id === sid)?.name ?? "—"}`);
+    } else if (Object.keys(fields).length) {
+      const { data, error } = await supabase
+        .from("pipeline_deals")
+        .update({ ...fields, updated_at: now })
+        .eq("id", deal.id)
+        .select("*")
+        .single();
+      if (error) throw new Error(error.message);
+      if (fields.stage_id && fields.stage_id !== deal.stage_id) {
+        changes.push(`${stages.find((s) => s.id === deal.stage_id)?.name ?? "—"} → ${stages.find((s) => s.id === fields.stage_id)?.name}`);
+      }
+      if (fields.note) changes.push(fields.note);
+      if (fields.suggested_message) changes.push("Propuso un mensaje de seguimiento");
+      if (fields.status) changes.push(fields.status === "won" ? "Ganada" : fields.status === "lost" ? "Perdida" : "Reabierta");
+      if (args.touched) changes.push("Hubo movimiento: reloj reiniciado");
+      const rest = Object.keys(fields).filter((k) => !["stage_id", "note", "suggested_message", "status", "last_activity_at"].includes(k));
+      if (rest.length) changes.push(`Editó: ${rest.join(", ")}`);
+      deal = data;
+    }
+    if (args.log) changes.push(args.log);
+
+    if (changes.length) {
+      const { error } = await supabase.from("pipeline_activity").insert({
+        user_id: userId,
+        deal_id: deal.id,
+        kind: "agent",
+        body: changes.join(" · "),
+        actor: "agent",
+      });
+      if (error) throw new Error(error.message);
+    }
+    const st = stages.find((s) => s.id === deal.stage_id);
+    return ok({
+      id: deal.id,
+      cliente: deal.name,
+      etapa: st?.name ?? null,
+      estado: deal.status === "open" ? dealHealth(deal, st) : deal.status,
+      cambios: changes.length ? changes : ["sin cambios"],
+    });
+  })
+);
+
 server.registerTool(
   "get_schedule",
   {
@@ -871,154 +1307,6 @@ server.registerTool(
 );
 
 server.registerTool(
-  "knowledge",
-  {
-    description:
-      "SU BASE DE CONOCIMIENTO: documentos markdown con quién es, su salud, " +
-      "su agencia, etc. Léelo antes de responder cualquier cosa personal " +
-      "(peso, salud, preferencias, clientes) en vez de preguntárselo. " +
-      "Sin argumentos devuelve el índice; con folder o doc devuelve el " +
-      "contenido completo.",
-    inputSchema: z.object({
-      folder: z
-        .string()
-        .optional()
-        .describe('Nombre de carpeta, ej. "Salud". Devuelve sus documentos completos'),
-      doc: z.string().optional().describe("Título exacto o parcial de un documento"),
-      full: z
-        .boolean()
-        .optional()
-        .describe("Devuelve TODOS los documentos completos (útil al empezar)"),
-    }),
-  },
-  tool(async ({ folder, doc, full }) => {
-    const { supabase } = await getSession();
-    const [{ data: folders, error: fErr }, { data: docs, error: dErr }] =
-      await Promise.all([
-        supabase.from("knowledge_folders").select("*").order("sort_order"),
-        supabase.from("knowledge_docs").select("*").order("sort_order"),
-      ]);
-    if (fErr) throw new Error(fErr.message);
-    if (dErr) throw new Error(dErr.message);
-
-    const folderName = new Map((folders ?? []).map((f) => [f.id, f.name]));
-    const withFolder = (d) => ({
-      titulo: d.title,
-      carpeta: d.folder_id ? folderName.get(d.folder_id) ?? "?" : "Sin carpeta",
-      contenido: d.content,
-      actualizado: d.updated_at,
-    });
-
-    if (doc) {
-      const needle = doc.toLowerCase();
-      const matches = (docs ?? []).filter((d) =>
-        d.title.toLowerCase().includes(needle)
-      );
-      if (matches.length === 0)
-        throw new Error(
-          `No hay documento que coincida con "${doc}". Títulos: ${
-            (docs ?? []).map((d) => d.title).join(", ") || "ninguno"
-          }`
-        );
-      return ok(matches.map(withFolder));
-    }
-
-    if (folder) {
-      const match = (folders ?? []).find(
-        (f) => f.name.toLowerCase() === folder.toLowerCase()
-      );
-      if (!match)
-        throw new Error(
-          `No existe la carpeta "${folder}". Carpetas: ${
-            (folders ?? []).map((f) => f.name).join(", ") || "ninguna"
-          }`
-        );
-      return ok(
-        (docs ?? []).filter((d) => d.folder_id === match.id).map(withFolder)
-      );
-    }
-
-    if (full) return ok((docs ?? []).map(withFolder));
-
-    // Index only, so a first call stays cheap
-    return ok({
-      carpetas: (folders ?? []).map((f) => ({
-        nombre: f.name,
-        ambito: f.section ? `módulo ${f.section}` : "general",
-        documentos: (docs ?? [])
-          .filter((d) => d.folder_id === f.id)
-          .map((d) => d.title),
-      })),
-      sin_carpeta: (docs ?? []).filter((d) => !d.folder_id).map((d) => d.title),
-      nota: 'Usa folder, doc o full:true para traer el contenido completo.',
-    });
-  })
-);
-
-server.registerTool(
-  "write_knowledge",
-  {
-    description:
-      "Crea o actualiza un documento de la base de conocimiento. Si el " +
-      "título ya existe lo sobrescribe; si no, lo crea en la carpeta indicada.",
-    inputSchema: z.object({
-      title: z.string(),
-      content: z.string().describe("Contenido en markdown"),
-      folder: z
-        .string()
-        .optional()
-        .describe("Carpeta destino por nombre; si no existe, queda sin carpeta"),
-      append: z
-        .boolean()
-        .optional()
-        .describe("Agrega al final en vez de sobrescribir"),
-    }),
-  },
-  tool(async ({ title, content, folder, append }) => {
-    const { supabase, userId } = await getSession();
-    const [{ data: folders }, { data: docs }] = await Promise.all([
-      supabase.from("knowledge_folders").select("*"),
-      supabase.from("knowledge_docs").select("id,title,content,folder_id"),
-    ]);
-
-    const existing = (docs ?? []).find(
-      (d) => d.title.toLowerCase() === title.toLowerCase()
-    );
-
-    if (existing) {
-      const next = append
-        ? `${existing.content}\n\n${content}`.trim()
-        : content;
-      const { error } = await supabase
-        .from("knowledge_docs")
-        .update({ content: next, updated_at: new Date().toISOString() })
-        .eq("id", existing.id);
-      if (error) throw new Error(error.message);
-      return ok(`Documento "${existing.title}" actualizado.`);
-    }
-
-    const target = folder
-      ? (folders ?? []).find((f) => f.name.toLowerCase() === folder.toLowerCase())
-      : null;
-    const folderId = target?.id ?? null;
-
-    const { error } = await supabase.from("knowledge_docs").insert({
-      user_id: userId,
-      folder_id: folderId,
-      title,
-      content,
-      sort_order: (docs ?? []).length,
-      ...(target?.section ? { section: target.section } : {}),
-    });
-    if (error) throw new Error(error.message);
-    return ok(
-      `Documento "${title}" creado${folderId ? ` en ${folder}` : " sin carpeta"}.`
-    );
-  })
-);
-
-
-server.registerTool(
   "file_attachment",
   {
     description:
@@ -1031,9 +1319,9 @@ server.registerTool(
         .string()
         .describe("Ruta del adjunto en el bucket chat-files, como te la pasaron"),
       destination: z
-        .enum(["medical_exam", "knowledge"])
+        .enum(["medical_exam", "brain"])
         .describe(
-          "medical_exam: examen o estudio médico. knowledge: documento de contexto"
+          "medical_exam: examen o estudio médico. brain: documento de contexto en BRAIN"
         ),
       description: z
         .string()
@@ -1042,13 +1330,13 @@ server.registerTool(
         .string()
         .optional()
         .describe("Fecha del documento, YYYY-MM-DD, si se puede leer en la imagen"),
-      knowledge_doc: z
+      brain_doc: z
         .string()
         .optional()
-        .describe("Solo para knowledge: título del documento al que se agrega"),
+        .describe("Solo para brain: título del documento de BRAIN al que se agrega"),
     }),
   },
-  tool(async ({ chat_path, destination, description, date, knowledge_doc }) => {
+  tool(async ({ chat_path, destination, description, date, brain_doc }) => {
     const { supabase, userId } = await getSession();
 
     // Pull the bytes out of the private chat bucket
@@ -1085,7 +1373,7 @@ server.registerTool(
       );
     }
 
-    // knowledge: the bucket is public, so the URL can go straight in the markdown
+    // brain: the bucket is public, so the URL can go straight in the markdown
     const filePath = `${userId}/${Date.now()}-${fileName}`;
     const { error: upErr } = await supabase.storage
       .from("grades-files")
@@ -1094,10 +1382,11 @@ server.registerTool(
     const url = supabase.storage.from("grades-files").getPublicUrl(filePath).data
       .publicUrl;
 
-    const title = knowledge_doc || description;
-    const { data: docs } = await supabase
+    const title = brain_doc || description;
+    const { data: allDocs } = await supabase
       .from("knowledge_docs")
-      .select("id,title,content");
+      .select("id,title,content,section");
+    const docs = (allDocs ?? []).filter((x) => x.section === "brain");
     const existing = (docs ?? []).find(
       (d) => d.title.toLowerCase() === title.toLowerCase()
     );
@@ -1117,7 +1406,7 @@ server.registerTool(
         })
         .eq("id", existing.id);
       if (error) throw new Error(error.message);
-      return ok(`Imagen agregada al documento "${existing.title}" de Knowledge.`);
+      return ok(`Imagen agregada al documento "${existing.title}" de BRAIN.`);
     }
 
     const { error } = await supabase.from("knowledge_docs").insert({
@@ -1125,10 +1414,11 @@ server.registerTool(
       folder_id: null,
       title,
       content: `# ${title}${block}`,
-      sort_order: (docs ?? []).length,
+      sort_order: docs.length,
+      section: "brain",
     });
     if (error) throw new Error(error.message);
-    return ok(`Documento "${title}" creado en Knowledge con la imagen.`);
+    return ok(`Documento "${title}" creado en BRAIN con la imagen.`);
   })
 );
 
@@ -1513,5 +1803,8 @@ server.registerTool(
 // ============================================
 // START
 // ============================================
+
+// Ver, crear, editar y borrar en cualquier módulo (lo usa también DESJ).
+registerCrudTools(server, { getSession, tool, ok });
 
 await serveStdio(() => server);

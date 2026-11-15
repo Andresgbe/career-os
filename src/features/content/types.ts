@@ -14,28 +14,48 @@ export interface StatusStep {
 }
 
 export const STATUS_STEPS: StatusStep[] = [
-  { key: "script_done", label: "Guion" },
-  { key: "recorded",    label: "Grabado" },
-  { key: "edited",      label: "Editado" },
+  { key: "script_done", label: "Script" },
+  { key: "recorded",    label: "Recorded" },
+  { key: "edited",      label: "Edited" },
 ];
 
 // ============================================
 // FORMATS (what kind of piece an idea becomes)
+// Keys are stored in the DB (and used by the MCP server), so they stay as
+// they were; only the labels are shown.
 // ============================================
 
 export const FORMATS = [
   { key: "reel",     label: "Reel" },
-  { key: "carrusel", label: "Carrusel" },
+  { key: "carrusel", label: "Carousel" },
   { key: "post",     label: "Post" },
-  { key: "historia", label: "Historia" },
-  { key: "video",    label: "Video largo" },
-  { key: "texto",    label: "Texto / hilo" },
+  { key: "historia", label: "Story" },
+  { key: "video",    label: "Long video" },
+  { key: "texto",    label: "Blog / text" },
 ] as const;
 
 export type FormatKey = (typeof FORMATS)[number]["key"];
 
 export function formatLabel(key: string): string {
   return FORMATS.find((f) => f.key === key)?.label ?? "";
+}
+
+// ============================================
+// STYLES (how a piece is produced) — separate from the format (how it's
+// published). Stored in content_ideas.style (BLOQUE 24), '' = not set yet.
+// ============================================
+
+export const STYLES = [
+  { key: "animado", label: "Animated", color: "#a78bfa" },
+  { key: "humano",  label: "Human",    color: "#f59e0b" },
+  { key: "noticia", label: "News",     color: "#ef4444" },
+  { key: "foto",    label: "Photo",    color: "#22d3ee" },
+] as const;
+
+export type StyleKey = (typeof STYLES)[number]["key"];
+
+export function styleOf(key: string) {
+  return STYLES.find((s) => s.key === key) ?? null;
 }
 
 // ============================================
@@ -61,10 +81,12 @@ export interface ContentIdeaRow {
   script: string;              // full script text
   hook: string;                // opening line / gancho
   format: string;              // FormatKey or '' (sin formato)
+  style: string;               // StyleKey or '' (not set yet)
   category_id: string | null;  // null = "Sin categoría" column
   sort_order: number;          // position within its category column
   scheduled_date: string | null; // 'YYYY-MM-DD' publish day, null = banco de ideas
   schedule_order: number;      // position within its day in the planner
+  do_not_publish: boolean;     // never scheduled / suggested (reveals stack or client process)
   script_done: boolean;
   recorded: boolean;
   edited: boolean;
@@ -79,11 +101,13 @@ export interface IdeaFields {
   script: string;
   hook: string;
   format: string;
+  style: string;
   category_id: string | null;
   scheduled_date: string | null;
   script_done: boolean;
   recorded: boolean;
   edited: boolean;
+  do_not_publish: boolean;
 }
 
 export function isDone(idea: Pick<ContentIdeaRow, StepKey>): boolean {
@@ -101,9 +125,9 @@ export function stepsDone(idea: Pick<ContentIdeaRow, StepKey>): number {
 export type WeekStatus = "draft" | "approved" | "done";
 
 export const WEEK_STATUSES: { key: WeekStatus; label: string }[] = [
-  { key: "draft",    label: "Borrador" },
-  { key: "approved", label: "Aprobada" },
-  { key: "done",     label: "Completada" },
+  { key: "draft",    label: "Draft" },
+  { key: "approved", label: "Approved" },
+  { key: "done",     label: "Done" },
 ];
 
 // One row per planned ISO week. Pieces aren't linked to it by id — an idea
@@ -194,8 +218,12 @@ export function weekNumber(key: string): string {
   return `W${key.split("-W")[1]}`;
 }
 
-const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-const DAYS_SHORT = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS_LONG = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+export const DAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export function monthShort(d: Date): string {
   return MONTHS[d.getMonth()];
@@ -205,20 +233,98 @@ export function dayShort(d: Date): string {
   return DAYS_SHORT[(d.getDay() + 6) % 7];
 }
 
-// "9 al 15 nov 2026" · "30 nov al 6 dic 2026" · "29 dic 2026 al 4 ene 2027"
+// "Nov 9 – 15, 2026" · "Nov 30 – Dec 6, 2026" · "Dec 28, 2026 – Jan 3, 2027"
 export function weekRangeLabel(key: string): string {
   const [a, b] = [weekStart(key), addDays(weekStart(key), 6)];
   if (a.getFullYear() !== b.getFullYear()) {
-    return `${a.getDate()} ${monthShort(a)} ${a.getFullYear()} al ${b.getDate()} ${monthShort(b)} ${b.getFullYear()}`;
+    return `${monthShort(a)} ${a.getDate()}, ${a.getFullYear()} – ${monthShort(b)} ${b.getDate()}, ${b.getFullYear()}`;
   }
   if (a.getMonth() !== b.getMonth()) {
-    return `${a.getDate()} ${monthShort(a)} al ${b.getDate()} ${monthShort(b)} ${b.getFullYear()}`;
+    return `${monthShort(a)} ${a.getDate()} – ${monthShort(b)} ${b.getDate()}, ${b.getFullYear()}`;
   }
-  return `${a.getDate()} al ${b.getDate()} ${monthShort(b)} ${b.getFullYear()}`;
+  return `${monthShort(a)} ${a.getDate()} – ${b.getDate()}, ${b.getFullYear()}`;
 }
 
-// "mié 12 nov"
+// "Wed, Nov 12"
 export function dateChipLabel(date: string): string {
   const d = parseISODate(date);
-  return `${dayShort(d)} ${d.getDate()} ${monthShort(d)}`;
+  return `${dayShort(d)}, ${monthShort(d)} ${d.getDate()}`;
+}
+
+// ============================================
+// MONTH CALENDAR HELPERS
+// Months are keyed 'YYYY-MM'.
+// ============================================
+
+export function monthKeyOf(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+}
+
+export function shiftMonth(key: string, n: number): string {
+  const [y, m] = key.split("-").map(Number);
+  return monthKeyOf(new Date(y, m - 1 + n, 1));
+}
+
+// "November 2026"
+export function monthLabel(key: string): string {
+  const [y, m] = key.split("-").map(Number);
+  return `${MONTHS_LONG[m - 1]} ${y}`;
+}
+
+// The Monday-first grid Google Calendar shows for a month: whole weeks from
+// the one holding the 1st to the one holding the last day (5 or 6 rows).
+export function monthGrid(key: string): Date[][] {
+  const [y, m] = key.split("-").map(Number);
+  const first = new Date(y, m - 1, 1);
+  const last = new Date(y, m, 0);
+  let cursor = addDays(first, -((first.getDay() + 6) % 7));
+  const rows: Date[][] = [];
+  while (cursor <= last) {
+    rows.push(Array.from({ length: 7 }, (_, i) => addDays(cursor, i)));
+    cursor = addDays(cursor, 7);
+  }
+  return rows;
+}
+
+// ============================================
+// PUBLICATIONS & METRICS (content_publications, BLOQUE 25)
+// One row per piece and platform. A piece is "published" once it has a row.
+// ============================================
+
+export const PLATFORMS = [
+  { key: "instagram", label: "Instagram" },
+  { key: "tiktok", label: "TikTok" },
+  { key: "linkedin", label: "LinkedIn" },
+  { key: "youtube", label: "YouTube" },
+  { key: "otro", label: "Other" },
+] as const;
+
+export type PlatformKey = (typeof PLATFORMS)[number]["key"];
+
+export function platformLabel(key: string): string {
+  return PLATFORMS.find((p) => p.key === key)?.label ?? key;
+}
+
+export const METRICS = ["views", "likes", "comments", "saves", "shares"] as const;
+export type MetricKey = (typeof METRICS)[number];
+
+export interface PublicationRow {
+  id: string;
+  idea_id: string;
+  platform: string;
+  published_at: string;
+  url: string;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  saves: number | null;
+  shares: number | null;
+  metrics_updated_at: string | null;
+  created_at: string;
+}
+
+// Average of a metric over the publications that have it filled in
+export function average(rows: PublicationRow[], key: MetricKey): number | null {
+  const vals = rows.map((r) => r[key]).filter((v): v is number => typeof v === "number");
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
 }
