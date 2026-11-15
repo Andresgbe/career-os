@@ -1423,13 +1423,62 @@ function prevPeriodOf(kind, p) {
 }
 
 server.registerTool(
+  "log_period_totals",
+  {
+    description:
+      "Registra el TOTAL de un periodo de la cuenta (TikTok o Instagram) tal como lo muestra la app, por " +
+      "ejemplo 'últimos 7 días, del 7 al 13 nov: 5.200 vistas, 115 visitas al perfil'. Se guarda como un " +
+      "total del rango, NUNCA repartido en días. Si ese mismo rango ya existe, se actualiza (solo los campos " +
+      "que pases). No inventes: si la captura no muestra un dato, no lo mandes. Para datos de un solo día usa " +
+      "log_account_metrics.",
+    inputSchema: z.object({
+      platform: z.enum(["tiktok", "instagram"]),
+      from: z.string().regex(DAY_RE).describe("Primer día del rango, YYYY-MM-DD"),
+      to: z.string().regex(DAY_RE).describe("Último día del rango, YYYY-MM-DD"),
+      views: optInt(),
+      unique_viewers: optInt(),
+      new_viewers: optInt(),
+      profile_views: optInt(),
+      followers_gained: optInt(),
+      followers_total: optInt(),
+      likes: optInt(),
+      comments: optInt(),
+      shares: optInt(),
+      saves: optInt(),
+    }),
+  },
+  tool(async (args) => {
+    if (args.to < args.from) return fail("'to' no puede ser antes de 'from'.");
+    const { supabase, userId } = await getSession();
+    const fields = pickDefined(args, ACCOUNT_KEYS);
+    if (!Object.keys(fields).length) return fail("No pasaste ninguna métrica.");
+    const { error } = await supabase.from("content_period_totals").upsert(
+      {
+        user_id: userId,
+        platform: args.platform,
+        from_day: args.from,
+        to_day: args.to,
+        ...fields,
+        source: "mcp",
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,platform,from_day,to_day" }
+    );
+    if (error) throw new Error(error.message);
+    return ok({ plataforma: args.platform, rango: `${args.from} → ${args.to}`, guardado: fields, nota: "Total del periodo, no se reparte en días." });
+  })
+);
+
+server.registerTool(
   "get_analytics_summary",
   {
     description:
       "Resumen de estadísticas de contenido (TikTok / Instagram) de un periodo: totales de la cuenta con " +
       "variación contra el periodo anterior y cobertura de días, embudo vistas → perfil → seguidores → leads, " +
       "top 5 por vistas y por conversión, rendimiento por formato y estilo, mejores horarios, leads por pieza " +
-      "y qué datos faltan. Úsalo para analizar qué funcionó; si algo dice 'sin datos', no lo inventes.",
+      "y qué datos faltan. Si el periodo no tiene datos por día, usa los totales de periodo cargados con " +
+      "log_period_totals y lo indica en 'origen' (un total no es una suma de días). Úsalo para analizar qué " +
+      "funcionó; si algo dice 'sin datos', no lo inventes.",
     inputSchema: z.object({
       period: z.enum(["week", "month", "range"]).optional().describe("Por defecto la semana actual"),
       date: z.string().regex(DAY_RE).optional().describe("Un día dentro del periodo, o el inicio del rango"),
@@ -1444,7 +1493,7 @@ server.registerTool(
     const okPl = (pl) => platform === "both" || pl === platform;
     const inP = (day, per) => day >= per.from && day <= per.to;
 
-    const [acc, pubs, snaps, times, ideas, cats, leadsRes] = await Promise.all([
+    const [acc, pubs, snaps, times, ideas, cats, leadsRes, periodRes] = await Promise.all([
       soft("content_account_daily", supabase.from("content_account_daily").select("*")),
       soft("content_publications", supabase.from("content_publications").select("*")),
       soft("content_post_metrics", supabase.from("content_post_metrics").select("*")),
@@ -1452,17 +1501,55 @@ server.registerTool(
       soft("content_ideas", supabase.from("content_ideas").select("*")),
       soft("content_categories", supabase.from("content_categories").select("id,name")),
       soft("pipeline_deals", supabase.from("pipeline_deals").select("id,name,status,source,source_idea_id,created_at")),
+      soft("content_period_totals", supabase.from("content_period_totals").select("*")),
     ]);
-    const missingTables = [acc, pubs, snaps, times, leadsRes].filter((r) => r.error).map((r) => r.label);
+    const missingTables = [acc, pubs, snaps, times, leadsRes, periodRes].filter((r) => r.error).map((r) => r.label);
     const leadsAll = leadsRes.error
       ? null
       : leadsRes.data.filter((l) => STATS_NETWORKS.includes(l.source) || l.source_idea_id);
 
+    // Same rule as the Stats tab, per platform and metric: sum the loaded
+    // days; if none, the period total for exactly this period; if none, the
+    // total that overlaps it the most (with its real dates). Never split.
+    const periodRows = periodRes.error ? [] : periodRes.data;
+    const plats = platform === "both" ? STATS_NETWORKS : [platform];
+    const dayCount = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000) + 1;
+    const overlap = (from, to, per) => {
+      const a = from > per.from ? from : per.from;
+      const b = to < per.to ? to : per.to;
+      return a > b ? 0 : dayCount(a, b);
+    };
     const totals = (per) => {
-      const rows = (acc.data ?? []).filter((r) => okPl(r.platform) && inP(r.day, per));
-      const t = Object.fromEntries(ACCOUNT_KEYS.filter((k) => k !== "followers_total").map((k) => [k, sumN(rows.map((r) => r[k]))]));
+      const t = {};
+      const origen = {};
+      let partial = false;
+      for (const k of ACCOUNT_KEYS.filter((x) => x !== "followers_total")) {
+        let sum = null;
+        const parts = [];
+        for (const pl of plats) {
+          const days = (acc.data ?? []).filter((r) => r.platform === pl && inP(r.day, per) && typeof r[k] === "number");
+          if (days.length) {
+            sum = (sum ?? 0) + days.reduce((a, r) => a + r[k], 0);
+            parts.push(`${pl}: suma de ${days.length} día(s)`);
+            continue;
+          }
+          const cands = periodRows.filter((r) => r.platform === pl && typeof r[k] === "number" && overlap(r.from_day, r.to_day, per) > 0);
+          const best =
+            cands.find((r) => r.from_day === per.from && r.to_day === per.to) ??
+            cands.sort((a, b) => overlap(b.from_day, b.to_day, per) - overlap(a.from_day, a.to_day, per) || b.to_day.localeCompare(a.to_day))[0];
+          if (best) {
+            sum = (sum ?? 0) + best[k];
+            const out = best.from_day < per.from || best.to_day > per.to;
+            if (out) partial = true;
+            parts.push(`${pl}: total del periodo ${best.from_day} → ${best.to_day}${out ? " (parcialmente fuera de este periodo)" : ""}, no es suma de días`);
+          }
+        }
+        t[k] = sum;
+        if (parts.length) origen[k] = parts.join(" · ");
+      }
       t.leads = leadsAll ? leadsAll.filter((l) => inP(localOf(l.created_at), per) && (platform === "both" || l.source === platform)).length : null;
-      return { t, dias_con_datos: new Set(rows.map((r) => r.day)).size };
+      const rows = (acc.data ?? []).filter((r) => okPl(r.platform) && inP(r.day, per));
+      return { t, origen, partial, dias_con_datos: new Set(rows.map((r) => r.day)).size };
     };
     const now = totals(p);
     const before = totals(prevP);
@@ -1470,9 +1557,25 @@ server.registerTool(
       Object.keys(now.t).map((k) => {
         const a = now.t[k];
         const b = before.t[k];
+        // a total that spills over both periods would be compared with itself
+        if ((now.partial || before.partial) && k !== "leads") return [k, "no comparable (total de periodo parcial)"];
         return [k, a === null || b === null || b === 0 ? SIN : `${a >= b ? "+" : ""}${Math.round(((a - b) / Math.abs(b)) * 100)}%`];
       })
     );
+
+    // Followers: latest total known up to the end of the period, per platform
+    let seguidores = null;
+    const seguidoresAl = [];
+    for (const pl of plats) {
+      const pts = [
+        ...(acc.data ?? []).filter((r) => r.platform === pl && typeof r.followers_total === "number" && r.day <= p.to).map((r) => [r.day, r.followers_total]),
+        ...periodRows.filter((r) => r.platform === pl && typeof r.followers_total === "number" && r.to_day <= p.to).map((r) => [r.to_day, r.followers_total]),
+      ].sort((a, b) => b[0].localeCompare(a[0]));
+      if (pts[0]) {
+        seguidores = (seguidores ?? 0) + pts[0][1];
+        seguidoresAl.push(`${pl} al ${pts[0][0]}: ${pts[0][1]}`);
+      }
+    }
 
     const steps = [["vistas", now.t.views], ["visitas_perfil", now.t.profile_views], ["seguidores", now.t.followers_gained], ["leads", now.t.leads]];
     const embudo = [];
@@ -1555,6 +1658,8 @@ server.registerTool(
       periodo_anterior: prevP,
       plataforma: platform,
       totales: Object.fromEntries(Object.entries(now.t).map(([k, v]) => [k, show(v)])),
+      origen: Object.keys(now.origen).length ? now.origen : SIN,
+      seguidores_totales: seguidores === null ? SIN : { total: seguidores, detalle: seguidoresAl },
       variacion_vs_anterior: variacion,
       cobertura: `${now.dias_con_datos} de ${totalDays} días con métricas de cuenta`,
       embudo: embudo.length ? embudo : SIN,

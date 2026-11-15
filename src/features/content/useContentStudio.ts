@@ -20,6 +20,8 @@ import {
   getAccountDaily,
   upsertAccountDay,
   getActiveTimes,
+  getPeriodTotals,
+  upsertPeriodTotal,
   getContentLeads,
   createContentLead,
   deletePublication,
@@ -34,6 +36,7 @@ import type {
   AccountDailyRow,
   ActiveTimeRow,
   ContentLead,
+  PeriodTotalRow,
   StepKey,
   WeekStatus,
 } from "./types";
@@ -66,6 +69,9 @@ export function useContentStudio() {
   const [accountDaily, setAccountDaily] = useState<AccountDailyRow[]>([]);
   const [activeTimes, setActiveTimes] = useState<ActiveTimeRow[]>([]);
   const [leads, setLeads] = useState<ContentLead[]>([]);
+  // false until content_period_totals exists (BLOQUE 28)
+  const [periodTotals, setPeriodTotals] = useState<PeriodTotalRow[]>([]);
+  const [periodTotalsReady, setPeriodTotalsReady] = useState(true);
   const [statsReady, setStatsReady] = useState(true);
   const [leadsReady, setLeadsReady] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -99,8 +105,13 @@ export function useContentStudio() {
         setLeadsReady(false);
         return [] as ContentLead[];
       }),
+      getPeriodTotals().catch(() => {
+        setPeriodTotalsReady(false);
+        return [] as PeriodTotalRow[];
+      }),
     ])
-      .then(([cats, allIdeas, allWeeks, pubs, [pm, ad, at], ls]) => {
+      .then(([cats, allIdeas, allWeeks, pubs, [pm, ad, at], ls, pt]) => {
+        setPeriodTotals(pt);
         setPublications(pubs);
         setPostMetrics(pm);
         setAccountDaily(ad);
@@ -329,6 +340,25 @@ export function useContentStudio() {
     }
   }
 
+  async function savePeriodTotal(
+    platform: string,
+    fromDay: string,
+    toDay: string,
+    fields: Partial<Omit<PeriodTotalRow, "id" | "platform" | "from_day" | "to_day" | "updated_at">>
+  ) {
+    try {
+      const row = await upsertPeriodTotal(platform, fromDay, toDay, fields);
+      setPeriodTotals((prev) => [
+        ...prev.filter((r) => !(r.platform === platform && r.from_day === fromDay && r.to_day === toDay)),
+        row,
+      ]);
+      return true;
+    } catch (err) {
+      report(err);
+      return false;
+    }
+  }
+
   async function addLead(fields: { name: string; source: string; source_idea_id: string | null; contact: string; note: string }) {
     try {
       const row = await createContentLead(fields);
@@ -361,6 +391,9 @@ export function useContentStudio() {
     accountDaily,
     activeTimes,
     leads,
+    periodTotals,
+    periodTotalsReady,
+    savePeriodTotal,
     statsReady,
     leadsReady,
     savePostMetric,

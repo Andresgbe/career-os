@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, Check } from "lucide-react";
-import type { AccountDailyRow, PostMetricKey, PostMetricRow } from "../types";
+import type { AccountDailyRow, PeriodTotalRow, PostMetricKey, PostMetricRow } from "../types";
 import { ACCOUNT_METRICS, POST_METRICS, STATS_PLATFORMS, addDays, platformLabel, todayISO, toISODate } from "../types";
 import { latestSnapshot } from "../stats";
 import type { ContentStudio } from "../useContentStudio";
@@ -71,6 +71,21 @@ export default function LogMetricsSheet({ studio, onClose }: { studio: ContentSt
   );
 }
 
+function ModeToggle({ mode, onChange }: { mode: "day" | "period"; onChange: (m: "day" | "period") => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-background/60 border border-border">
+      {([
+        ["day", "One day"],
+        ["period", "Period total"],
+      ] as const).map(([k, label]) => (
+        <button key={k} onClick={() => onChange(k)} className={`h-9 rounded-lg text-sm font-semibold ${mode === k ? "bg-surface-hover text-foreground" : "text-muted"}`}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function PlatformPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <div className="grid grid-cols-2 gap-1.5">
@@ -108,33 +123,105 @@ function SaveButton({ onClick, disabled, label }: { onClick: () => void; disable
 
 const ACCOUNT_FIELDS = [...ACCOUNT_METRICS.map((m) => ({ key: m.key as string, label: m.label })), { key: "followers_total", label: "Followers total" }];
 
+// "Last N days" ending yesterday — how TikTok / Instagram show their totals
+const lastDays = (n: number) => ({ from: toISODate(addDays(new Date(), -n)), to: toISODate(addDays(new Date(), -1)) });
+
 function AccountForm({ studio, onDone }: { studio: ContentStudio; onDone: () => void }) {
   const [platform, setPlatform] = useState("tiktok");
+  // One day, or the platform's own total for a range (never split into days)
+  const [mode, setMode] = useState<"day" | "period">("day");
   // TikTok's numbers for "today" aren't final yet, so default to yesterday
   const [day, setDay] = useState(() => toISODate(addDays(new Date(), -1)));
-  const existing = studio.accountDaily.find((r) => r.platform === platform && r.day === day);
+  const [range, setRange] = useState(() => lastDays(7));
+  const existing =
+    mode === "day"
+      ? studio.accountDaily.find((r) => r.platform === platform && r.day === day)
+      : studio.periodTotals.find((r) => r.platform === platform && r.from_day === range.from && r.to_day === range.to);
   const [values, setValues] = useState<Record<string, string>>({});
   const [loadedFor, setLoadedFor] = useState("");
-  const key = `${platform}|${day}`;
+  const key = `${mode}|${platform}|${day}|${range.from}|${range.to}`;
   if (loadedFor !== key) {
     setLoadedFor(key);
-    setValues(Object.fromEntries(ACCOUNT_FIELDS.map((f) => [f.key, toStr(existing?.[f.key as keyof AccountDailyRow] as number | null)])));
+    setValues(
+      Object.fromEntries(
+        ACCOUNT_FIELDS.map((f) => [f.key, toStr(existing?.[f.key as keyof AccountDailyRow & keyof PeriodTotalRow] as number | null)])
+      )
+    );
   }
   const any = Object.values(values).some((v) => v.trim() !== "");
+  const rangeOk = range.from && range.to && range.to >= range.from;
 
   async function save() {
     const fields = Object.fromEntries(ACCOUNT_FIELDS.map((f) => [f.key, toNum(values[f.key] ?? "")]));
-    if (await studio.saveAccountDay(platform, day, fields)) onDone();
+    const ok =
+      mode === "day"
+        ? await studio.saveAccountDay(platform, day, fields)
+        : await studio.savePeriodTotal(platform, range.from, range.to, fields);
+    if (ok) onDone();
+  }
+
+  if (mode === "period" && !studio.periodTotalsReady) {
+    return (
+      <div className="space-y-4">
+        <ModeToggle mode={mode} onChange={setMode} />
+        <p className="text-sm text-amber-200">Run BLOQUE 28 of PENDIENTE.sql to save period totals.</p>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
+      <ModeToggle mode={mode} onChange={setMode} />
       <PlatformPicker value={platform} onChange={setPlatform} />
-      <div className="space-y-1.5">
-        <label className={lbl}>Day</label>
-        <input type="date" value={day} max={todayISO()} onChange={(e) => e.target.value && setDay(e.target.value)} className={`${field} [color-scheme:dark]`} />
-        {existing && <p className="text-xs text-muted">Already has numbers — saving updates them.</p>}
-      </div>
+      {mode === "day" ? (
+        <div className="space-y-1.5">
+          <label className={lbl}>Day</label>
+          <input type="date" value={day} max={todayISO()} onChange={(e) => e.target.value && setDay(e.target.value)} className={`${field} [color-scheme:dark]`} />
+          {existing && <p className="text-xs text-muted">Already has numbers — saving updates them.</p>}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <label className={lbl}>Period (as the app shows it)</label>
+          <div className="flex gap-1.5">
+            {[7, 28, 30].map((n) => {
+              const r = lastDays(n);
+              const on = r.from === range.from && r.to === range.to;
+              return (
+                <button
+                  key={n}
+                  onClick={() => setRange(r)}
+                  className={`flex-1 h-9 rounded-xl border text-xs font-semibold ${on ? "bg-primary/15 border-primary/50 text-foreground" : "border-border text-muted"}`}
+                >
+                  Last {n} days
+                </button>
+              );
+            })}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="date"
+              value={range.from}
+              max={range.to}
+              onChange={(e) => e.target.value && setRange((r) => ({ ...r, from: e.target.value }))}
+              className={`${field} [color-scheme:dark]`}
+              aria-label="From"
+            />
+            <input
+              type="date"
+              value={range.to}
+              min={range.from}
+              max={todayISO()}
+              onChange={(e) => e.target.value && setRange((r) => ({ ...r, to: e.target.value }))}
+              className={`${field} [color-scheme:dark]`}
+              aria-label="To"
+            />
+          </div>
+          <p className="text-xs text-muted">
+            {existing ? "This range already has a total — saving updates it. " : ""}
+            Saved as one total for the whole range; it's never split into days.
+          </p>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         {ACCOUNT_FIELDS.map((f) => (
           <div key={f.key} className="space-y-1">
@@ -150,7 +237,11 @@ function AccountForm({ studio, onDone }: { studio: ContentStudio; onDone: () => 
         ))}
       </div>
       <p className="text-xs text-muted">Leave a field empty if the screen doesn't show it — it's saved as "no data", not 0.</p>
-      <SaveButton onClick={save} disabled={!any} label={`Save ${platformLabel(platform)} · ${day}`} />
+      <SaveButton
+        onClick={save}
+        disabled={!any || (mode === "period" && !rangeOk)}
+        label={mode === "day" ? `Save ${platformLabel(platform)} · ${day}` : `Save ${platformLabel(platform)} total · ${range.from} → ${range.to}`}
+      />
     </div>
   );
 }

@@ -917,3 +917,53 @@ create policy "nexus update" on content_active_times for update
   using (user_id = auth.uid() or public.nexus_can_edit('content'));
 create policy "nexus delete" on content_active_times for delete
   using (user_id = auth.uid());
+
+
+-- ============================================================
+-- BLOQUE 28 — CONTENT: TOTALES DE UN PERIODO
+--
+-- TikTok e Instagram casi siempre muestran totales de 7 / 28 / 30 días
+-- ("del 7 al 13 nov: 5.200 vistas"), no datos por día. Esta tabla guarda ese
+-- total tal cual, con su rango, sin repartirlo en días inventados. Stats y
+-- get_analytics_summary lo usan cuando el periodo no tiene datos diarios, y
+-- siempre dicen que es un total y no una suma de días.
+-- Solo crea una tabla nueva: no toca datos existentes. Se puede volver a correr.
+-- ============================================================
+
+create table if not exists content_period_totals (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  platform text not null check (platform in ('tiktok', 'instagram')),
+  from_day date not null,
+  to_day date not null,
+  views integer,
+  unique_viewers integer,
+  new_viewers integer,
+  profile_views integer,
+  followers_gained integer,
+  followers_total integer,
+  likes integer,
+  comments integer,
+  shares integer,
+  saves integer,
+  source text not null default 'manual' check (source in ('manual', 'mcp', 'api')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (to_day >= from_day),
+  unique (user_id, platform, from_day, to_day)
+);
+
+alter table content_period_totals enable row level security;
+
+drop policy if exists "nexus read" on content_period_totals;
+drop policy if exists "nexus insert" on content_period_totals;
+drop policy if exists "nexus update" on content_period_totals;
+drop policy if exists "nexus delete" on content_period_totals;
+create policy "nexus read" on content_period_totals for select
+  using (user_id = auth.uid() or public.nexus_can_view('content'));
+create policy "nexus insert" on content_period_totals for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('content')));
+create policy "nexus update" on content_period_totals for update
+  using (user_id = auth.uid() or public.nexus_can_edit('content'));
+create policy "nexus delete" on content_period_totals for delete
+  using (user_id = auth.uid());

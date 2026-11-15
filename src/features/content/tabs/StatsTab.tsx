@@ -6,6 +6,9 @@ import { ACCOUNT_METRICS, STATS_PLATFORMS, formatLabel, styleOf, todayISO } from
 import {
   accountTotals,
   activeGrid,
+  basisNote,
+  comparable,
+  shortRange,
   dailySeries,
   delta,
   funnel,
@@ -70,6 +73,14 @@ export default function StatsTab({ studio, onOpenIdea }: { studio: ContentStudio
   const { grid, max } = activeGrid(studio, platform);
   const slots = topSlots(grid, 3);
   const leadPieces = leadsIn(studio, period, platform).filter((l) => l.source_idea_id);
+  const usedTotals = [
+    ...new Set(
+      Object.values(totals.basis)
+        .flat()
+        .filter((b) => b.kind === "total")
+        .map((b) => (b.kind === "total" ? `${shortRange(b.from, b.to)}${b.partial ? " (partly outside this period)" : ""}` : ""))
+    ),
+  ];
 
   return (
     <div className="space-y-4">
@@ -147,10 +158,35 @@ export default function StatsTab({ studio, onOpenIdea }: { studio: ContentStudio
       )}
 
       {/* ===== KPI cards ===== */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-        {[...ACCOUNT_METRICS.map((m) => ({ key: m.key as AccountMetricKey | "leads", label: m.label })), { key: "leads" as const, label: "Leads" }].map((m) => {
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2.5">
+        {[
+          ...ACCOUNT_METRICS.flatMap((m) => [
+            { key: m.key as AccountMetricKey | "leads" | "followers_total", label: m.label },
+            ...(m.key === "followers_gained" ? [{ key: "followers_total" as const, label: "Followers" }] : []),
+          ]),
+          { key: "leads" as const, label: "Leads" },
+        ].map((m) => {
+          // Followers is the latest total (with its date), never a sum
+          if (m.key === "followers_total") {
+            const fv = totals.followers.value;
+            return (
+              <div key={m.key} className="rounded-2xl border border-border bg-surface px-3.5 py-3">
+                <p className="text-[12px] text-muted truncate">{m.label}</p>
+                {fv === null ? (
+                  <p className="text-sm font-semibold text-muted mt-2">No data</p>
+                ) : (
+                  <p className="text-[24px] font-extrabold tabular-nums leading-none tracking-tight mt-1.5">{n0(fv)}</p>
+                )}
+                <p className="mt-1.5 h-4 text-[11px] text-muted truncate">
+                  {totals.followers.asOf && `as of ${new Date(`${totals.followers.asOf}T12:00:00`).toLocaleDateString("en", { month: "short", day: "numeric" })}`}
+                </p>
+              </div>
+            );
+          }
           const v = totals.values[m.key];
-          const d = delta(v, prev.values[m.key]);
+          const d =
+            m.key === "leads" || comparable(totals.basis[m.key], prev.basis[m.key]) ? delta(v, prev.values[m.key]) : null;
+          const note = m.key === "leads" ? "" : basisNote(totals.basis[m.key]);
           return (
             <div key={m.key} className="rounded-2xl border border-border bg-surface px-3.5 py-3">
               <p className="text-[12px] text-muted truncate">{m.label}</p>
@@ -170,13 +206,24 @@ export default function StatsTab({ studio, onOpenIdea }: { studio: ContentStudio
                   v !== null && <span className="text-muted">no previous data</span>
                 )}
               </div>
+              {note && (
+                <p className="mt-1 text-[10.5px] font-semibold text-primary-hover truncate" title={`${note}. A platform total, not a sum of days.`}>
+                  {note}
+                </p>
+              )}
             </div>
           );
         })}
       </div>
       {totals.daysWithData > 0 && totals.daysWithData < totals.daysInPeriod && (
         <p className="text-[11px] text-muted -mt-2">
-          Account numbers loaded for {totals.daysWithData} of {totals.daysInPeriod} days — totals only count those days.
+          Account numbers loaded for {totals.daysWithData} of {totals.daysInPeriod} days — sums only count those days.
+        </p>
+      )}
+      {usedTotals.length > 0 && (
+        <p className="text-[11px] text-muted -mt-2">
+          Cards marked "Period total" use the platform's own total for {usedTotals.join(", ")} — shown as is, not split into
+          days.
         </p>
       )}
 
@@ -220,7 +267,15 @@ export default function StatsTab({ studio, onOpenIdea }: { studio: ContentStudio
           </select>
         }
       >
-        <DailyChart series={series} platforms={chartPlatforms} />
+        <DailyChart
+          series={series}
+          platforms={chartPlatforms}
+          emptyText={
+            usedTotals.length
+              ? "Only period totals for these dates — no daily breakdown to chart."
+              : undefined
+          }
+        />
       </Card>
 
       {/* ===== Top pieces ===== */}
@@ -358,10 +413,18 @@ function FunnelView({ totals }: { totals: ReturnType<typeof accountTotals> }) {
   );
 }
 
-function DailyChart({ series, platforms }: { series: ReturnType<typeof dailySeries>; platforms: string[] }) {
+function DailyChart({
+  series,
+  platforms,
+  emptyText,
+}: {
+  series: ReturnType<typeof dailySeries>;
+  platforms: string[];
+  emptyText?: string;
+}) {
   const [active, setActive] = useState<number | null>(null);
   const values = series.flatMap((d) => platforms.map((p) => d.values[p])).filter((v): v is number => v !== null);
-  if (!values.length) return <NoData />;
+  if (!values.length) return <NoData text={emptyText} />;
   const W = 640;
   const H = 200;
   const pad = { l: 40, r: 12, t: 12, b: 24 };

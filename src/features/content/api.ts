@@ -8,6 +8,7 @@ import type {
   PostMetricRow,
   AccountDailyRow,
   ActiveTimeRow,
+  PeriodTotalRow,
   ContentLead,
   WeekStatus,
 } from "./types";
@@ -312,6 +313,34 @@ export async function upsertAccountDay(
     .single();
   if (error) throw error;
   return data as AccountDailyRow;
+}
+
+export async function getPeriodTotals(): Promise<PeriodTotalRow[]> {
+  const { data, error } = await supabase
+    .from("content_period_totals")
+    .select("*")
+    .order("to_day", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as PeriodTotalRow[];
+}
+
+export async function upsertPeriodTotal(
+  platform: string,
+  fromDay: string,
+  toDay: string,
+  fields: Partial<Omit<PeriodTotalRow, "id" | "platform" | "from_day" | "to_day" | "updated_at">>
+): Promise<PeriodTotalRow> {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("content_period_totals")
+    .upsert(
+      { user_id: user.id, platform, from_day: fromDay, to_day: toDay, source: "manual", ...fields, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,platform,from_day,to_day" }
+    )
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as PeriodTotalRow;
 }
 
 export async function getActiveTimes(): Promise<ActiveTimeRow[]> {

@@ -7,6 +7,7 @@ import type {
   ActiveTimeRow,
   ContentIdeaRow,
   ContentLead,
+  PeriodTotalRow,
   PostMetricRow,
   PublicationRow,
 } from "./types";
@@ -19,6 +20,7 @@ export interface StatsData {
   accountDaily: AccountDailyRow[];
   activeTimes: ActiveTimeRow[];
   leads: ContentLead[];
+  periodTotals: PeriodTotalRow[];
 }
 
 export type PlatformFilter = "both" | "tiktok" | "instagram";
@@ -100,9 +102,21 @@ function avgOrNull(values: (number | null | undefined)[]): number | null {
 }
 
 // ---------- account totals ----------
+//
+// Per platform and per metric, the value for a period comes from:
+//   1. the loaded days of that period, summed (as many as exist), or
+//   2. if no day has the metric, a platform total for exactly that period, or
+//   3. failing that, the total that overlaps the period the most — shown with
+//      its real dates. Totals are never split into days or prorated.
+
+export type Basis =
+  | { kind: "days"; platform: string; days: number }
+  | { kind: "total"; platform: string; from: string; to: string; exact: boolean; partial: boolean };
 
 export interface Totals {
   values: Record<AccountMetricKey | "leads", number | null>;
+  basis: Record<AccountMetricKey, Basis[]>; // one entry per platform that contributed
+  followers: { value: number | null; asOf: string | null }; // latest total, never summed over days
   daysWithData: number;
   daysInPeriod: number;
 }
@@ -113,16 +127,105 @@ export function leadsIn(data: StatsData, p: Period, f: PlatformFilter): ContentL
   );
 }
 
+const overlapDays = (from: string, to: string, p: Period) => {
+  const a = from > p.from ? from : p.from;
+  const b = to < p.to ? to : p.to;
+  return a > b ? 0 : daysOf({ kind: "range", from: a, to: b }).length;
+};
+
+function pickTotal(rows: PeriodTotalRow[], p: Period, metric: AccountMetricKey): PeriodTotalRow | null {
+  const candidates = rows.filter((r) => r[metric] !== null && overlapDays(r.from_day, r.to_day, p) > 0);
+  if (!candidates.length) return null;
+  const exact = candidates.find((r) => r.from_day === p.from && r.to_day === p.to);
+  if (exact) return exact;
+  return candidates.sort(
+    (a, b) => overlapDays(b.from_day, b.to_day, p) - overlapDays(a.from_day, a.to_day, p) || b.to_day.localeCompare(a.to_day)
+  )[0];
+}
+
+const platformsOf = (f: PlatformFilter) => (f === "both" ? ["tiktok", "instagram"] : [f]);
+
 export function accountTotals(data: StatsData, p: Period, f: PlatformFilter, leadsReady: boolean): Totals {
+  const values = {} as Record<AccountMetricKey, number | null>;
+  const basis = {} as Record<AccountMetricKey, Basis[]>;
+  for (const m of ACCOUNT_METRICS) {
+    let total: number | null = null;
+    const used: Basis[] = [];
+    for (const pl of platformsOf(f)) {
+      const days = data.accountDaily.filter((r) => r.platform === pl && inPeriod(r.day, p) && r[m.key] !== null);
+      if (days.length) {
+        total = (total ?? 0) + days.reduce((a, r) => a + (r[m.key] as number), 0);
+        used.push({ kind: "days", platform: pl, days: days.length });
+        continue;
+      }
+      const t = pickTotal(data.periodTotals.filter((r) => r.platform === pl), p, m.key);
+      if (t) {
+        total = (total ?? 0) + (t[m.key] as number);
+        used.push({
+          kind: "total",
+          platform: pl,
+          from: t.from_day,
+          to: t.to_day,
+          exact: t.from_day === p.from && t.to_day === p.to,
+          partial: t.from_day < p.from || t.to_day > p.to,
+        });
+      }
+    }
+    values[m.key] = total;
+    basis[m.key] = used;
+  }
+
+  // Followers: the latest total known up to the end of the period, per
+  // platform (from a day or a period total), added across platforms
+  let followers: number | null = null;
+  let asOf = null as string | null;
+  for (const pl of platformsOf(f)) {
+    const points = [
+      ...data.accountDaily.filter((r) => r.platform === pl && r.followers_total !== null && r.day <= p.to).map((r) => ({ day: r.day, v: r.followers_total as number })),
+      ...data.periodTotals.filter((r) => r.platform === pl && r.followers_total !== null && r.to_day <= p.to).map((r) => ({ day: r.to_day, v: r.followers_total as number })),
+    ].sort((a, b) => b.day.localeCompare(a.day));
+    if (points[0]) {
+      followers = (followers ?? 0) + points[0].v;
+      // the oldest "as of" across platforms, so the date never overstates freshness
+      const prevAsOf: string | null = asOf;
+      if (prevAsOf === null || points[0].day < prevAsOf) asOf = points[0].day;
+    }
+  }
+
   const rows = data.accountDaily.filter((r) => platformOk(r.platform, f) && inPeriod(r.day, p));
-  const values = Object.fromEntries(
-    ACCOUNT_METRICS.map((m) => [m.key, sumOrNull(rows.map((r) => r[m.key]))])
-  ) as Record<AccountMetricKey, number | null>;
   return {
     values: { ...values, leads: leadsReady ? leadsIn(data, p, f).length : null },
+    basis,
+    followers: { value: followers, asOf },
     daysWithData: new Set(rows.map((r) => r.day)).size,
     daysInPeriod: daysOf(p).length,
   };
+}
+
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export function shortRange(from: string, to: string): string {
+  const a = parseISODate(from);
+  const b = parseISODate(to);
+  return a.getMonth() === b.getMonth()
+    ? `${MON[a.getMonth()]} ${a.getDate()}–${b.getDate()}`
+    : `${MON[a.getMonth()]} ${a.getDate()} – ${MON[b.getMonth()]} ${b.getDate()}`;
+}
+
+// A change between two periods only means something when neither side
+// leans on a total that spills outside its period (the same Nov 7–13 total
+// could otherwise be "compared" with itself)
+export function comparable(a: Basis[], b: Basis[]): boolean {
+  return !a.some((x) => x.kind === "total" && x.partial) && !b.some((x) => x.kind === "total" && x.partial);
+}
+
+// How a card's number was obtained, in a few words ("" = plain sum of days)
+export function basisNote(b: Basis[]): string {
+  const totals = b.filter((x): x is Extract<Basis, { kind: "total" }> => x.kind === "total");
+  if (!totals.length) return "";
+  const ranges = [...new Set(totals.map((t) => shortRange(t.from, t.to)))];
+  const partial = totals.some((t) => t.partial);
+  const mixed = b.some((x) => x.kind === "days");
+  return `${mixed ? "Days + period total" : "Period total"} · ${ranges.join(", ")}${partial ? " (partly outside)" : ""}`;
 }
 
 // Relative change; null when either side has no data or the base is 0
@@ -320,8 +423,11 @@ export function writtenSummary(
 
   const v = now.values.views;
   if (v !== null) {
-    const d = delta(v, before.values.views);
-    lines.push(`Views: ${n0(v)}${d !== null ? ` (${pct(d)} vs. the previous ${unit})` : ""}.`);
+    const d = comparable(now.basis.views, before.basis.views) ? delta(v, before.values.views) : null;
+    const note = basisNote(now.basis.views);
+    lines.push(
+      `Views: ${n0(v)}${note ? ` (${note} — not a sum of days)` : ""}${d !== null ? `, ${pct(d)} vs. the previous ${unit}` : ""}.`
+    );
   }
 
   const styles = groupPerf(pieces, "style").filter((g) => g.avgViews !== null && g.key);

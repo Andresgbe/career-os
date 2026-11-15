@@ -390,6 +390,27 @@ export const ACCOUNT_METRICS = [
 ] as const;
 export type AccountMetricKey = (typeof ACCOUNT_METRICS)[number]["key"];
 
+// A platform's own total for a range ("Nov 7–13: 5,200 views"), stored as
+// is — never split into days (content_period_totals, BLOQUE 28)
+export interface PeriodTotalRow {
+  id: string;
+  platform: string;
+  from_day: string;
+  to_day: string;
+  views: number | null;
+  unique_viewers: number | null;
+  new_viewers: number | null;
+  profile_views: number | null;
+  followers_gained: number | null;
+  followers_total: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  saves: number | null;
+  source: string;
+  updated_at: string;
+}
+
 // "Most active times": 0 = Monday … 6 = Sunday, hour in Caracas time
 export interface ActiveTimeRow {
   id: string;
