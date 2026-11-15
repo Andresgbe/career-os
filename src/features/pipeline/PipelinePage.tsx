@@ -245,6 +245,7 @@ export default function PipelinePage() {
           key={"id" in modal ? modal.id : "new"}
           deal={modalDeal}
           defaultStageId={"stageId" in modal ? modal.stageId : undefined}
+          ideaOptions={pipeline.ideaOptions}
           stages={stages}
           activity={pipeline.activity}
           onClose={() => setModal(null)}

@@ -11,6 +11,7 @@ import {
   deleteDeal,
   getActivity,
   logActivity,
+  getIdeaOptions,
 } from "./api";
 import type { DealFields } from "./api";
 import type { ActivityRow, DealRow, DealStatus, StageRow } from "./types";
@@ -22,6 +23,7 @@ export function usePipeline() {
   const [stages, setStages] = useState<StageRow[]>([]);
   const [deals, setDeals] = useState<DealRow[]>([]);
   const [activity, setActivity] = useState<ActivityRow[]>([]);
+  const [ideaOptions, setIdeaOptions] = useState<{ id: string; title: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -36,6 +38,7 @@ export function usePipeline() {
       })
       .catch(report)
       .finally(() => setLoading(false));
+    getIdeaOptions().then(setIdeaOptions).catch(() => {});
   }, [report]);
 
   async function log(dealId: string, kind: string, body: string) {
@@ -171,6 +174,7 @@ export function usePipeline() {
     stages: stages.slice().sort((a, b) => a.sort_order - b.sort_order),
     deals,
     activity,
+    ideaOptions,
     loading,
     error,
     clearError: () => setError(""),

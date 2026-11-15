@@ -639,11 +639,12 @@ where style = '' and format in ('carrusel', 'post');
 
 
 -- ============================================================
--- BLOQUE 25 — CONTENT: PUBLICACIONES Y MÉTRICAS (B1)
+-- BLOQUE 25 — CONTENT: PUBLICACIONES (B1)
 --
--- Una fila por pieza y plataforma donde se publicó. Una pieza cuenta como
--- "publicada" si tiene al menos una fila. Las métricas se cargan a mano por
--- ahora (sin APIs de redes); null = todavía sin dato.
+-- Una fila por pieza y plataforma donde se publicó: dónde, cuándo y el
+-- link. Una pieza cuenta como "publicada" si tiene al menos una fila. Las
+-- métricas NO van acá: son fotos fechadas en content_post_metrics
+-- (BLOQUE 27), para ver cómo crece cada publicación.
 -- ============================================================
 
 create table if not exists content_publications (
@@ -653,12 +654,6 @@ create table if not exists content_publications (
   platform text not null check (platform in ('instagram', 'tiktok', 'linkedin', 'youtube', 'otro')),
   published_at timestamptz not null default now(),
   url text not null default '',
-  views integer,
-  likes integer,
-  comments integer,
-  saves integer,
-  shares integer,
-  metrics_updated_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -724,6 +719,15 @@ create table if not exists pipeline_deals (
 );
 
 create index if not exists pipeline_deals_stage_idx on pipeline_deals (user_id, stage_id, sort_order);
+
+-- Origen del lead: de qué red y de qué pieza de contenido salió. Las
+-- estadísticas de Content cuentan como "lead" todo deal con origen en
+-- contenido (tiktok / instagram) o con pieza asociada.
+alter table pipeline_deals
+  add column if not exists source text not null default '',
+  add column if not exists source_idea_id uuid references content_ideas(id) on delete set null;
+
+create index if not exists pipeline_deals_source_idea_idx on pipeline_deals (source_idea_id);
 
 create table if not exists pipeline_activity (
   id uuid primary key default gen_random_uuid(),
@@ -798,3 +802,118 @@ insert into pipeline_stages (user_id, name, max_days, rule, message_template, co
 select o.user_id, s.name, s.max_days, s.rule, s.message_template, s.color, s.sort_order
 from s cross join owner o
 where not exists (select 1 from pipeline_stages p where p.user_id = o.user_id);
+
+
+-- ============================================================
+-- BLOQUE 27 — CONTENT: ESTADÍSTICAS (cuenta por día, fotos por publicación,
+-- horarios activos)
+--
+-- Requiere los BLOQUES 25 y 26. Toda métrica es nullable: null = "sin datos",
+-- nunca 0. Cargar dos veces el mismo día / la misma foto actualiza, no
+-- duplica. source = de dónde salió el dato (manual, mcp desde una captura,
+-- o api cuando exista la sincronización de la Fase 2).
+-- ============================================================
+
+-- a) Métricas de la cuenta por día y plataforma
+create table if not exists content_account_daily (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  platform text not null check (platform in ('tiktok', 'instagram')),
+  day date not null,
+  views integer,
+  unique_viewers integer,
+  new_viewers integer,
+  profile_views integer,
+  followers_gained integer,   -- neto del día (puede ser negativo)
+  followers_total integer,
+  likes integer,
+  comments integer,
+  shares integer,
+  saves integer,
+  source text not null default 'manual' check (source in ('manual', 'mcp', 'api')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, platform, day)
+);
+
+-- b) Fotos fechadas de cada publicación (la más reciente = cómo va hoy)
+create table if not exists content_post_metrics (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  publication_id uuid not null references content_publications(id) on delete cascade,
+  captured_on date not null default current_date,
+  views integer,
+  likes integer,
+  comments integer,
+  shares integer,
+  saves integer,
+  avg_watch_seconds numeric,
+  full_watch_pct numeric check (full_watch_pct is null or (full_watch_pct >= 0 and full_watch_pct <= 100)),
+  profile_views integer,      -- visitas al perfil que trajo esta pieza (Instagram lo da por post)
+  follows integer,            -- seguidores que trajo esta pieza
+  source text not null default 'manual' check (source in ('manual', 'mcp', 'api')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (publication_id, captured_on)
+);
+
+create index if not exists content_post_metrics_pub_idx
+  on content_post_metrics (user_id, publication_id, captured_on desc);
+
+-- c) Horarios activos ("Most active times"): 0 = lunes … 6 = domingo, hora
+-- en horario de Caracas. Cada carga reemplaza el valor de esa celda.
+create table if not exists content_active_times (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  platform text not null check (platform in ('tiktok', 'instagram')),
+  weekday smallint not null check (weekday between 0 and 6),
+  hour smallint not null check (hour between 0 and 23),
+  value numeric not null,
+  captured_on date not null default current_date,
+  source text not null default 'manual' check (source in ('manual', 'mcp', 'api')),
+  created_at timestamptz not null default now(),
+  unique (user_id, platform, weekday, hour)
+);
+
+alter table content_account_daily enable row level security;
+alter table content_post_metrics enable row level security;
+alter table content_active_times enable row level security;
+
+drop policy if exists "nexus read" on content_account_daily;
+drop policy if exists "nexus insert" on content_account_daily;
+drop policy if exists "nexus update" on content_account_daily;
+drop policy if exists "nexus delete" on content_account_daily;
+create policy "nexus read" on content_account_daily for select
+  using (user_id = auth.uid() or public.nexus_can_view('content'));
+create policy "nexus insert" on content_account_daily for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('content')));
+create policy "nexus update" on content_account_daily for update
+  using (user_id = auth.uid() or public.nexus_can_edit('content'));
+create policy "nexus delete" on content_account_daily for delete
+  using (user_id = auth.uid());
+
+drop policy if exists "nexus read" on content_post_metrics;
+drop policy if exists "nexus insert" on content_post_metrics;
+drop policy if exists "nexus update" on content_post_metrics;
+drop policy if exists "nexus delete" on content_post_metrics;
+create policy "nexus read" on content_post_metrics for select
+  using (user_id = auth.uid() or public.nexus_can_view('content'));
+create policy "nexus insert" on content_post_metrics for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('content')));
+create policy "nexus update" on content_post_metrics for update
+  using (user_id = auth.uid() or public.nexus_can_edit('content'));
+create policy "nexus delete" on content_post_metrics for delete
+  using (user_id = auth.uid());
+
+drop policy if exists "nexus read" on content_active_times;
+drop policy if exists "nexus insert" on content_active_times;
+drop policy if exists "nexus update" on content_active_times;
+drop policy if exists "nexus delete" on content_active_times;
+create policy "nexus read" on content_active_times for select
+  using (user_id = auth.uid() or public.nexus_can_view('content'));
+create policy "nexus insert" on content_active_times for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('content')));
+create policy "nexus update" on content_active_times for update
+  using (user_id = auth.uid() or public.nexus_can_edit('content'));
+create policy "nexus delete" on content_active_times for delete
+  using (user_id = auth.uid());

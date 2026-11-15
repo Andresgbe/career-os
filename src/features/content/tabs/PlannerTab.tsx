@@ -760,7 +760,7 @@ function WeekBrief({
         "Wed carousel, Thu animated video, Sat human reel, Sun weekly news). Never schedule ideas marked do_not_publish. " +
         "Write the content itself in Spanish, as the context says. Leave the week as a draft for me to approve."
     );
-    const metrics = metricsSummary(studio.publications, studio.ideas);
+    const metrics = metricsSummary(studio);
     if (metrics) lines.push("", metrics, "Lean on what performs best.");
     try {
       await navigator.clipboard.writeText(lines.join("\n"));

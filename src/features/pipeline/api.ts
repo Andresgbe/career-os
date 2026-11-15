@@ -47,7 +47,19 @@ export async function deleteStage(id: string): Promise<void> {
 export async function getDeals(): Promise<DealRow[]> {
   const { data, error } = await supabase.from("pipeline_deals").select("*").order("sort_order");
   if (error) throw error;
-  return (data ?? []).map((d) => ({ ...d, value: d.value === null ? null : Number(d.value) })) as DealRow[];
+  return (data ?? []).map((d) => ({
+    ...d,
+    value: d.value === null ? null : Number(d.value),
+    source: d.source ?? "",
+    source_idea_id: d.source_idea_id ?? null,
+  })) as DealRow[];
+}
+
+// Content pieces a lead can be attributed to (title only)
+export async function getIdeaOptions(): Promise<{ id: string; title: string }[]> {
+  const { data, error } = await supabase.from("content_ideas").select("id,title").order("updated_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as { id: string; title: string }[];
 }
 
 export type DealFields = Partial<Omit<DealRow, "id" | "created_at" | "updated_at">>;

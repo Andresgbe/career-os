@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { X, Save, Trash2, Trophy, CircleX, RotateCcw, Bot, UserRound } from "lucide-react";
 import ConfirmDialog from "../../../components/ConfirmDialog";
 import type { ActivityRow, DealRow, StageRow } from "../types";
-import { CHANNELS } from "../types";
+import { CHANNELS, SOURCES } from "../types";
 import type { DealFields } from "../api";
 
 const label = "text-[11px] font-semibold uppercase tracking-[0.12em] text-muted";
@@ -25,6 +25,8 @@ interface Form {
   currency: string;
   last_activity: string; // YYYY-MM-DD
   suggested_message: string;
+  source: string;
+  source_idea_id: string;
 }
 
 // Create or edit a deal, plus its history (who did what: you or an agent)
@@ -37,9 +39,11 @@ export default function DealModal({
   onStatus,
   onDelete,
   defaultStageId,
+  ideaOptions = [],
 }: {
   deal: DealRow | null;
   defaultStageId?: string | null;
+  ideaOptions?: { id: string; title: string }[];
   stages: StageRow[];
   activity: ActivityRow[];
   onClose: () => void;
@@ -58,6 +62,8 @@ export default function DealModal({
     currency: deal?.currency ?? "USD",
     last_activity: toDateInput(deal?.last_activity_at ?? new Date().toISOString()),
     suggested_message: deal?.suggested_message ?? "",
+    source: deal?.source ?? "",
+    source_idea_id: deal?.source_idea_id ?? "",
   };
   const [form, setForm] = useState<Form>(initial);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -82,6 +88,10 @@ export default function DealModal({
       currency: form.currency,
       suggested_message: form.suggested_message,
     };
+    // Only send the origin when it's set or changed (the columns come with
+    // BLOQUE 26; this keeps saving working on an older database)
+    if (form.source !== initial.source) fields.source = form.source;
+    if (form.source_idea_id !== initial.source_idea_id) fields.source_idea_id = form.source_idea_id || null;
     // Only move the clock if the date was actually changed
     if (form.last_activity !== initial.last_activity) {
       fields.last_activity_at = new Date(`${form.last_activity}T12:00:00`).toISOString();
@@ -170,6 +180,33 @@ export default function DealModal({
               <div className="space-y-1.5">
                 <label className={label}>Last movement</label>
                 <input type="date" value={form.last_activity} onChange={(e) => set("last_activity", e.target.value)} className={`${field} [color-scheme:dark]`} />
+              </div>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className={label}>Lead source</label>
+                <select value={form.source} onChange={(e) => set("source", e.target.value)} className={`${field} [color-scheme:dark]`}>
+                  {SOURCES.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className={label}>From content piece</label>
+                <select
+                  value={form.source_idea_id}
+                  onChange={(e) => set("source_idea_id", e.target.value)}
+                  className={`${field} [color-scheme:dark]`}
+                >
+                  <option value="">— None —</option>
+                  {ideaOptions.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.title.slice(0, 70)}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="space-y-1.5">

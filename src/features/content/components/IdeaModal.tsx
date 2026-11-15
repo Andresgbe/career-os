@@ -331,7 +331,6 @@ export default function IdeaModal({
                           </span>
                           <span className="text-xs text-muted tabular-nums">
                             {new Date(p.published_at).toLocaleDateString("en", { month: "short", day: "numeric" })}
-                            {p.views !== null && ` · ${p.views.toLocaleString("en")} views`}
                           </span>
                         </li>
                       ))}

@@ -15,7 +15,13 @@ import {
   upsertContentWeek,
   getPublications,
   addPublications,
-  updatePublication,
+  getPostMetrics,
+  upsertPostMetric,
+  getAccountDaily,
+  upsertAccountDay,
+  getActiveTimes,
+  getContentLeads,
+  createContentLead,
   deletePublication,
 } from "./api";
 import type {
@@ -24,9 +30,14 @@ import type {
   ContentWeekRow,
   IdeaFields,
   PublicationRow,
+  PostMetricRow,
+  AccountDailyRow,
+  ActiveTimeRow,
+  ContentLead,
   StepKey,
   WeekStatus,
 } from "./types";
+import { POST_METRICS, todayISO } from "./types";
 
 export const CATEGORY_COLORS = [
   "#8b5cf6",
@@ -49,6 +60,14 @@ export function useContentStudio() {
   const [publications, setPublications] = useState<PublicationRow[]>([]);
   // false until content_publications exists (BLOQUE 25 of PENDIENTE.sql)
   const [publicationsReady, setPublicationsReady] = useState(true);
+  // Analytics (BLOQUE 27) and content leads (BLOQUE 26). Each flag goes false
+  // when its tables don't exist yet, and the Stats tab says what to run.
+  const [postMetrics, setPostMetrics] = useState<PostMetricRow[]>([]);
+  const [accountDaily, setAccountDaily] = useState<AccountDailyRow[]>([]);
+  const [activeTimes, setActiveTimes] = useState<ActiveTimeRow[]>([]);
+  const [leads, setLeads] = useState<ContentLead[]>([]);
+  const [statsReady, setStatsReady] = useState(true);
+  const [leadsReady, setLeadsReady] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -72,9 +91,21 @@ export function useContentStudio() {
         setPublicationsReady(false);
         return [] as PublicationRow[];
       }),
+      Promise.all([getPostMetrics(), getAccountDaily(), getActiveTimes()]).catch(() => {
+        setStatsReady(false);
+        return [[], [], []] as [PostMetricRow[], AccountDailyRow[], ActiveTimeRow[]];
+      }),
+      getContentLeads().catch(() => {
+        setLeadsReady(false);
+        return [] as ContentLead[];
+      }),
     ])
-      .then(([cats, allIdeas, allWeeks, pubs]) => {
+      .then(([cats, allIdeas, allWeeks, pubs, [pm, ad, at], ls]) => {
         setPublications(pubs);
+        setPostMetrics(pm);
+        setAccountDaily(ad);
+        setActiveTimes(at);
+        setLeads(ls);
         setCategories(cats);
         setIdeas(allIdeas);
         setWeeks(allWeeks);
@@ -255,13 +286,63 @@ export function useContentStudio() {
     }
   }
 
-  function editPublication(id: string, fields: Partial<Omit<PublicationRow, "id" | "idea_id" | "created_at">>) {
-    setPublications((prev) => prev.map((p) => (p.id === id ? { ...p, ...fields } : p)));
-    updatePublication(id, fields).catch(report);
+  // ---------- analytics ----------
+
+  // Today's snapshot of a publication. Fields not being edited are carried
+  // over from its latest snapshot, so every snapshot is a complete picture.
+  async function savePostMetric(
+    publicationId: string,
+    fields: Partial<Omit<PostMetricRow, "id" | "publication_id" | "captured_on" | "updated_at">>,
+    capturedOn = todayISO()
+  ) {
+    const latest = postMetrics
+      .filter((m) => m.publication_id === publicationId && m.captured_on <= capturedOn)
+      .sort((a, b) => b.captured_on.localeCompare(a.captured_on))[0];
+    const carried = latest
+      ? Object.fromEntries(
+          POST_METRICS.map((m) => [m.key, latest[m.key]]).filter(([, v]) => v !== null)
+        )
+      : {};
+    try {
+      const row = await upsertPostMetric(publicationId, capturedOn, { ...carried, ...fields });
+      setPostMetrics((prev) => [
+        ...prev.filter((m) => !(m.publication_id === publicationId && m.captured_on === capturedOn)),
+        row,
+      ]);
+    } catch (err) {
+      report(err);
+    }
+  }
+
+  async function saveAccountDay(
+    platform: string,
+    day: string,
+    fields: Partial<Omit<AccountDailyRow, "id" | "platform" | "day" | "updated_at">>
+  ) {
+    try {
+      const row = await upsertAccountDay(platform, day, fields);
+      setAccountDaily((prev) => [...prev.filter((r) => !(r.platform === platform && r.day === day)), row]);
+      return true;
+    } catch (err) {
+      report(err);
+      return false;
+    }
+  }
+
+  async function addLead(fields: { name: string; source: string; source_idea_id: string | null; contact: string; note: string }) {
+    try {
+      const row = await createContentLead(fields);
+      setLeads((prev) => [...prev, row]);
+      return true;
+    } catch (err) {
+      report(err);
+      return false;
+    }
   }
 
   function removePublication(id: string) {
     setPublications((prev) => prev.filter((p) => p.id !== id));
+    setPostMetrics((prev) => prev.filter((m) => m.publication_id !== id));
     deletePublication(id).catch(report);
   }
 
@@ -275,8 +356,16 @@ export function useContentStudio() {
     publicationsReady,
     publishedIds,
     markPosted,
-    editPublication,
     removePublication,
+    postMetrics,
+    accountDaily,
+    activeTimes,
+    leads,
+    statsReady,
+    leadsReady,
+    savePostMetric,
+    saveAccountDay,
+    addLead,
     loading,
     error,
     clearError: () => setError(""),

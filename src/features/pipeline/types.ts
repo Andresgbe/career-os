@@ -27,6 +27,8 @@ export interface DealRow {
   status: DealStatus;
   last_activity_at: string; // last real movement with the client
   suggested_message: string; // written by Andrés or an agent; '' = use the stage template
+  source: string; // where the lead came from: tiktok | instagram | referido | web | otro | ''
+  source_idea_id: string | null; // the content piece that brought it (Content → Stats counts it)
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -47,6 +49,15 @@ export const CHANNELS = [
   { key: "instagram", label: "Instagram" },
   { key: "linkedin", label: "LinkedIn" },
   { key: "llamada", label: "Call" },
+  { key: "otro", label: "Other" },
+] as const;
+
+export const SOURCES = [
+  { key: "", label: "Unknown" },
+  { key: "tiktok", label: "TikTok" },
+  { key: "instagram", label: "Instagram" },
+  { key: "referido", label: "Referral" },
+  { key: "web", label: "Website" },
   { key: "otro", label: "Other" },
 ] as const;
 

@@ -391,7 +391,14 @@ const STYLE_KEYS = ["animado", "humano", "noticia", "foto"];
 
 // Average views / saves per post, by format and by style, over publications
 // that have the number (metrics are entered by hand in NEXUS).
-function metricsByGroup(pubs, ideas) {
+function metricsByGroup(pubsRaw, ideas, snaps = []) {
+  // each publication gets the numbers of its latest snapshot
+  const latestOf = new Map();
+  for (const s of snaps) {
+    const cur = latestOf.get(s.publication_id);
+    if (!cur || s.captured_on > cur.captured_on) latestOf.set(s.publication_id, s);
+  }
+  const pubs = pubsRaw.map((p) => ({ ...p, ...(latestOf.get(p.id) ?? {}), id: p.id, idea_id: p.idea_id }));
   const withViews = pubs.filter((p) => typeof p.views === "number");
   if (!withViews.length) return "sin datos todavía";
   const ideaOf = new Map(ideas.map((i) => [i.id, i]));
@@ -457,7 +464,7 @@ server.registerTool(
     const key = week_key ?? weekKeyOfDate(parseDate(caracasToday().date));
     const dates = weekDates(key);
 
-    const [{ data: cats }, { data: ideas, error }, weekRes, pubRes] = await Promise.all([
+    const [{ data: cats }, { data: ideas, error }, weekRes, pubRes, snapResult] = await Promise.all([
       supabase.from("content_categories").select("id,name"),
       supabase.from("content_ideas").select("*"),
       soft(
@@ -465,8 +472,10 @@ server.registerTool(
         supabase.from("content_weeks").select("*").eq("week_key", key).maybeSingle()
       ),
       soft("content_publications", supabase.from("content_publications").select("*")),
+      soft("content_post_metrics", supabase.from("content_post_metrics").select("*")),
     ]);
     const pubs = pubRes.error ? [] : pubRes.data;
+    const snapRows = snapResult.error ? [] : snapResult.data;
     const postedOn = new Map();
     for (const p of pubs) postedOn.set(p.idea_id, [...(postedOn.get(p.idea_id) ?? []), p.platform]);
     if (error) throw new Error(error.message);
@@ -511,7 +520,7 @@ server.registerTool(
         .filter((i) => !i.scheduled_date && !(i.script_done && i.recorded && i.edited) && !i.do_not_publish)
         .map(piece),
       categorias: [...catName.values()],
-      metricas: metricsByGroup(pubs, all),
+      metricas: metricsByGroup(pubs, all, snapRows),
       formatos: FORMAT_KEYS,
     });
   })
@@ -1083,6 +1092,8 @@ server.registerTool(
       touched: z.boolean().optional().describe("Hubo movimiento real hoy: reinicia el contador de días"),
       status: z.enum(["open", "won", "lost"]).optional(),
       log: z.string().optional().describe("Nota extra para el historial"),
+      source: z.enum(["tiktok", "instagram", "referido", "web", "otro"]).optional().describe("De dónde vino el lead"),
+      source_idea: z.string().optional().describe("Título de la pieza de contenido que trajo el lead"),
     }),
   },
   tool(async (args) => {
@@ -1112,8 +1123,19 @@ server.registerTool(
     }
 
     const fields = {};
-    for (const k of ["note", "company", "contact", "channel", "value", "currency", "suggested_message", "status"]) {
+    for (const k of ["note", "company", "contact", "channel", "value", "currency", "suggested_message", "status", "source"]) {
       if (args[k] !== undefined) fields[k] = args[k];
+    }
+    if (args.source_idea) {
+      const { data: ideaRows, error: ie } = await supabase.from("content_ideas").select("id,title");
+      if (ie) throw new Error(ie.message);
+      const needle = args.source_idea.toLowerCase();
+      const exact = ideaRows.filter((i) => i.title.toLowerCase() === needle);
+      const hits = exact.length ? exact : ideaRows.filter((i) => i.title.toLowerCase().includes(needle));
+      if (hits.length !== 1) {
+        return fail(hits.length ? `"${args.source_idea}" coincide con varias piezas: ${hits.map((i) => i.title).join(" | ")}` : `No encontré la pieza "${args.source_idea}".`);
+      }
+      fields.source_idea_id = hits[0].id;
     }
     if (stageId) fields.stage_id = stageId;
     const now = new Date().toISOString();
@@ -1156,7 +1178,8 @@ server.registerTool(
       if (fields.suggested_message) changes.push("Propuso un mensaje de seguimiento");
       if (fields.status) changes.push(fields.status === "won" ? "Ganada" : fields.status === "lost" ? "Perdida" : "Reabierta");
       if (args.touched) changes.push("Hubo movimiento: reloj reiniciado");
-      const rest = Object.keys(fields).filter((k) => !["stage_id", "note", "suggested_message", "status", "last_activity_at"].includes(k));
+      if (fields.source || fields.source_idea_id) changes.push(`Origen: ${fields.source ?? ""}${fields.source_idea_id ? ` · pieza ${args.source_idea}` : ""}`);
+      const rest = Object.keys(fields).filter((k) => !["stage_id", "note", "suggested_message", "status", "last_activity_at", "source", "source_idea_id"].includes(k));
       if (rest.length) changes.push(`Editó: ${rest.join(", ")}`);
       deal = data;
     }
@@ -1179,6 +1202,369 @@ server.registerTool(
       etapa: st?.name ?? null,
       estado: deal.status === "open" ? dealHealth(deal, st) : deal.status,
       cambios: changes.length ? changes : ["sin cambios"],
+    });
+  })
+);
+
+// ============================================
+// CONTENT ANALYTICS (BLOQUE 27)
+// Account numbers per day and platform, dated snapshots per publication,
+// and "most active times". Every metric is optional: what isn't passed is
+// left as is / null ("sin datos"), never written as 0. Meant for loading
+// numbers from TikTok / Instagram Analytics screenshots.
+// ============================================
+
+const STATS_NETWORKS = ["tiktok", "instagram"];
+const ACCOUNT_KEYS = ["views", "unique_viewers", "new_viewers", "profile_views", "followers_gained", "followers_total", "likes", "comments", "shares", "saves"];
+const POST_KEYS = ["views", "likes", "comments", "shares", "saves", "avg_watch_seconds", "full_watch_pct", "profile_views", "follows"];
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const optInt = () => z.number().int().nullable().optional();
+const optNum = () => z.number().nullable().optional();
+
+const pickDefined = (obj, keys) =>
+  Object.fromEntries(keys.filter((k) => obj[k] !== undefined).map((k) => [k, obj[k]]));
+
+server.registerTool(
+  "log_account_metrics",
+  {
+    description:
+      "Registra métricas de la CUENTA por día (TikTok o Instagram), por ejemplo leídas de una captura de " +
+      "Analytics → Overview. Un día ya cargado se actualiza (solo los campos que pases). No inventes: si la " +
+      "captura no muestra un dato, no lo mandes. followers_gained es el neto del día.",
+    inputSchema: z.object({
+      platform: z.enum(["tiktok", "instagram"]),
+      days: z
+        .array(
+          z.object({
+            date: z.string().regex(DAY_RE).describe("YYYY-MM-DD"),
+            views: optInt(),
+            unique_viewers: optInt(),
+            new_viewers: optInt(),
+            profile_views: optInt(),
+            followers_gained: optInt(),
+            followers_total: optInt(),
+            likes: optInt(),
+            comments: optInt(),
+            shares: optInt(),
+            saves: optInt(),
+          })
+        )
+        .min(1),
+    }),
+  },
+  tool(async ({ platform, days }) => {
+    const { supabase, userId } = await getSession();
+    const saved = [];
+    for (const d of days) {
+      const fields = pickDefined(d, ACCOUNT_KEYS);
+      if (!Object.keys(fields).length) continue;
+      const { error } = await supabase.from("content_account_daily").upsert(
+        { user_id: userId, platform, day: d.date, ...fields, source: "mcp", updated_at: new Date().toISOString() },
+        { onConflict: "user_id,platform,day" }
+      );
+      if (error) throw new Error(`${d.date}: ${error.message}`);
+      saved.push(`${d.date} (${Object.keys(fields).join(", ")})`);
+    }
+    return ok({ plataforma: platform, dias_guardados: saved });
+  })
+);
+
+server.registerTool(
+  "log_post_metrics",
+  {
+    description:
+      "Guarda la foto del día de las métricas de UNA publicación (TikTok o Instagram). Identifícala con " +
+      "publication_id, o con el título de la pieza (idea, exacto o parcial) + platform. Si la pieza no tiene " +
+      "publicación en esa red, la crea (published_on, o hoy). Los campos que no pases se copian de la foto " +
+      "anterior; no inventes datos que la captura no muestre.",
+    inputSchema: z.object({
+      publication_id: z.string().optional(),
+      idea: z.string().optional().describe("Título de la pieza en NEXUS"),
+      platform: z.enum(["tiktok", "instagram"]).optional(),
+      published_on: z.string().regex(DAY_RE).optional().describe("Fecha de publicación si hay que crearla"),
+      url: z.string().optional(),
+      captured_on: z.string().regex(DAY_RE).optional().describe("Fecha de la foto (por defecto hoy)"),
+      views: optInt(),
+      likes: optInt(),
+      comments: optInt(),
+      shares: optInt(),
+      saves: optInt(),
+      avg_watch_seconds: optNum(),
+      full_watch_pct: optNum(),
+      profile_views: optInt(),
+      follows: optInt(),
+    }),
+  },
+  tool(async (args) => {
+    const { supabase, userId } = await getSession();
+    const capturedOn = args.captured_on ?? caracasToday().date;
+    let pub = null;
+    if (args.publication_id) {
+      const { data, error } = await supabase.from("content_publications").select("*").eq("id", args.publication_id).maybeSingle();
+      if (error) throw new Error(error.message);
+      pub = data;
+      if (!pub) return fail(`No existe la publicación ${args.publication_id}.`);
+    } else {
+      if (!args.idea || !args.platform) return fail("Pasa publication_id, o idea + platform.");
+      const { data: ideas, error } = await supabase.from("content_ideas").select("id,title");
+      if (error) throw new Error(error.message);
+      const needle = args.idea.toLowerCase();
+      const exact = ideas.filter((i) => i.title.toLowerCase() === needle);
+      const found = exact.length ? exact : ideas.filter((i) => i.title.toLowerCase().includes(needle));
+      if (found.length !== 1) {
+        return fail(
+          found.length
+            ? `"${args.idea}" coincide con varias piezas: ${found.map((i) => i.title).join(" | ")}`
+            : `No encontré la pieza "${args.idea}".`
+        );
+      }
+      const { data: pubs, error: pe } = await supabase
+        .from("content_publications")
+        .select("*")
+        .eq("idea_id", found[0].id)
+        .eq("platform", args.platform)
+        .order("published_at", { ascending: false });
+      if (pe) throw new Error(pe.message);
+      pub = pubs?.[0] ?? null;
+      if (!pub) {
+        const day = args.published_on ?? capturedOn;
+        const { data, error: ie } = await supabase
+          .from("content_publications")
+          .insert({ user_id: userId, idea_id: found[0].id, platform: args.platform, published_at: new Date(`${day}T12:00:00-04:00`).toISOString(), url: args.url ?? "" })
+          .select("*")
+          .single();
+        if (ie) throw new Error(ie.message);
+        pub = data;
+      }
+    }
+
+    // carry over the previous snapshot's numbers for fields not passed
+    const { data: prev } = await supabase
+      .from("content_post_metrics")
+      .select("*")
+      .eq("publication_id", pub.id)
+      .lte("captured_on", capturedOn)
+      .order("captured_on", { ascending: false })
+      .limit(1);
+    const carried = prev?.[0] ? Object.fromEntries(POST_KEYS.filter((k) => prev[0][k] !== null).map((k) => [k, prev[0][k]])) : {};
+    const fields = pickDefined(args, POST_KEYS);
+    if (!Object.keys(fields).length) return fail("No pasaste ninguna métrica.");
+    const { error } = await supabase.from("content_post_metrics").upsert(
+      { user_id: userId, publication_id: pub.id, captured_on: capturedOn, ...carried, ...fields, source: "mcp", updated_at: new Date().toISOString() },
+      { onConflict: "publication_id,captured_on" }
+    );
+    if (error) throw new Error(error.message);
+    return ok({ publicacion: pub.id, plataforma: pub.platform, foto_del: capturedOn, guardado: fields });
+  })
+);
+
+server.registerTool(
+  "log_active_times",
+  {
+    description:
+      "Carga los horarios activos de la audiencia (TikTok Analytics → Followers → Most active times). " +
+      "weekday 0 = lunes … 6 = domingo; hour 0–23 en HORA DE CARACAS (convierte si la captura usa otra zona). " +
+      "value = lo que muestra la gráfica (seguidores activos). Reemplaza el valor de cada celda que pases.",
+    inputSchema: z.object({
+      platform: z.enum(["tiktok", "instagram"]),
+      entries: z
+        .array(z.object({ weekday: z.number().int().min(0).max(6), hour: z.number().int().min(0).max(23), value: z.number() }))
+        .min(1),
+    }),
+  },
+  tool(async ({ platform, entries }) => {
+    const { supabase, userId } = await getSession();
+    const today = caracasToday().date;
+    const rows = entries.map((e) => ({ user_id: userId, platform, ...e, captured_on: today, source: "mcp" }));
+    const { error } = await supabase.from("content_active_times").upsert(rows, { onConflict: "user_id,platform,weekday,hour" });
+    if (error) throw new Error(error.message);
+    return ok({ plataforma: platform, celdas: rows.length });
+  })
+);
+
+// ---------- summary (same rules as the Stats tab: null = sin datos) ----------
+
+const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const addDaysTo = (s, n) => {
+  const [y, m, d] = s.split("-").map(Number);
+  return isoDay(new Date(y, m - 1, d + n));
+};
+// Calendar day of a timestamp in Caracas time
+const caracasDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Caracas" });
+const localOf = (ts) => caracasDay.format(new Date(ts));
+const sumN = (vals) => {
+  const v = vals.filter((x) => typeof x === "number");
+  return v.length ? v.reduce((a, b) => a + b, 0) : null;
+};
+const avgN = (vals) => {
+  const v = vals.filter((x) => typeof x === "number");
+  return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null;
+};
+const SIN = "sin datos";
+const show = (v) => (v === null ? SIN : v);
+
+function periodOf(kind, anchor, to) {
+  const [y, m, d] = anchor.split("-").map(Number);
+  if (kind === "month") return { from: isoDay(new Date(y, m - 1, 1)), to: isoDay(new Date(y, m, 0)) };
+  if (kind === "range") return { from: anchor, to: to && to >= anchor ? to : anchor };
+  const dt = new Date(y, m - 1, d);
+  const monday = new Date(y, m - 1, d - ((dt.getDay() + 6) % 7));
+  return { from: isoDay(monday), to: addDaysTo(isoDay(monday), 6) };
+}
+function prevPeriodOf(kind, p) {
+  if (kind === "month") {
+    const [y, m] = p.from.split("-").map(Number);
+    return periodOf("month", isoDay(new Date(y, m - 2, 1)));
+  }
+  const [y1, m1, d1] = p.from.split("-").map(Number);
+  const [y2, m2, d2] = p.to.split("-").map(Number);
+  const len = Math.round((new Date(y2, m2 - 1, d2) - new Date(y1, m1 - 1, d1)) / 86400000) + 1;
+  return { from: addDaysTo(p.from, -len), to: addDaysTo(p.from, -1) };
+}
+
+server.registerTool(
+  "get_analytics_summary",
+  {
+    description:
+      "Resumen de estadísticas de contenido (TikTok / Instagram) de un periodo: totales de la cuenta con " +
+      "variación contra el periodo anterior y cobertura de días, embudo vistas → perfil → seguidores → leads, " +
+      "top 5 por vistas y por conversión, rendimiento por formato y estilo, mejores horarios, leads por pieza " +
+      "y qué datos faltan. Úsalo para analizar qué funcionó; si algo dice 'sin datos', no lo inventes.",
+    inputSchema: z.object({
+      period: z.enum(["week", "month", "range"]).optional().describe("Por defecto la semana actual"),
+      date: z.string().regex(DAY_RE).optional().describe("Un día dentro del periodo, o el inicio del rango"),
+      to: z.string().regex(DAY_RE).optional().describe("Fin del rango (solo period=range)"),
+      platform: z.enum(["both", "tiktok", "instagram"]).optional(),
+    }),
+  },
+  tool(async ({ period = "week", date, to, platform = "both" }) => {
+    const { supabase } = await getSession();
+    const p = periodOf(period, date ?? caracasToday().date, to);
+    const prevP = prevPeriodOf(period, p);
+    const okPl = (pl) => platform === "both" || pl === platform;
+    const inP = (day, per) => day >= per.from && day <= per.to;
+
+    const [acc, pubs, snaps, times, ideas, cats, leadsRes] = await Promise.all([
+      soft("content_account_daily", supabase.from("content_account_daily").select("*")),
+      soft("content_publications", supabase.from("content_publications").select("*")),
+      soft("content_post_metrics", supabase.from("content_post_metrics").select("*")),
+      soft("content_active_times", supabase.from("content_active_times").select("*")),
+      soft("content_ideas", supabase.from("content_ideas").select("*")),
+      soft("content_categories", supabase.from("content_categories").select("id,name")),
+      soft("pipeline_deals", supabase.from("pipeline_deals").select("id,name,status,source,source_idea_id,created_at")),
+    ]);
+    const missingTables = [acc, pubs, snaps, times, leadsRes].filter((r) => r.error).map((r) => r.label);
+    const leadsAll = leadsRes.error
+      ? null
+      : leadsRes.data.filter((l) => STATS_NETWORKS.includes(l.source) || l.source_idea_id);
+
+    const totals = (per) => {
+      const rows = (acc.data ?? []).filter((r) => okPl(r.platform) && inP(r.day, per));
+      const t = Object.fromEntries(ACCOUNT_KEYS.filter((k) => k !== "followers_total").map((k) => [k, sumN(rows.map((r) => r[k]))]));
+      t.leads = leadsAll ? leadsAll.filter((l) => inP(localOf(l.created_at), per) && (platform === "both" || l.source === platform)).length : null;
+      return { t, dias_con_datos: new Set(rows.map((r) => r.day)).size };
+    };
+    const now = totals(p);
+    const before = totals(prevP);
+    const variacion = Object.fromEntries(
+      Object.keys(now.t).map((k) => {
+        const a = now.t[k];
+        const b = before.t[k];
+        return [k, a === null || b === null || b === 0 ? SIN : `${a >= b ? "+" : ""}${Math.round(((a - b) / Math.abs(b)) * 100)}%`];
+      })
+    );
+
+    const steps = [["vistas", now.t.views], ["visitas_perfil", now.t.profile_views], ["seguidores", now.t.followers_gained], ["leads", now.t.leads]];
+    const embudo = [];
+    for (const [i, [k, v]] of steps.entries()) {
+      if (v === null) break;
+      const prevV = i ? steps[i - 1][1] : null;
+      embudo.push({ paso: k, valor: v, del_paso_anterior: prevV ? `${((v / prevV) * 100).toFixed(1)}%` : null });
+    }
+
+    // pieces posted in the period (latest snapshot per publication)
+    const latest = (pubId) =>
+      (snaps.data ?? []).filter((s) => s.publication_id === pubId).sort((a, b) => b.captured_on.localeCompare(a.captured_on))[0] ?? null;
+    const byIdea = new Map();
+    for (const pub of pubs.data ?? []) {
+      if (!okPl(pub.platform) || !inP(localOf(pub.published_at), p)) continue;
+      byIdea.set(pub.idea_id, [...(byIdea.get(pub.idea_id) ?? []), pub]);
+    }
+    const catName = new Map((cats.data ?? []).map((c) => [c.id, c.name]));
+    const pieces = [...byIdea.entries()].map(([ideaId, list]) => {
+      const idea = (ideas.data ?? []).find((i) => i.id === ideaId) ?? {};
+      const ss = list.map((x) => latest(x.id)).filter(Boolean);
+      const views = sumN(ss.map((s) => s.views));
+      const follows = sumN(ss.map((s) => s.follows));
+      const pv = sumN(ss.map((s) => s.profile_views));
+      const leads = leadsAll ? leadsAll.filter((l) => l.source_idea_id === ideaId).length : 0;
+      let conv = null;
+      let base = null;
+      if (views) {
+        if (follows !== null || leads) {
+          conv = +((((follows ?? 0) + leads) / views) * 1000).toFixed(2);
+          base = "seguidores+leads por 1000 vistas";
+        } else if (pv !== null) {
+          conv = +((pv / views) * 1000).toFixed(2);
+          base = "visitas al perfil por 1000 vistas";
+        }
+      }
+      return {
+        pieza: idea.title ?? "?",
+        formato: idea.format || SIN,
+        estilo: idea.style || SIN,
+        categoria: catName.get(idea.category_id) ?? null,
+        publicada: list.map((x) => localOf(x.published_at)).sort()[0],
+        redes: [...new Set(list.map((x) => x.platform))],
+        vistas: views,
+        comentarios: sumN(ss.map((s) => s.comments)),
+        compartidos: sumN(ss.map((s) => s.shares)),
+        guardados: sumN(ss.map((s) => s.saves)),
+        leads,
+        conversion: conv,
+        base_conversion: base,
+      };
+    });
+    const group = (key) => {
+      const g = {};
+      for (const x of pieces) (g[x[key]] ??= []).push(x);
+      return Object.fromEntries(
+        Object.entries(g).map(([k, list]) => [k, { piezas: list.length, vistas_prom: show(avgN(list.map((x) => x.vistas))), comentarios_prom: show(avgN(list.map((x) => x.comentarios))), compartidos_prom: show(avgN(list.map((x) => x.compartidos))) }])
+      );
+    };
+    const DAYS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"];
+    const cells = {};
+    for (const r of (times.data ?? []).filter((x) => okPl(x.platform))) cells[`${r.weekday}-${r.hour}`] = (cells[`${r.weekday}-${r.hour}`] ?? 0) + Number(r.value);
+    const horarios = Object.entries(cells)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([k, v]) => {
+        const [wd, h] = k.split("-").map(Number);
+        return `${DAYS[wd]} ${h}:00 (${v})`;
+      });
+
+    const faltan = [];
+    if (missingTables.length) faltan.push(`Tablas sin crear: ${missingTables.join(", ")} (correr PENDIENTE.sql)`);
+    const totalDays = Math.round((new Date(p.to) - new Date(p.from)) / 86400000) + 1;
+    if (now.dias_con_datos < totalDays) faltan.push(`Métricas de cuenta: ${now.dias_con_datos} de ${totalDays} días cargados`);
+    if (!pieces.some((x) => x.vistas !== null)) faltan.push("Ninguna pieza publicada en el periodo tiene métricas");
+    if (!horarios.length) faltan.push("No hay horarios activos cargados");
+
+    return ok({
+      periodo: p,
+      periodo_anterior: prevP,
+      plataforma: platform,
+      totales: Object.fromEntries(Object.entries(now.t).map(([k, v]) => [k, show(v)])),
+      variacion_vs_anterior: variacion,
+      cobertura: `${now.dias_con_datos} de ${totalDays} días con métricas de cuenta`,
+      embudo: embudo.length ? embudo : SIN,
+      top_vistas: pieces.filter((x) => x.vistas !== null).sort((a, b) => b.vistas - a.vistas).slice(0, 5),
+      top_conversion: pieces.filter((x) => x.conversion !== null).sort((a, b) => b.conversion - a.conversion).slice(0, 5),
+      por_formato: group("formato"),
+      por_estilo: group("estilo"),
+      mejores_horarios: horarios.length ? horarios : SIN,
+      leads_por_pieza: pieces.filter((x) => x.leads > 0).map((x) => ({ pieza: x.pieza, leads: x.leads })),
+      faltan,
     });
   })
 );
