@@ -1157,3 +1157,69 @@ create policy "nexus read" on calendar_events for select using (auth.uid() = use
 create policy "nexus insert" on calendar_events for insert with check (auth.uid() = user_id);
 create policy "nexus update" on calendar_events for update using (auth.uid() = user_id);
 create policy "nexus delete" on calendar_events for delete using (auth.uid() = user_id);
+
+
+
+-- ============================================================
+-- BLOQUE 34 — BUZÓN DEL ASISTENTE (pestaña "Buzón" del dashboard)
+--
+-- assistant_messages: hilo asíncrono entre Andrés y el asistente (como
+-- "Mensajes" de los proyectos). author = andres | agent; seen_by_agent_at
+-- lo pone buzon_read al leerlo (la UI muestra "Visto").
+-- assistant_notes: notas sueltas (Markdown, fijables) que se dejan entre sí.
+-- Privadas por cuenta, como dashboard_*. No toca datos. Se puede volver a correr.
+-- ============================================================
+
+create table if not exists assistant_messages (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  author text not null default 'andres' check (author in ('andres', 'agent')),
+  body text not null default '',
+  seen_by_agent_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists assistant_messages_user_idx
+  on assistant_messages (user_id, created_at);
+
+create table if not exists assistant_notes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null default '',
+  body text not null default '',
+  pinned boolean not null default false,
+  updated_by text not null default 'andres' check (updated_by in ('andres', 'agent')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists assistant_notes_user_idx
+  on assistant_notes (user_id, pinned, updated_at);
+
+alter table assistant_messages enable row level security;
+alter table assistant_notes enable row level security;
+
+drop policy if exists "nexus read" on assistant_messages;
+drop policy if exists "nexus insert" on assistant_messages;
+drop policy if exists "nexus update" on assistant_messages;
+drop policy if exists "nexus delete" on assistant_messages;
+create policy "nexus read" on assistant_messages for select using (auth.uid() = user_id);
+create policy "nexus insert" on assistant_messages for insert with check (auth.uid() = user_id);
+create policy "nexus update" on assistant_messages for update using (auth.uid() = user_id);
+create policy "nexus delete" on assistant_messages for delete using (auth.uid() = user_id);
+
+drop policy if exists "nexus read" on assistant_notes;
+drop policy if exists "nexus insert" on assistant_notes;
+drop policy if exists "nexus update" on assistant_notes;
+drop policy if exists "nexus delete" on assistant_notes;
+create policy "nexus read" on assistant_notes for select using (auth.uid() = user_id);
+create policy "nexus insert" on assistant_notes for insert with check (auth.uid() = user_id);
+create policy "nexus update" on assistant_notes for update using (auth.uid() = user_id);
+create policy "nexus delete" on assistant_notes for delete using (auth.uid() = user_id);
+
+-- Respuestas en vivo (si no, la pantalla se actualiza sola cada 8 s)
+do $$
+begin
+  alter publication supabase_realtime add table assistant_messages;
+exception when duplicate_object then null;
+end $$;

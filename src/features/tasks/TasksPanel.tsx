@@ -5,7 +5,6 @@ import {
   Check,
   ChevronDown,
   ListChecks,
-  Pencil,
   Plus,
   RefreshCw,
   Trash2,
@@ -179,19 +178,20 @@ export default function TasksPanel() {
           <button
             type="button"
             onClick={() => setShowMore((v) => !v)}
-            className="shrink-0 flex items-center gap-1 px-3 rounded-lg text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+            className="shrink-0 flex items-center gap-1 px-2.5 sm:px-3 rounded-lg text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
             aria-expanded={showMore}
           >
-            Más
+            <span className="hidden sm:inline">Más</span>
             <ChevronDown className={`w-4 h-4 transition-transform ${showMore ? "rotate-180" : ""}`} />
           </button>
           <button
             type="submit"
             disabled={!draft.title.trim() || saving}
-            className="shrink-0 flex items-center gap-1.5 px-4 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-semibold disabled:opacity-40 transition-colors"
+            aria-label="Agregar tarea"
+            className="shrink-0 flex items-center gap-1.5 px-3 sm:px-4 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-semibold disabled:opacity-40 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            Agregar
+            <span className="hidden sm:inline">Agregar</span>
           </button>
         </div>
         {showMore && (
@@ -338,9 +338,19 @@ function TaskItem({
   const html = useMemo(() => (expanded && task.details ? renderMarkdown(task.details) : ""), [expanded, task.details]);
 
   return (
-    <li className="group bg-surface border border-border rounded-xl p-3 flex gap-3">
+    <li
+      onClick={onEdit}
+      onKeyDown={(e) => e.target === e.currentTarget && (e.key === "Enter" || e.key === " ") && onEdit()}
+      tabIndex={0}
+      role="button"
+      aria-label={`Abrir tarea: ${task.title}`}
+      className="group cursor-pointer bg-surface border border-border hover:border-primary/50 hover:bg-surface-hover/40 rounded-xl p-3 grid grid-cols-[auto_minmax(0,1fr)] sm:grid-cols-[auto_minmax(0,1fr)_auto] gap-x-3 gap-y-2 transition-colors focus:outline-none focus-visible:border-primary"
+    >
       <button
-        onClick={onToggle}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
         aria-label={isDone ? "Marcar como pendiente" : "Marcar como hecha"}
         className={`mt-0.5 w-5 h-5 shrink-0 rounded-full border flex items-center justify-center transition-colors ${
           isDone ? "bg-emerald-500 border-emerald-500" : "border-muted/50 hover:border-primary"
@@ -351,14 +361,9 @@ function TaskItem({
 
       <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <button
-            onClick={onEdit}
-            className={`text-left text-sm font-medium hover:text-primary-hover transition-colors ${
-              isDone ? "line-through text-muted" : ""
-            }`}
-          >
+          <span className={`text-left text-sm font-medium ${isDone ? "line-through text-muted" : ""}`}>
             {task.title}
-          </button>
+          </span>
           {!isDone && (
             <span className={`text-[11px] font-medium ${PRIORITY_CLASS[task.priority]}`}>
               {PRIORITY_LABEL[task.priority]}
@@ -419,7 +424,9 @@ function TaskItem({
             )}
             <div>
               <p className="text-[11px] uppercase tracking-wide text-muted mb-1">Subtareas</p>
-              <Checklist items={task.checklist} onChange={onChecklist} />
+              <div onClick={(e) => e.stopPropagation()}>
+                <Checklist items={task.checklist} onChange={onChecklist} />
+              </div>
             </div>
             {task.result && (
               <div className="rounded-lg bg-background border border-border px-3 py-2">
@@ -443,7 +450,10 @@ function TaskItem({
         )}
       </div>
 
-      <div className="flex flex-col items-end gap-2 shrink-0">
+      <div
+        className="col-span-2 sm:col-span-1 flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 pl-8 sm:pl-0"
+        onClick={(e) => e.stopPropagation()}
+      >
         <select
           value={task.status}
           onChange={(e) => onStatus(e.target.value as TaskStatus)}
@@ -465,13 +475,6 @@ function TaskItem({
             className="p-1 rounded text-muted hover:text-foreground transition"
           >
             <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
-          </button>
-          <button
-            onClick={onEdit}
-            aria-label="Editar tarea"
-            className="p-1 rounded text-muted opacity-60 sm:opacity-0 group-hover:opacity-100 hover:text-foreground transition"
-          >
-            <Pencil className="w-4 h-4" />
           </button>
         </div>
         <button
@@ -542,7 +545,7 @@ function TaskEditModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
-        className="relative bg-surface border border-border rounded-xl p-5 w-full max-w-2xl max-h-[90dvh] overflow-y-auto space-y-4"
+        className="relative bg-surface border border-border rounded-xl p-5 w-full max-w-6xl max-h-[92dvh] overflow-y-auto space-y-5 p-4 sm:p-7"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -552,12 +555,18 @@ function TaskEditModal({
         >
           <X className="w-4 h-4" />
         </button>
-        <h3 className="font-semibold pr-8">Editar tarea</h3>
+        <h3 className="text-lg font-semibold pr-8">Editar tarea</h3>
 
         <label className="block text-xs text-muted space-y-1">
           Título
-          <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputClass} maxLength={300} />
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className={`${inputClass} text-base font-medium`}
+            maxLength={300}
+          />
         </label>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <div className="text-xs text-muted space-y-1">
           <div className="flex items-center justify-between">
             <span>Descripción (Markdown)</span>
@@ -576,26 +585,21 @@ function TaskEditModal({
           </div>
           {preview ? (
             <div
-              className={`${TASK_MD_CLASS} min-h-[7rem] rounded-lg border border-border bg-background px-3 py-2`}
+              className={`${TASK_MD_CLASS} min-h-[10rem] lg:min-h-[22rem] rounded-lg border border-border bg-background px-3 py-2`}
               dangerouslySetInnerHTML={{ __html: details.trim() ? renderMarkdown(details) : "<p class='text-muted'>Sin descripción.</p>" }}
             />
           ) : (
             <textarea
               value={details}
               onChange={(e) => setDetails(e.target.value)}
-              rows={7}
+              rows={9}
               placeholder="Qué hay que hacer, contexto, links, cómo saber que está lista…"
-              className={`${inputClass} resize-y`}
+              className={`${inputClass} resize-y lg:min-h-[22rem]`}
             />
           )}
         </div>
-        <div className="text-xs text-muted space-y-1">
-          Subtareas
-          <div className="rounded-lg border border-border bg-background px-3 py-2">
-            <Checklist items={checklist} onChange={setChecklist} />
-          </div>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
           <label className="text-xs text-muted space-y-1">
             Estado
             <select value={status} onChange={(e) => setStatus(e.target.value as TaskStatus)} className={inputClass}>
@@ -615,24 +619,32 @@ function TaskEditModal({
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputClass} />
           </label>
         </div>
+        <div className="text-xs text-muted space-y-1">
+          Subtareas
+          <div className="rounded-lg border border-border bg-background px-3 py-2">
+            <Checklist items={checklist} onChange={setChecklist} />
+          </div>
+        </div>
         <label className="block text-xs text-muted space-y-1">
           Reporte del asistente
           <textarea
             value={result}
             onChange={(e) => setResult(e.target.value)}
-            rows={3}
+            rows={6}
             placeholder="Lo escribe el asistente al avanzar o terminar."
             className={`${inputClass} resize-y`}
           />
         </label>
+        </div>
+        </div>
 
         {error && <p className="text-sm text-red-400">{error}</p>}
 
-        <div className="flex justify-center pt-1">
+        <div className="flex sm:justify-end pt-1">
           <button
             onClick={save}
             disabled={saving}
-            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-semibold disabled:opacity-50 transition-colors"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-semibold disabled:opacity-50 transition-colors"
           >
             {saving ? "Guardando…" : "Guardar cambios"}
           </button>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { CalendarDays, LayoutGrid, ListTodo, MessageSquare, Lock } from "lucide-react";
+import { CalendarDays, Inbox, LayoutGrid, ListTodo, MessageSquare, Lock } from "lucide-react";
 import {
   getShortcuts,
   addShortcut,
@@ -16,6 +16,7 @@ import QuickModuleCards from "./components/QuickModuleCards";
 import ChatPanel from "../chat/ChatPanel";
 import TasksPanel from "../tasks/TasksPanel";
 import CalendarPanel from "../calendar/CalendarPanel";
+import BuzonPanel from "../buzon/BuzonPanel";
 import { usePermissions } from "../../hooks/usePermissions";
 import { MODULES } from "../../lib/modules";
 
@@ -28,6 +29,7 @@ const TABS = [
   { id: "modules", label: "Módulos", icon: LayoutGrid },
   { id: "tasks", label: "Tareas", icon: ListTodo },
   { id: "calendar", label: "Calendario", icon: CalendarDays },
+  { id: "buzon", label: "Buzón", icon: Inbox },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -87,7 +89,7 @@ function AdminDashboard() {
 
   return (
     <div>
-      <div className="flex w-fit gap-1 p-1 mb-5 rounded-xl bg-surface border border-border">
+      <div className="flex w-fit max-w-full gap-1 p-1 mb-5 rounded-xl bg-surface border border-border overflow-x-auto">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -95,7 +97,7 @@ function AdminDashboard() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap shrink-0 ${
                 isActive
                   ? "bg-primary text-white font-semibold"
                   : "text-muted hover:text-foreground"
@@ -121,6 +123,8 @@ function AdminDashboard() {
         <TasksPanel />
       ) : activeTab === "calendar" ? (
         <CalendarPanel />
+      ) : activeTab === "buzon" ? (
+        <BuzonPanel />
       ) : (
         <>
           {/* Shortcuts */}

@@ -9,6 +9,7 @@ import { addEvent, deleteEvent, getEvents, updateEvent } from "./api";
 import {
   DAYS_ES,
   KIND_CLASS,
+  KIND_DOT,
   KIND_LABEL,
   KINDS,
   longDayLabel,
@@ -68,7 +69,7 @@ export default function CalendarPanel() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-lg font-semibold mr-auto">{monthTitle(monthKey)}</h2>
+        <h2 className="text-lg font-semibold mr-auto truncate">{monthTitle(monthKey)}</h2>
         <button
           onClick={() => setMonthKey(monthKeyOf(new Date()))}
           className="px-3 py-1.5 rounded-lg text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
@@ -117,15 +118,15 @@ export default function CalendarPanel() {
               const evs = eventsOn(date);
               const tks = tasksOn(date);
               const items = [
-                ...evs.map((e) => ({ key: e.id, label: e.title, cls: KIND_CLASS[e.kind], done: e.done, time: e.event_time })),
-                ...tks.map((t) => ({ key: `t${t.id}`, label: t.title, cls: "bg-surface-hover text-muted", done: false, time: "" })),
+                ...evs.map((e) => ({ key: e.id, label: e.title, cls: KIND_CLASS[e.kind], dot: KIND_DOT[e.kind], done: e.done, time: e.event_time })),
+                ...tks.map((t) => ({ key: `t${t.id}`, label: t.title, cls: "bg-surface-hover text-muted", dot: "bg-muted", done: false, time: "" })),
               ];
               const extra = items.length - MAX_CHIPS;
               return (
                 <button
                   key={date}
                   onClick={() => setOpenDay(date)}
-                  className={`group min-h-[84px] sm:min-h-[104px] p-1 sm:p-1.5 text-left align-top border-r border-border last:border-r-0 hover:bg-surface-hover/60 transition-colors ${
+                  className={`group min-h-[62px] sm:min-h-[104px] p-1 sm:p-1.5 text-left align-top border-r border-border last:border-r-0 hover:bg-surface-hover/60 transition-colors ${
                     di >= 5 ? "bg-background/20" : ""
                   } ${inMonth ? "" : "opacity-40"}`}
                 >
@@ -139,7 +140,14 @@ export default function CalendarPanel() {
                     </span>
                     <Plus className="w-3.5 h-3.5 text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
-                  <div className="space-y-0.5">
+                  {/* Celular: solo puntos de color (no caben los textos) */}
+                  <div className="flex flex-wrap gap-0.5 px-0.5 sm:hidden">
+                    {items.slice(0, 6).map((it) => (
+                      <span key={it.key} className={`w-1.5 h-1.5 rounded-full ${it.dot} ${it.done ? "opacity-40" : ""}`} />
+                    ))}
+                    {items.length > 6 && <span className="text-[9px] leading-none text-muted">+</span>}
+                  </div>
+                  <div className="hidden sm:block space-y-0.5">
                     {items.slice(0, MAX_CHIPS).map((it) => (
                       <div
                         key={it.key}
@@ -259,7 +267,7 @@ function DayModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
-        className="relative bg-surface border border-border rounded-xl p-5 w-full max-w-md max-h-[90dvh] overflow-y-auto space-y-4"
+        className="relative bg-surface border border-border rounded-xl p-4 sm:p-5 w-full max-w-md max-h-[90dvh] overflow-y-auto space-y-4"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -331,7 +339,7 @@ function DayModal({
             className={inputClass}
             autoFocus
           />
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2">
             <select value={kind} onChange={(e) => setKind(e.target.value as EventKind)} className={inputClass}>
               {KINDS.map((k) => (
                 <option key={k} value={k}>
