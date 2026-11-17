@@ -1379,6 +1379,144 @@ server.registerTool(
 );
 
 // ============================================
+// BUZÓN (BLOQUE 34)
+// Canal asíncrono con Andrés (pestaña Buzón del dashboard): un hilo de
+// mensajes y notas sueltas. buzon_read trae lo nuevo y lo marca como visto
+// ("Visto por el asistente"); buzon_reply contesta en el hilo.
+// ============================================
+
+server.registerTool(
+  "buzon_read",
+  {
+    description:
+      "Lee el Buzón de Andrés (pestaña Buzón del dashboard de NEXUS). Devuelve los mensajes nuevos que él dejó " +
+      "(sin leer) y los últimos mensajes del hilo como contexto, y marca los nuevos como vistos. Úsalo cuando " +
+      "Andrés diga 'revisa el buzón' o 'lee mis mensajes'. Responde con buzon_reply.",
+    inputSchema: z.object({
+      context: z.number().int().min(0).max(50).optional().describe("Cuántos mensajes anteriores traer de contexto (por defecto 8)"),
+    }),
+  },
+  tool(async ({ context = 8 }) => {
+    const { supabase } = await getSession();
+    const { data, error } = await supabase
+      .from("assistant_messages")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    const all = data ?? [];
+    const unread = all.filter((m) => m.author === "andres" && !m.seen_by_agent_at);
+    if (unread.length) {
+      const { error: ue } = await supabase
+        .from("assistant_messages")
+        .update({ seen_by_agent_at: new Date().toISOString() })
+        .in("id", unread.map((m) => m.id));
+      if (ue) throw new Error(ue.message);
+    }
+    const unreadIds = new Set(unread.map((m) => m.id));
+    const view = (m) => ({ de: m.author === "agent" ? "asistente" : "andres", cuando: m.created_at, mensaje: m.body });
+    return ok({
+      nuevos: unread.map(view),
+      contexto_reciente: all.filter((m) => !unreadIds.has(m.id)).slice(-context).map(view),
+      aviso: unread.length ? null : "No hay mensajes nuevos.",
+    });
+  })
+);
+
+server.registerTool(
+  "buzon_reply",
+  {
+    description:
+      "Responde a Andrés en el hilo del Buzón. Admite Markdown. Úsalo después de buzon_read, o para dejarle un " +
+      "aviso. Andrés lo ve en la pestaña Buzón > Mensajes.",
+    inputSchema: z.object({ body: z.string().min(1).describe("Texto de la respuesta (Markdown)") }),
+  },
+  tool(async ({ body }) => {
+    const { supabase, userId } = await getSession();
+    const { data, error } = await supabase
+      .from("assistant_messages")
+      .insert({ user_id: userId, author: "agent", body })
+      .select("*")
+      .single();
+    if (error) throw new Error(error.message);
+    return ok({ enviado: true, id: data.id });
+  })
+);
+
+server.registerTool(
+  "notes_list",
+  {
+    description:
+      "Notas que Andrés le dejó al asistente (Buzón > Notas). Las fijadas van primero. Léelas cuando necesites " +
+      "contexto o preferencias suyas.",
+    inputSchema: z.object({ query: z.string().optional().describe("Texto a buscar en título o contenido") }),
+  },
+  tool(async ({ query }) => {
+    const { supabase } = await getSession();
+    const { data, error } = await supabase.from("assistant_notes").select("*");
+    if (error) throw new Error(error.message);
+    const q = query?.toLowerCase();
+    const rows = (data ?? [])
+      .filter((n) => !q || n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q))
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updated_at.localeCompare(a.updated_at));
+    return ok({
+      notas: rows.map((n) => ({
+        id: n.id,
+        titulo: n.title || null,
+        contenido: n.body,
+        fijada: n.pinned,
+        ultimo_en_tocarla: n.updated_by === "agent" ? "asistente" : "andres",
+        actualizada: n.updated_at,
+      })),
+    });
+  })
+);
+
+server.registerTool(
+  "note_write",
+  {
+    description:
+      "Crea o actualiza una nota del Buzón (por note_id o título exacto). Con create:true la crea si no existe. " +
+      "Con append:true agrega el contenido al final en vez de reemplazarlo. Úsalo solo si Andrés te pide anotar algo.",
+    inputSchema: z.object({
+      note_id: z.string().optional(),
+      title: z.string().optional().describe("Título; para buscarla o crearla"),
+      body: z.string().optional().describe("Contenido en Markdown"),
+      append: z.boolean().optional(),
+      pinned: z.boolean().optional(),
+      create: z.boolean().optional(),
+    }),
+  },
+  tool(async (args) => {
+    const { supabase, userId } = await getSession();
+    const { data, error: le } = await supabase.from("assistant_notes").select("*");
+    if (le) throw new Error(le.message);
+    const notes = data ?? [];
+    let note = args.note_id ? notes.find((n) => n.id === args.note_id) : null;
+    if (!note && args.title) note = notes.find((n) => n.title.toLowerCase() === args.title.toLowerCase()) ?? null;
+    const now = new Date().toISOString();
+
+    if (!note) {
+      if (!args.create) return fail("No encontré la nota. Usa create:true (con title y/o body) para crearla.");
+      const { data: row, error } = await supabase
+        .from("assistant_notes")
+        .insert({ user_id: userId, title: args.title ?? "", body: args.body ?? "", pinned: args.pinned ?? false, updated_by: "agent" })
+        .select("*")
+        .single();
+      if (error) throw new Error(error.message);
+      return ok({ creada: true, id: row.id });
+    }
+
+    const fields = { updated_by: "agent", updated_at: now };
+    if (args.body !== undefined) fields.body = args.append && note.body ? `${note.body}\n\n${args.body}` : args.body;
+    if (args.pinned !== undefined) fields.pinned = args.pinned;
+    if (args.title !== undefined && args.note_id) fields.title = args.title;
+    const { error } = await supabase.from("assistant_notes").update(fields).eq("id", note.id);
+    if (error) throw new Error(error.message);
+    return ok({ actualizada: true, id: note.id });
+  })
+);
+
+// ============================================
 // CONTENT ANALYTICS (BLOQUE 27)
 // Account numbers per day and platform, dated snapshots per publication,
 // and "most active times". Every metric is optional: what isn't passed is
