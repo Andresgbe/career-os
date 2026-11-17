@@ -1107,3 +1107,16 @@ create policy "nexus read" on assistant_tasks for select using (auth.uid() = use
 create policy "nexus insert" on assistant_tasks for insert with check (auth.uid() = user_id);
 create policy "nexus update" on assistant_tasks for update using (auth.uid() = user_id);
 create policy "nexus delete" on assistant_tasks for delete using (auth.uid() = user_id);
+
+
+
+-- ============================================================
+-- BLOQUE 32 — SUBTAREAS EN LAS TAREAS DEL ASISTENTE
+--
+-- Agrega la checklist de cada tarea: [{ "id": "...", "text": "...", "done": false }].
+-- La descripción sigue en details (ahora se escribe y se muestra en Markdown).
+-- No toca datos. Se puede volver a correr.
+-- ============================================================
+
+alter table assistant_tasks
+  add column if not exists checklist jsonb not null default '[]'::jsonb;
