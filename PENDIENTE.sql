@@ -1120,3 +1120,40 @@ create policy "nexus delete" on assistant_tasks for delete using (auth.uid() = u
 
 alter table assistant_tasks
   add column if not exists checklist jsonb not null default '[]'::jsonb;
+
+
+
+-- ============================================================
+-- BLOQUE 33 — CALENDARIO DEL DASHBOARD (pestaña "Calendario")
+--
+-- Recordatorios, tareas y eventos puestos en cualquier día del mes.
+-- event_time es "HH:MM" o '' si es de todo el día. Privada por cuenta,
+-- como dashboard_*. No toca datos. Se puede volver a correr.
+-- ============================================================
+
+create table if not exists calendar_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null default '',
+  notes text not null default '',
+  event_date date not null,
+  event_time text not null default '',
+  kind text not null default 'recordatorio'
+    check (kind in ('recordatorio', 'tarea', 'evento')),
+  done boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists calendar_events_user_date_idx
+  on calendar_events (user_id, event_date);
+
+alter table calendar_events enable row level security;
+
+drop policy if exists "nexus read" on calendar_events;
+drop policy if exists "nexus insert" on calendar_events;
+drop policy if exists "nexus update" on calendar_events;
+drop policy if exists "nexus delete" on calendar_events;
+create policy "nexus read" on calendar_events for select using (auth.uid() = user_id);
+create policy "nexus insert" on calendar_events for insert with check (auth.uid() = user_id);
+create policy "nexus update" on calendar_events for update using (auth.uid() = user_id);
+create policy "nexus delete" on calendar_events for delete using (auth.uid() = user_id);
