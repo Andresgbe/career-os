@@ -21,7 +21,8 @@ export default function CommandPalette({ onClose }: CommandPaletteProps) {
   const all = [
     ...(isAdmin ? [DASHBOARD] : []),
     ...MODULES.filter((m) => canView(m.id)),
-    ...(isAdmin ? [ADMIN_MODULE, BRAIN_MODULE] : []),
+    ...(isAdmin ? [ADMIN_MODULE] : []),
+    ...(isAdmin || canView("brain") ? [BRAIN_MODULE] : []),
   ];
   const needle = query.trim().toLowerCase();
   const results = needle ? all.filter((m) => m.name.toLowerCase().includes(needle)) : all;

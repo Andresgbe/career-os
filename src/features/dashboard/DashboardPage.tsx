@@ -47,6 +47,7 @@ function GuestLanding({ canView }: { canView: (id: string) => boolean }) {
 
   // Con acceso a algo, entra directo ahí: no hay "inicio" que mostrarle.
   if (allowed.length > 0) return <Navigate to={allowed[0].path} replace />;
+  if (canView("brain")) return <Navigate to="/brain" replace />;
 
   return (
     <div className="max-w-md mx-auto text-center py-16 space-y-3">

@@ -41,6 +41,7 @@ import {
 } from "../../lib/contextDocs";
 import type { ContextDocRow, ContextFolderRow } from "../../lib/contextDocs";
 import { BRAIN_SECTION, BRAIN_STARTER } from "./brainTemplates";
+import { usePermissions } from "../../hooks/usePermissions";
 
 const COLORS = ["#8b5cf6", "#ec4899", "#06b6d4", "#f59e0b", "#10b981", "#ef4444", "#3b82f6", "#f97316"];
 const UNFILED = "unfiled";
@@ -125,6 +126,11 @@ export default function BrainPage() {
   const [copied, setCopied] = useState<string | null>(null);
 
   const readerRef = useRef<HTMLDivElement>(null);
+  // Admin: everything. A user granted BRAIN in Admin reads it ("View") and,
+  // with "Edit", writes docs and folders. Deleting and the agent setup stay
+  // admin-only (RLS enforces the same: only the owner deletes).
+  const { isAdmin, canEdit } = usePermissions();
+  const canWrite = isAdmin || canEdit("brain");
   const report = (err: unknown) => setError(errorMessage(err, "Something went wrong"));
 
   useEffect(() => {
@@ -387,6 +393,7 @@ export default function BrainPage() {
                 {copied === "all" ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 {copied === "all" ? "Copied" : "Copy all"}
               </button>
+              {isAdmin && (
               <button
                 onClick={() => setConnectOpen(true)}
                 className="flex items-center gap-2 h-10 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold transition-colors"
@@ -394,6 +401,7 @@ export default function BrainPage() {
                 <Plug className="w-4 h-4" />
                 Connect an agent
               </button>
+              )}
             </div>
           </div>
         </div>
@@ -408,7 +416,11 @@ export default function BrainPage() {
         </div>
       )}
 
-      {folders.length === 0 && docs.length === 0 ? (
+      {folders.length === 0 && docs.length === 0 && !canWrite ? (
+        <div className="rounded-3xl border border-border bg-surface px-6 py-16 text-center text-sm text-muted">
+          Nothing has been shared with you in BRAIN yet.
+        </div>
+      ) : folders.length === 0 && docs.length === 0 ? (
         <EmptyBrain onStarter={createStarter} onBlank={() => setAddingFolder(true)} adding={addingFolder}>
           <input
             autoFocus
@@ -442,6 +454,7 @@ export default function BrainPage() {
                   </button>
                 )}
               </label>
+              {canWrite && (
               <div className="flex gap-1.5">
                 <button
                   onClick={() => createDoc(sortedFolders[0]?.id ?? null)}
@@ -458,6 +471,7 @@ export default function BrainPage() {
                   New folder
                 </button>
               </div>
+              )}
             </div>
 
             <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
@@ -519,7 +533,7 @@ export default function BrainPage() {
                               <span className="text-[13px] font-semibold truncate">{folder?.name ?? "Unfiled"}</span>
                               <span className="ml-auto text-[10.5px] text-muted tabular-nums pr-1">{list.length}</span>
                             </button>
-                            {folder && (
+                            {folder && canWrite && (
                               <div className="hidden group-hover:flex items-center pr-1">
                                 <button
                                   onClick={() => createDoc(folder.id)}
@@ -538,6 +552,7 @@ export default function BrainPage() {
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
                                 </button>
+                                {isAdmin && (
                                 <button
                                   onClick={() => setDeletingFolder(folder)}
                                   className="p-1 rounded text-muted hover:text-red-400"
@@ -545,6 +560,7 @@ export default function BrainPage() {
                                 >
                                   <X className="w-3.5 h-3.5" />
                                 </button>
+                                )}
                               </div>
                             )}
                           </div>
@@ -617,6 +633,7 @@ export default function BrainPage() {
                       <select
                         value={selected.folder_id ?? UNFILED}
                         onChange={(e) => moveDoc(e.target.value === UNFILED ? null : e.target.value)}
+                        disabled={!canWrite}
                         title="Move to another folder"
                         className="bg-transparent uppercase outline-none hover:text-foreground cursor-pointer max-w-[220px] truncate [color-scheme:dark]"
                       >
@@ -630,6 +647,7 @@ export default function BrainPage() {
                     </nav>
 
                     <div className="flex items-center gap-1.5">
+                      {canWrite && (
                       <div className="flex gap-0.5 p-1 rounded-xl bg-background/60 border border-border">
                         {([
                           { key: "read", label: "Read", icon: Eye },
@@ -648,6 +666,7 @@ export default function BrainPage() {
                           </button>
                         ))}
                       </div>
+                      )}
                       <button
                         onClick={() => copy("doc", `# ${draftTitle}\n\n${draftContent}`)}
                         className="p-2 rounded-xl text-muted hover:text-foreground hover:bg-white/5 transition-colors"
@@ -655,6 +674,7 @@ export default function BrainPage() {
                       >
                         {copied === "doc" ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                       </button>
+                      {isAdmin && (
                       <button
                         onClick={() => setDeletingDoc(selected)}
                         className="p-2 rounded-xl text-muted hover:text-red-400 hover:bg-white/5 transition-colors"
@@ -662,12 +682,14 @@ export default function BrainPage() {
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
+                      )}
                     </div>
                   </div>
 
                   <input
                     value={draftTitle}
                     onChange={(e) => edit(e.target.value, draftContent)}
+                    readOnly={!canWrite}
                     placeholder="Untitled"
                     className="w-full bg-transparent text-[28px] font-extrabold tracking-tight outline-none placeholder:text-muted/40"
                   />
@@ -702,7 +724,7 @@ export default function BrainPage() {
                 </div>
 
                 <div className={`flex-1 min-h-0 grid ${mode === "split" ? "md:grid-cols-2" : "grid-cols-1"}`}>
-                  {mode !== "read" && (
+                  {mode !== "read" && canWrite && (
                     <textarea
                       value={draftContent}
                       onChange={(e) => edit(draftTitle, e.target.value)}
@@ -719,12 +741,12 @@ export default function BrainPage() {
                       }`}
                     />
                   )}
-                  {mode !== "edit" && (
+                  {(mode !== "edit" || !canWrite) && (
                     <div
                       ref={readerRef}
-                      onDoubleClick={() => mode === "read" && setMode("edit")}
+                      onDoubleClick={() => canWrite && mode === "read" && setMode("edit")}
                       className={`overflow-y-auto px-6 sm:px-10 py-6 ${mode === "split" ? "hidden md:block" : ""}`}
-                      title={mode === "read" ? "Double-click to edit" : undefined}
+                      title={canWrite && mode === "read" ? "Double-click to edit" : undefined}
                     >
                       <article
                         className={`max-w-3xl text-[14.5px] leading-relaxed ${MARKDOWN_CLASS}`}

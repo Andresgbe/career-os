@@ -59,9 +59,9 @@ export const router = createBrowserRouter([
       {
         path: "brain",
         element: (
-          <RequireAdmin>
+          <RequireModule module="brain">
             <BrainPage />
-          </RequireAdmin>
+          </RequireModule>
         ),
       },
       {

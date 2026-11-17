@@ -22,7 +22,7 @@ export default function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isAdmin } = usePermissions();
+  const { isAdmin, canView } = usePermissions();
   const [paletteOpen, setPaletteOpen] = useState(false);
   // null = unknown (never checked, or no heartbeat table yet)
   const [workerOnline, setWorkerOnline] = useState<boolean | null>(null);
@@ -98,7 +98,7 @@ export default function AppLayout() {
           <ModuleNavGroups variant="topbar" />
           {/* BRAIN: fixed right after Admin (always the nav's last item).
               Not a module, so it can't be regrouped or moved. */}
-          {isAdmin && (
+          {(isAdmin || canView("brain")) && (
             <Link
               to="/brain"
               className={`flex items-center gap-1.5 ml-1 px-3 py-1.5 rounded-lg text-[13px] font-bold tracking-[0.08em] whitespace-nowrap shrink-0 transition-all ${
@@ -197,7 +197,7 @@ export default function AppLayout() {
                 variant="drawer"
                 onNavigate={() => setDrawerOpen(false)}
               />
-              {isAdmin && (
+              {(isAdmin || canView("brain")) && (
                 <Link
                   to="/brain"
                   onClick={() => setDrawerOpen(false)}

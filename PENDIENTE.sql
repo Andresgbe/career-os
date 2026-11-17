@@ -967,3 +967,70 @@ create policy "nexus update" on content_period_totals for update
   using (user_id = auth.uid() or public.nexus_can_edit('content'));
 create policy "nexus delete" on content_period_totals for delete
   using (user_id = auth.uid());
+
+
+-- ============================================================
+-- BLOQUE 29 — BRAIN SE PUEDE COMPARTIR DESDE EL PANEL ADMIN
+--
+-- knowledge_folders / knowledge_docs guardan BRAIN (section 'brain') y el
+-- AI context de Content (section 'content'). Antes los cubría el permiso
+-- del módulo 'knowledge', que ya no existe. Ahora:
+--   · 'brain'   → quien tenga Ver / Editar en BRAIN (panel Admin)
+--   · 'content' → quien tenga Ver / Editar en Content
+-- Borrar sigue siendo solo del dueño. Solo cambia políticas: no toca datos.
+-- Se puede volver a correr.
+-- ============================================================
+
+drop policy if exists "nexus read" on knowledge_folders;
+drop policy if exists "nexus insert" on knowledge_folders;
+drop policy if exists "nexus update" on knowledge_folders;
+drop policy if exists "nexus delete" on knowledge_folders;
+create policy "nexus read" on knowledge_folders for select
+  using (
+    user_id = auth.uid()
+    or (section = 'brain' and public.nexus_can_view('brain'))
+    or (section = 'content' and public.nexus_can_view('content'))
+  );
+create policy "nexus insert" on knowledge_folders for insert
+  with check (
+    user_id = auth.uid() and (
+      public.nexus_is_admin()
+      or (section = 'brain' and public.nexus_can_edit('brain'))
+      or (section = 'content' and public.nexus_can_edit('content'))
+    )
+  );
+create policy "nexus update" on knowledge_folders for update
+  using (
+    user_id = auth.uid()
+    or (section = 'brain' and public.nexus_can_edit('brain'))
+    or (section = 'content' and public.nexus_can_edit('content'))
+  );
+create policy "nexus delete" on knowledge_folders for delete
+  using (user_id = auth.uid());
+
+drop policy if exists "nexus read" on knowledge_docs;
+drop policy if exists "nexus insert" on knowledge_docs;
+drop policy if exists "nexus update" on knowledge_docs;
+drop policy if exists "nexus delete" on knowledge_docs;
+create policy "nexus read" on knowledge_docs for select
+  using (
+    user_id = auth.uid()
+    or (section = 'brain' and public.nexus_can_view('brain'))
+    or (section = 'content' and public.nexus_can_view('content'))
+  );
+create policy "nexus insert" on knowledge_docs for insert
+  with check (
+    user_id = auth.uid() and (
+      public.nexus_is_admin()
+      or (section = 'brain' and public.nexus_can_edit('brain'))
+      or (section = 'content' and public.nexus_can_edit('content'))
+    )
+  );
+create policy "nexus update" on knowledge_docs for update
+  using (
+    user_id = auth.uid()
+    or (section = 'brain' and public.nexus_can_edit('brain'))
+    or (section = 'content' and public.nexus_can_edit('content'))
+  );
+create policy "nexus delete" on knowledge_docs for delete
+  using (user_id = auth.uid());

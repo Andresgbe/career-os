@@ -70,9 +70,10 @@ export const ADMIN_MODULE: ModuleDef = {
   icon: ShieldCheck,
 };
 
-// BRAIN tampoco es un módulo: es una página fija, solo del admin, que va
-// siempre al lado de Admin en la barra. No entra en MODULES para que no se
-// pueda mover, agrupar ni dar permisos sobre ella. La leen los agentes por
+// BRAIN tampoco es un módulo: es una página fija que va siempre al lado de
+// Admin en la barra. No entra en MODULES para que no se pueda mover ni
+// agrupar en el tablero; el panel Admin sí lo lista aparte para dar Ver /
+// Editar con el id "brain" (borrar sigue siendo solo del admin). La leen los agentes por
 // MCP (herramientas `brain` / `brain_write`).
 export const BRAIN_MODULE: ModuleDef = {
   id: "brain",
