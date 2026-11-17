@@ -285,7 +285,6 @@ async function windowLimit(userId, hours, max, label) {
   const { data, count, error } = await supabase
     .from("chat_messages")
     .select("created_at", { count: "exact" })
-    .eq("user_id", userId)
     .eq("role", "assistant")
     .gte("created_at", since)
     .order("created_at", { ascending: true })
@@ -327,8 +326,27 @@ async function guard(message, userId) {
   );
 }
 
+// Andrés can grant the Dashboard (chat) to other accounts in Admin. Their
+// messages are answered with the same full access as his — his decision —
+// but ONLY if that account is active and has "dashboard" view permission;
+// anything else written straight into chat_messages is refused.
+async function chatAllowed(ownerId, adminId) {
+  if (ownerId === adminId) return { ok: true, email: null };
+  const [{ data: prof }, { data: perm }] = await Promise.all([
+    supabase.from("app_profiles").select("email,active").eq("user_id", ownerId).maybeSingle(),
+    supabase
+      .from("app_module_permissions")
+      .select("can_view")
+      .eq("user_id", ownerId)
+      .eq("module", "dashboard")
+      .maybeSingle(),
+  ]);
+  return { ok: !!prof?.active && !!perm?.can_view, email: prof?.email ?? "otro usuario" };
+}
+
 async function handleMessage(message, userId) {
   log(`→ "${message.content.slice(0, 60)}"`);
+  const ownerId = message.user_id;
 
   // Claim it first, so a second worker instance can't take the same row
   const { error: claimErr } = await supabase
@@ -340,6 +358,21 @@ async function handleMessage(message, userId) {
     log("  no se pudo reclamar:", claimErr.message);
     return;
   }
+
+  const access = await chatAllowed(ownerId, userId);
+  if (!access.ok) {
+    log(`  RECHAZADO: ${access.email ?? ownerId} no tiene el chat habilitado`);
+    await supabase.from("chat_messages").insert({
+      user_id: ownerId,
+      conversation_id: message.conversation_id,
+      role: "assistant",
+      content: "Tu cuenta no tiene habilitado el chat de NEXUS. Pedile a Andrés que te active Dashboard en el panel de administrador.",
+      status: "error",
+    });
+    await supabase.from("chat_messages").update({ status: "error" }).eq("id", message.id);
+    return;
+  }
+  if (access.email) log(`  de ${access.email}`);
 
   // Decidir antes de gastar nada en Claude
   const verdict = await guard(message, userId);
@@ -355,7 +388,7 @@ async function handleMessage(message, userId) {
   if (verdict?.kind === "permanent") {
     log(`  RECHAZADO: ${verdict.message}`);
     await supabase.from("chat_messages").insert({
-      user_id: userId,
+      user_id: ownerId,
       conversation_id: message.conversation_id,
       role: "assistant",
       content: verdict.message,
@@ -397,13 +430,13 @@ async function handleMessage(message, userId) {
 
     // La base de conocimiento va solo en sesión nueva: una sesión
     // reanudada ya la tiene en contexto.
-    const resume = await lastSessionId(userId, message.conversation_id);
+    const resume = await lastSessionId(ownerId, message.conversation_id);
     const context = await buildContext(supabase, !resume);
     prompt = `=== CONTEXTO DE NEXUS ===
 ${context}
 === FIN DEL CONTEXTO ===
 
-Mensaje de Andrés:
+${access.email ? `Mensaje de ${access.email} (no es Andrés; Andrés le dio acceso completo al chat):` : "Mensaje de Andrés:"}
 ${prompt}`;
 
     // Mientras Claude trabaja, se comprueba cada pocos segundos si el
@@ -464,7 +497,7 @@ ${prompt}`;
   attempts.delete(message.id);
 
   const { error: insertErr } = await supabase.from("chat_messages").insert({
-    user_id: userId,
+    user_id: ownerId,
     conversation_id: message.conversation_id,
     role: "assistant",
     content: reply,

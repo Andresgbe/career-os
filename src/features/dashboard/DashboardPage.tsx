@@ -34,7 +34,7 @@ export default function DashboardPage() {
   const { isAdmin, canView, loading } = usePermissions();
 
   if (loading) return null;
-  if (!isAdmin) return <GuestLanding canView={canView} />;
+  if (!isAdmin && !canView("dashboard")) return <GuestLanding canView={canView} />;
   return <AdminDashboard />;
 }
 

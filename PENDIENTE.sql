@@ -1034,3 +1034,32 @@ create policy "nexus update" on knowledge_docs for update
   );
 create policy "nexus delete" on knowledge_docs for delete
   using (user_id = auth.uid());
+
+
+-- ============================================================
+-- BLOQUE 30 — EL CHAT DEL DASHBOARD PARA OTRAS CUENTAS
+--
+-- Andrés puede darle "Dashboard (chat)" a otra cuenta en el panel Admin.
+-- El worker inicia sesión como Andrés (admin), así que para responderle a
+-- esa cuenta necesita leer sus mensajes y conversaciones, escribir la
+-- respuesta a su nombre y abrir sus adjuntos. Estas políticas se SUMAN a
+-- las que ya existen (cada cuenta sigue viendo solo lo suyo); solo el admin
+-- ve todo. El worker además se niega a responder a cuentas sin el permiso.
+-- No toca datos. Se puede volver a correr.
+-- ============================================================
+
+drop policy if exists "admin worker read" on chat_messages;
+drop policy if exists "admin worker insert" on chat_messages;
+drop policy if exists "admin worker update" on chat_messages;
+create policy "admin worker read" on chat_messages for select using (public.nexus_is_admin());
+create policy "admin worker insert" on chat_messages for insert with check (public.nexus_is_admin());
+create policy "admin worker update" on chat_messages for update using (public.nexus_is_admin());
+
+drop policy if exists "admin worker read" on chat_conversations;
+drop policy if exists "admin worker update" on chat_conversations;
+create policy "admin worker read" on chat_conversations for select using (public.nexus_is_admin());
+create policy "admin worker update" on chat_conversations for update using (public.nexus_is_admin());
+
+drop policy if exists "chat-files admin read" on storage.objects;
+create policy "chat-files admin read" on storage.objects for select
+  using (bucket_id = 'chat-files' and public.nexus_is_admin());

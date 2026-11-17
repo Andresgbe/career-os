@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Bike, Stethoscope, Video, GraduationCap, Laptop, Landmark, KeyRound, ShieldCheck, Brain, Radar } from "lucide-react";
+import { Bike, Stethoscope, Video, GraduationCap, Laptop, Landmark, KeyRound, ShieldCheck, Brain, Radar, LayoutDashboard } from "lucide-react";
 
 export interface ModuleDef {
   id: string;
@@ -80,4 +80,15 @@ export const BRAIN_MODULE: ModuleDef = {
   name: "BRAIN",
   path: "/brain",
   icon: Brain,
+};
+
+// La pantalla principal (Chat + tarjetas). Es del admin, pero desde el panel
+// Admin se le puede dar "Ver" a otra cuenta: entonces ve esta pantalla y usa
+// el chat, que el worker responde con el mismo acceso completo de Andrés
+// (decisión suya). El worker solo atiende a cuentas activas con este permiso.
+export const DASHBOARD_MODULE: ModuleDef = {
+  id: "dashboard",
+  name: "Dashboard (chat)",
+  path: "/",
+  icon: LayoutDashboard,
 };

@@ -19,7 +19,7 @@ export default function CommandPalette({ onClose }: CommandPaletteProps) {
   const [selected, setSelected] = useState(0);
 
   const all = [
-    ...(isAdmin ? [DASHBOARD] : []),
+    ...(isAdmin || canView("dashboard") ? [DASHBOARD] : []),
     ...MODULES.filter((m) => canView(m.id)),
     ...(isAdmin ? [ADMIN_MODULE] : []),
     ...(isAdmin || canView("brain") ? [BRAIN_MODULE] : []),

@@ -16,9 +16,11 @@ async function requireUser() {
 // ============================================
 
 export async function getConversations(): Promise<ConversationRow[]> {
+  const user = await requireUser();
   const { data, error } = await supabase
     .from("chat_conversations")
     .select("*")
+    .eq("user_id", user.id)
     .order("updated_at", { ascending: false });
   if (error) throw error;
   return data ?? [];

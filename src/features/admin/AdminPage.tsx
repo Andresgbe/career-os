@@ -9,7 +9,7 @@ import {
   Check,
 } from "lucide-react";
 import { errorMessage } from "../../lib/errors";
-import { BRAIN_MODULE, MODULES } from "../../lib/modules";
+import { BRAIN_MODULE, DASHBOARD_MODULE, MODULES } from "../../lib/modules";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { getProjects } from "../projects/api";
 import type { ProjectRow } from "../projects/types";
@@ -381,7 +381,7 @@ function PermissionEditor({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {[...MODULES, BRAIN_MODULE].map((module) => {
+            {[DASHBOARD_MODULE, ...MODULES, BRAIN_MODULE].map((module) => {
               const Icon = module.icon;
               const perm = permissions[module.id] ?? NO_PERMISSION;
               return (

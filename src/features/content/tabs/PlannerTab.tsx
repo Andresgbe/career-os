@@ -39,6 +39,8 @@ import MonthCalendar from "../components/MonthCalendar";
 import PieceCard from "../components/PieceCard";
 import type { ContentStudio } from "../useContentStudio";
 import { metricsSummary } from "../stats";
+import CollapseToggle from "../../../components/CollapseToggle";
+import { useCollapsed } from "../../../hooks/useCollapsed";
 
 const BANK = "bank";
 const READY = "ready";
@@ -79,6 +81,14 @@ export default function PlannerTab({
     setStripStart(laterOf(shiftWeek(selectedWeek, -1), currentWeek));
   }
   const [pastOpen, setPastOpen] = useState(false);
+
+  // Every horizontal block can be minimized; remembered per browser
+  const [stripCollapsed, toggleStrip] = useCollapsed("content-planner:weeks");
+  const [briefCollapsed, toggleBrief] = useCollapsed("content-planner:brief");
+  const [daysCollapsed, toggleDays] = useCollapsed("content-planner:days");
+  const [monthCollapsed, toggleMonth] = useCollapsed("content-planner:month");
+  const [readyCollapsed, toggleReady] = useCollapsed("content-planner:ready");
+  const [bankCollapsed, toggleBank] = useCollapsed("content-planner:bank");
 
   // Week view (strip + 7 days) or Google-Calendar-style month view. The
   // choice is remembered per browser.
@@ -178,6 +188,7 @@ export default function PlannerTab({
     <div className="space-y-3">
             <div className="rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.04] p-3.5 space-y-3">
               <div className="flex items-center gap-2.5 px-0.5">
+                <CollapseToggle collapsed={readyCollapsed} onToggle={toggleReady} label="Ready to post" />
                 <span className="w-8 h-8 rounded-xl bg-emerald-400/15 flex items-center justify-center text-emerald-300">
                   <CircleCheck className="w-4 h-4" />
                 </span>
@@ -185,10 +196,13 @@ export default function PlannerTab({
                   <p className="text-sm font-semibold">
                     Ready to post <span className="text-muted font-normal tabular-nums">· {ready.length}</span>
                   </p>
-                  <p className="text-xs text-muted">Finished pieces without a date. Drag one onto a day to schedule it.</p>
+                  {!readyCollapsed && (
+                    <p className="text-xs text-muted">Finished pieces without a date. Drag one onto a day to schedule it.</p>
+                  )}
                 </div>
               </div>
 
+              {!readyCollapsed && (
               <Droppable droppableId={READY} direction="horizontal" isDropDisabled={!draggingDone}>
                 {(provided, snapshot) => (
                   <div
@@ -225,10 +239,12 @@ export default function PlannerTab({
                   </div>
                 )}
               </Droppable>
+              )}
             </div>
             <div className="rounded-2xl border border-border bg-background/40 p-3.5 space-y-3">
               <div className="flex items-center justify-between gap-3 flex-wrap px-0.5">
                 <div className="flex items-center gap-2.5">
+                  <CollapseToggle collapsed={bankCollapsed} onToggle={toggleBank} label="Idea bank" />
                   <span className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center text-muted">
                     <Inbox className="w-4 h-4" />
                   </span>
@@ -236,7 +252,9 @@ export default function PlannerTab({
                     <p className="text-sm font-semibold">
                       Idea bank <span className="text-muted font-normal tabular-nums">· {bank.length}</span>
                     </p>
-                    <p className="text-xs text-muted">Drag an idea onto a day to schedule it, or drop it back here.</p>
+                    {!bankCollapsed && (
+                      <p className="text-xs text-muted">Drag an idea onto a day to schedule it, or drop it back here.</p>
+                    )}
                   </div>
                 </div>
                 <button
@@ -248,6 +266,7 @@ export default function PlannerTab({
                 </button>
               </div>
 
+              {!bankCollapsed && (
               <Droppable droppableId={BANK} direction="horizontal" isDropDisabled={draggingDone}>
                 {(provided, snapshot) => (
                   <div
@@ -284,6 +303,7 @@ export default function PlannerTab({
                   </div>
                 )}
               </Droppable>
+              )}
             </div>
     </div>
   );
@@ -392,6 +412,13 @@ export default function PlannerTab({
       {view === "month" && (
         <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="space-y-4">
+            <BlockBar
+              title="Calendar"
+              meta={monthCollapsed ? monthLabel(monthKey) : undefined}
+              collapsed={monthCollapsed}
+              onToggle={toggleMonth}
+            />
+            {!monthCollapsed && (
             <MonthCalendar
               monthKey={monthKey}
               today={today}
@@ -405,6 +432,7 @@ export default function PlannerTab({
                 setView("week");
               }}
             />
+            )}
             {bankPanel}
           </div>
         </DragDropContext>
@@ -414,6 +442,13 @@ export default function PlannerTab({
         <>
       {/* ===== Week strip ===== */}
       <section className="space-y-3">
+        <BlockBar
+          title="Upcoming weeks"
+          meta={`${weekNumber(stripWeeks[0])} – ${weekNumber(stripWeeks[stripWeeks.length - 1])}`}
+          collapsed={stripCollapsed}
+          onToggle={toggleStrip}
+        />
+        {!stripCollapsed && (
         <div
           ref={stripRef}
           className="flex gap-3.5 overflow-x-auto snap-x pb-3 pt-1 -mx-4 px-4 sm:mx-0 sm:px-0"
@@ -432,6 +467,7 @@ export default function PlannerTab({
             />
           ))}
         </div>
+        )}
       </section>
 
       {pastOpen && (
@@ -514,10 +550,27 @@ export default function PlannerTab({
             </div>
           </div>
 
-          <WeekBrief key={selectedWeek} weekKey={selectedWeek} week={week} studio={studio} />
+          <div className="space-y-3">
+            <BlockBar
+              title="Theme & brief"
+              meta={briefCollapsed ? week?.title || undefined : undefined}
+              collapsed={briefCollapsed}
+              onToggle={toggleBrief}
+            />
+            {!briefCollapsed && (
+              <WeekBrief key={selectedWeek} weekKey={selectedWeek} week={week} studio={studio} />
+            )}
+          </div>
 
           <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             {/* Days */}
+            <BlockBar
+              title="Days"
+              meta={`${selectedPieces.length} ${selectedPieces.length === 1 ? "piece" : "pieces"}`}
+              collapsed={daysCollapsed}
+              onToggle={toggleDays}
+            />
+            {!daysCollapsed && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-2.5">
               {days.map((date) => {
                 const d = new Date(`${date}T00:00:00`);
@@ -596,6 +649,7 @@ export default function PlannerTab({
                 );
               })}
             </div>
+            )}
 
             {bankPanel}
           </DragDropContext>
@@ -603,6 +657,32 @@ export default function PlannerTab({
       </section>
         </>
       )}
+    </div>
+  );
+}
+
+// Slim header for a block that has none of its own: chevron + label (+ a
+// short summary). Clicking the label also toggles.
+function BlockBar({
+  title,
+  meta,
+  collapsed,
+  onToggle,
+}: {
+  title: string;
+  meta?: string;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2.5 min-w-0">
+      <CollapseToggle collapsed={collapsed} onToggle={onToggle} label={title} />
+      <button onClick={onToggle} className="flex items-baseline gap-2 min-w-0 text-left">
+        <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted hover:text-foreground transition-colors whitespace-nowrap">
+          {title}
+        </span>
+        {meta && <span className="text-xs text-muted/70 truncate">{meta}</span>}
+      </button>
     </div>
   );
 }

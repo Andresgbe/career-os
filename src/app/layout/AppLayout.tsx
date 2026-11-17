@@ -83,7 +83,7 @@ export default function AppLayout() {
             Scrolls sideways instead of wrapping — the header is a fixed
             height, so a wrapped second row would be clipped. */}
         <nav className="hidden sm:flex items-center gap-0.5 p-1 ml-1 rounded-xl bg-surface border border-border min-w-0 overflow-x-auto no-scrollbar">
-          {isAdmin && (
+          {(isAdmin || canView("dashboard")) && (
             <Link
               to="/"
               className={`px-3.5 py-1.5 rounded-lg text-sm transition-colors shrink-0 ${
@@ -96,12 +96,15 @@ export default function AppLayout() {
             </Link>
           )}
           <ModuleNavGroups variant="topbar" />
-          {/* BRAIN: fixed right after Admin (always the nav's last item).
-              Not a module, so it can't be regrouped or moved. */}
-          {(isAdmin || canView("brain")) && (
+        </nav>
+
+        {/* BRAIN: right after the nav (Admin is always its last item), but
+            outside its sideways scroll so it never gets pushed off-screen on
+            smaller widths. Not a module, so it can't be regrouped or moved. */}
+        {(isAdmin || canView("brain")) && (
             <Link
               to="/brain"
-              className={`flex items-center gap-1.5 ml-1 px-3 py-1.5 rounded-lg text-[13px] font-bold tracking-[0.08em] whitespace-nowrap shrink-0 transition-all ${
+              className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-bold tracking-[0.08em] whitespace-nowrap shrink-0 transition-all ${
                 location.pathname.startsWith("/brain")
                   ? "bg-gradient-to-r from-primary to-fuchsia-500 text-white shadow-[0_6px_18px_-8px_rgba(139,92,246,0.9)]"
                   : "border border-primary/40 bg-primary/10 text-primary-hover hover:bg-primary/20"
@@ -111,7 +114,6 @@ export default function AppLayout() {
               BRAIN
             </Link>
           )}
-        </nav>
 
           {/* Spacer */}
           <div className="flex-1" />
@@ -184,7 +186,7 @@ export default function AppLayout() {
               </button>
             </div>
             <nav className="flex flex-col gap-1">
-              {isAdmin && (
+              {(isAdmin || canView("dashboard")) && (
                 <Link
                   to="/"
                   onClick={() => setDrawerOpen(false)}

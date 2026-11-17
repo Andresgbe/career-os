@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 import { MODULES } from "../../../lib/modules";
+import { usePermissions } from "../../../hooks/usePermissions";
 
 // The two modules opened most from the dashboard, as big cards in the left
 // column. Icon and route come from MODULES so they never drift from the nav.
@@ -20,11 +21,12 @@ const CARDS = [
 ];
 
 export default function QuickModuleCards() {
+  const { canView } = usePermissions();
   return (
     <div className="grid grid-cols-2 lg:grid-cols-1 lg:grid-rows-2 gap-4 h-full">
       {CARDS.map((card) => {
         const mod = MODULES.find((m) => m.id === card.moduleId);
-        if (!mod) return null;
+        if (!mod || !canView(mod.id)) return null;
         const Icon = mod.icon;
         return (
           <Link
