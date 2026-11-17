@@ -9,6 +9,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { createClient } from "@supabase/supabase-js";
 import * as z from "zod";
+import { randomUUID } from "node:crypto";
 import dotenv from "dotenv";
 
 import { registerCrudTools } from "./crud.js";
@@ -1218,11 +1219,17 @@ const TASK_PRIORITY_RANK = { alta: 0, media: 1, baja: 2 };
 const taskToday = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "America/Caracas" }).format(new Date());
 
+const taskChecklist = (items) =>
+  items.map((i) => ({ id: randomUUID(), text: i.text, done: !!i.done }));
+
 function taskView(t, today) {
   return {
     id: t.id,
     tarea: t.title,
     detalles: t.details || null,
+    subtareas: Array.isArray(t.checklist) && t.checklist.length
+      ? t.checklist.map((i) => ({ texto: i.text, hecha: !!i.done }))
+      : null,
     estado: t.status,
     prioridad: t.priority,
     fecha_limite: t.due_date,
@@ -1293,7 +1300,11 @@ server.registerTool(
       status: z.enum(TASK_STATUSES).optional(),
       result: z.string().optional().describe("Reporte para Andrés: qué hiciste, resultado, o qué falta"),
       append: z.boolean().optional().describe("Agregar result debajo del reporte anterior en vez de reemplazarlo"),
-      details: z.string().optional().describe("Qué hay que hacer"),
+      details: z.string().optional().describe("Qué hay que hacer (admite Markdown)"),
+      checklist: z
+        .array(z.object({ text: z.string(), done: z.boolean().optional() }))
+        .optional()
+        .describe("Subtareas; reemplaza la lista completa (manda todas, con done true/false)"),
       priority: z.enum(["alta", "media", "baja"]).optional(),
       due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().describe("YYYY-MM-DD o null"),
     }),
@@ -1329,6 +1340,7 @@ server.registerTool(
           user_id: userId,
           title: args.title,
           details: args.details ?? "",
+          ...(args.checklist?.length ? { checklist: taskChecklist(args.checklist) } : {}),
           priority: args.priority ?? "media",
           due_date: args.due_date ?? null,
           status,
@@ -1354,6 +1366,7 @@ server.registerTool(
     for (const k of ["details", "priority", "due_date"]) {
       if (args[k] !== undefined) fields[k] = args[k];
     }
+    if (args.checklist !== undefined) fields.checklist = taskChecklist(args.checklist);
     const { data, error } = await supabase
       .from("assistant_tasks")
       .update(fields)

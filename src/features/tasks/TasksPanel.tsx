@@ -4,6 +4,8 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  ListChecks,
+  Pencil,
   Plus,
   RefreshCw,
   Trash2,
@@ -12,8 +14,13 @@ import {
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { errorMessage } from "../../lib/errors";
 import { addTask, deleteTask, getTasks, updateTask } from "./api";
+import Checklist from "./Checklist";
+import { renderMarkdown, TASK_MD_CLASS } from "./markdown";
 import {
   caracasToday,
+  checklistProgress,
+  timeAgo,
+  type ChecklistItem,
   formatDue,
   isOverdue,
   PRIORITY_CLASS,
@@ -35,7 +42,7 @@ type Filter = "abiertas" | "hechas" | "todas";
 // marcando desde el chat sin tener que recargar.
 const REFRESH_MS = 30000;
 
-const EMPTY_DRAFT: TaskFields = { title: "", details: "", priority: "media", due_date: null };
+const EMPTY_DRAFT: TaskFields = { title: "", details: "", priority: "media", due_date: null, checklist: [] };
 
 const inputClass =
   "w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted/60 focus:outline-none focus:border-primary";
@@ -192,8 +199,8 @@ export default function TasksPanel() {
             <textarea
               value={draft.details}
               onChange={(e) => setDraft({ ...draft, details: e.target.value })}
-              placeholder="Detalles: qué tiene que hacer, dónde, cómo sabes que está listo…"
-              rows={3}
+              placeholder="Descripción (admite Markdown): qué hay que hacer, dónde, cómo sabes que está listo…"
+              rows={4}
               className={`${inputClass} resize-y`}
             />
             <label className="text-xs text-muted space-y-1">
@@ -209,6 +216,17 @@ export default function TasksPanel() {
                 className={inputClass}
               />
             </label>
+            <div className="sm:col-span-3 rounded-lg border border-border bg-background px-3 py-2">
+              <p className="text-xs text-muted mb-1.5 flex items-center gap-1.5">
+                <ListChecks className="w-3.5 h-3.5" />
+                Subtareas
+              </p>
+              <Checklist
+                items={draft.checklist ?? []}
+                onChange={(checklist) => setDraft({ ...draft, checklist })}
+                compact
+              />
+            </div>
           </div>
         )}
       </form>
@@ -252,6 +270,15 @@ export default function TasksPanel() {
               key={task.id}
               task={task}
               onToggle={() => setStatus(task, task.status === "hecha" ? "pendiente" : "hecha")}
+              onChecklist={async (checklist) => {
+                replace({ ...task, checklist });
+                try {
+                  replace(await updateTask(task.id, { checklist }));
+                } catch (err) {
+                  setError(errorMessage(err, "No pude guardar las subtareas (¿corriste el BLOQUE 32?)"));
+                  load();
+                }
+              }}
               onStatus={(s) => setStatus(task, s)}
               onEdit={() => setEditing(task)}
               onDelete={() => setDeleting(task)}
@@ -291,18 +318,24 @@ export default function TasksPanel() {
 function TaskItem({
   task,
   onToggle,
+  onChecklist,
   onStatus,
   onEdit,
   onDelete,
 }: {
   task: TaskRow;
   onToggle: () => void;
+  onChecklist: (items: ChecklistItem[]) => void;
   onStatus: (s: TaskStatus) => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const isDone = task.status === "hecha";
   const overdue = isOverdue(task, caracasToday());
+  const [expanded, setExpanded] = useState(false);
+  const progress = checklistProgress(task.checklist);
+  const hasMore = !!task.details || progress.total > 0 || !!task.result;
+  const html = useMemo(() => (expanded && task.details ? renderMarkdown(task.details) : ""), [expanded, task.details]);
 
   return (
     <li className="group bg-surface border border-border rounded-xl p-3 flex gap-3">
@@ -341,6 +374,17 @@ function TaskItem({
               {overdue && " · vencida"}
             </span>
           )}
+          {progress.total > 0 && (
+            <span
+              className={`flex items-center gap-1 text-[11px] ${
+                progress.done === progress.total ? "text-emerald-300" : "text-muted"
+              }`}
+              title="Subtareas completadas"
+            >
+              <ListChecks className="w-3 h-3" />
+              {progress.done}/{progress.total}
+            </span>
+          )}
           {task.updated_by === "agent" && (
             <span
               className="flex items-center gap-1 text-[11px] text-primary-hover"
@@ -352,11 +396,46 @@ function TaskItem({
           )}
         </div>
 
-        {task.details && (
+        {progress.total > 0 && (
+          <div className="mt-1.5 h-1 rounded-full bg-background overflow-hidden max-w-xs">
+            <div
+              className="h-full bg-emerald-500 transition-all"
+              style={{ width: `${(progress.done / progress.total) * 100}%` }}
+            />
+          </div>
+        )}
+
+        {!expanded && task.details && (
           <p className="mt-1 text-xs text-muted line-clamp-2 whitespace-pre-line">{task.details}</p>
         )}
 
-        {task.result && (
+        {expanded && (
+          <div className="mt-3 space-y-3">
+            {task.details && (
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted mb-0.5">Descripción</p>
+                <div className={TASK_MD_CLASS} dangerouslySetInnerHTML={{ __html: html }} />
+              </div>
+            )}
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-muted mb-1">Subtareas</p>
+              <Checklist items={task.checklist} onChange={onChecklist} />
+            </div>
+            {task.result && (
+              <div className="rounded-lg bg-background border border-border px-3 py-2">
+                <p className="text-[11px] uppercase tracking-wide text-muted mb-0.5">Reporte del asistente</p>
+                <p className="text-xs text-foreground whitespace-pre-line">{task.result}</p>
+              </div>
+            )}
+            <p className="text-[11px] text-muted">
+              Creada {timeAgo(task.created_at)}
+              {task.updated_at !== task.created_at && ` · actualizada ${timeAgo(task.updated_at)}`}
+              {task.completed_at && ` · terminada ${timeAgo(task.completed_at)}`}
+            </p>
+          </div>
+        )}
+
+        {!expanded && task.result && (
           <div className="mt-2 rounded-lg bg-background border border-border px-3 py-2">
             <p className="text-[11px] uppercase tracking-wide text-muted mb-0.5">Reporte del asistente</p>
             <p className="text-xs text-foreground whitespace-pre-line line-clamp-4">{task.result}</p>
@@ -377,6 +456,24 @@ function TaskItem({
             </option>
           ))}
         </select>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            aria-label={expanded ? "Contraer" : "Ver detalle"}
+            aria-expanded={expanded}
+            title={hasMore ? "Ver detalle" : "Ver detalle y agregar subtareas"}
+            className="p-1 rounded text-muted hover:text-foreground transition"
+          >
+            <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
+          </button>
+          <button
+            onClick={onEdit}
+            aria-label="Editar tarea"
+            className="p-1 rounded text-muted opacity-60 sm:opacity-0 group-hover:opacity-100 hover:text-foreground transition"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
+        </div>
         <button
           onClick={onDelete}
           aria-label="Borrar tarea"
@@ -408,6 +505,8 @@ function TaskEditModal({
   const [dueDate, setDueDate] = useState(task.due_date ?? "");
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [result, setResult] = useState(task.result);
+  const [checklist, setChecklist] = useState<ChecklistItem[]>(task.checklist);
+  const [preview, setPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -430,6 +529,7 @@ function TaskEditModal({
         priority,
         due_date: dueDate || null,
         result: result.trim(),
+        ...(JSON.stringify(checklist) !== JSON.stringify(task.checklist) ? { checklist } : {}),
         ...(status !== task.status ? { status } : {}),
       });
       onSaved(row);
@@ -442,7 +542,7 @@ function TaskEditModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
-        className="relative bg-surface border border-border rounded-xl p-5 w-full max-w-lg max-h-[90dvh] overflow-y-auto space-y-4"
+        className="relative bg-surface border border-border rounded-xl p-5 w-full max-w-2xl max-h-[90dvh] overflow-y-auto space-y-4"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -458,10 +558,43 @@ function TaskEditModal({
           Título
           <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputClass} maxLength={300} />
         </label>
-        <label className="block text-xs text-muted space-y-1">
-          Detalles
-          <textarea value={details} onChange={(e) => setDetails(e.target.value)} rows={4} className={`${inputClass} resize-y`} />
-        </label>
+        <div className="text-xs text-muted space-y-1">
+          <div className="flex items-center justify-between">
+            <span>Descripción (Markdown)</span>
+            <span className="flex gap-1">
+              {[false, true].map((p) => (
+                <button
+                  key={String(p)}
+                  type="button"
+                  onClick={() => setPreview(p)}
+                  className={`px-2 py-0.5 rounded ${preview === p ? "bg-surface-hover text-foreground" : "hover:text-foreground"}`}
+                >
+                  {p ? "Vista previa" : "Escribir"}
+                </button>
+              ))}
+            </span>
+          </div>
+          {preview ? (
+            <div
+              className={`${TASK_MD_CLASS} min-h-[7rem] rounded-lg border border-border bg-background px-3 py-2`}
+              dangerouslySetInnerHTML={{ __html: details.trim() ? renderMarkdown(details) : "<p class='text-muted'>Sin descripción.</p>" }}
+            />
+          ) : (
+            <textarea
+              value={details}
+              onChange={(e) => setDetails(e.target.value)}
+              rows={7}
+              placeholder="Qué hay que hacer, contexto, links, cómo saber que está lista…"
+              className={`${inputClass} resize-y`}
+            />
+          )}
+        </div>
+        <div className="text-xs text-muted space-y-1">
+          Subtareas
+          <div className="rounded-lg border border-border bg-background px-3 py-2">
+            <Checklist items={checklist} onChange={setChecklist} />
+          </div>
+        </div>
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="text-xs text-muted space-y-1">
             Estado

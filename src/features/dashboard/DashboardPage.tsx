@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { LayoutGrid, ListTodo, MessageSquare, Lock } from "lucide-react";
+import { CalendarDays, LayoutGrid, ListTodo, MessageSquare, Lock } from "lucide-react";
 import {
   getShortcuts,
   addShortcut,
@@ -15,6 +15,7 @@ import ModuleBoard from "./components/ModuleBoard";
 import QuickModuleCards from "./components/QuickModuleCards";
 import ChatPanel from "../chat/ChatPanel";
 import TasksPanel from "../tasks/TasksPanel";
+import CalendarPanel from "../calendar/CalendarPanel";
 import { usePermissions } from "../../hooks/usePermissions";
 import { MODULES } from "../../lib/modules";
 
@@ -26,6 +27,7 @@ const TABS = [
   { id: "chat", label: "Chat", icon: MessageSquare },
   { id: "modules", label: "Módulos", icon: LayoutGrid },
   { id: "tasks", label: "Tareas", icon: ListTodo },
+  { id: "calendar", label: "Calendario", icon: CalendarDays },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -117,6 +119,8 @@ function AdminDashboard() {
         <ChatPanel />
       ) : activeTab === "tasks" ? (
         <TasksPanel />
+      ) : activeTab === "calendar" ? (
+        <CalendarPanel />
       ) : (
         <>
           {/* Shortcuts */}

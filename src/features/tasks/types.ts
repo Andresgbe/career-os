@@ -6,10 +6,18 @@ export type TaskStatus = "pendiente" | "en_curso" | "bloqueada" | "hecha";
 export type TaskPriority = "alta" | "media" | "baja";
 export type TaskActor = "andres" | "agent";
 
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
 export interface TaskRow {
   id: string;
   title: string;
   details: string;
+  /** Subtareas (BLOQUE 32). Opcional en la BD: si la columna no existe es []. */
+  checklist: ChecklistItem[];
   status: TaskStatus;
   priority: TaskPriority;
   due_date: string | null;
@@ -22,7 +30,30 @@ export interface TaskRow {
   completed_at: string | null;
 }
 
-export type TaskFields = Pick<TaskRow, "title" | "details" | "priority" | "due_date">;
+export type TaskFields = Pick<TaskRow, "title" | "details" | "priority" | "due_date"> & {
+  checklist?: ChecklistItem[];
+};
+
+export function newChecklistItem(text: string): ChecklistItem {
+  return { id: crypto.randomUUID(), text, done: false };
+}
+
+export function checklistProgress(items: ChecklistItem[]): { done: number; total: number } {
+  return { done: items.filter((i) => i.done).length, total: items.length };
+}
+
+/** "hace 3 h", "hace 2 d"… para mostrar cuándo se creó o tocó una tarea. */
+export function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return "";
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return "ahora";
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.floor(h / 24);
+  return d < 30 ? `hace ${d} d` : new Date(iso).toLocaleDateString("es-VE", { day: "numeric", month: "short" });
+}
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {
   pendiente: "Pendiente",

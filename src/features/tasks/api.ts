@@ -1,5 +1,5 @@
 import { supabase } from "../../lib/supabase";
-import type { TaskFields, TaskRow, TaskStatus } from "./types";
+import type { ChecklistItem, TaskFields, TaskRow, TaskStatus } from "./types";
 
 async function requireUser() {
   const {
@@ -9,11 +9,22 @@ async function requireUser() {
   return user;
 }
 
+function normalizeChecklist(raw: unknown): ChecklistItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((i, idx) => {
+      const o = (i ?? {}) as Record<string, unknown>;
+      return { id: String(o.id ?? `i${idx}`), text: String(o.text ?? ""), done: o.done === true };
+    })
+    .filter((i) => i.text);
+}
+
 function normalize(row: Record<string, unknown>): TaskRow {
   return {
     id: String(row.id),
     title: String(row.title ?? ""),
     details: String(row.details ?? ""),
+    checklist: normalizeChecklist(row.checklist),
     status: (row.status as TaskStatus) ?? "pendiente",
     priority: (row.priority as TaskRow["priority"]) ?? "media",
     due_date: (row.due_date as string | null) ?? null,
@@ -34,9 +45,17 @@ export async function getTasks(): Promise<TaskRow[]> {
 
 export async function addTask(fields: TaskFields, sortOrder: number): Promise<TaskRow> {
   const user = await requireUser();
+  // checklist solo se manda si hay items, así funciona aunque el BLOQUE 32 no se haya corrido.
+  const { checklist, ...base } = fields;
   const { data, error } = await supabase
     .from("assistant_tasks")
-    .insert({ user_id: user.id, ...fields, sort_order: sortOrder, updated_by: "andres" })
+    .insert({
+      user_id: user.id,
+      ...base,
+      ...(checklist && checklist.length ? { checklist } : {}),
+      sort_order: sortOrder,
+      updated_by: "andres",
+    })
     .select("*")
     .single();
   if (error) throw error;
