@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Clock, ListTodo, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Clock, ListTodo, Plus, Repeat, Trash2, X } from "lucide-react";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { errorMessage } from "../../lib/errors";
 import { monthGrid, monthKeyOf, shiftMonth, toISODate, todayISO } from "../content/types";
 import { getTasks } from "../tasks/api";
 import type { TaskRow } from "../tasks/types";
 import { addEvent, deleteEvent, getEvents, updateEvent } from "./api";
+import { dayBefore, occurrencesOn } from "./recurrence";
 import {
   DAYS_ES,
   KIND_CLASS,
@@ -14,9 +15,14 @@ import {
   KINDS,
   longDayLabel,
   monthTitle,
-  sortEvents,
+  repeatLabel,
+  repeatShort,
+  REPEATS,
+  sortOccurrences,
   type CalendarEvent,
   type EventKind,
+  type Occurrence,
+  type RepeatKind,
 } from "./types";
 
 // Cuántos items se ven en una celda antes de colapsar el resto en "+N"
@@ -60,7 +66,7 @@ export default function CalendarPanel() {
       .catch(() => {});
   }, []);
 
-  const eventsOn = (date: string) => events.filter((e) => e.event_date === date).sort(sortEvents);
+  const occurrences = (date: string) => occurrencesOn(events, date).sort(sortOccurrences);
   const tasksOn = (date: string) =>
     assistantTasks.filter((t) => t.due_date === date && t.status !== "hecha");
 
@@ -115,11 +121,11 @@ export default function CalendarPanel() {
               const date = toISODate(day);
               const inMonth = day.getMonth() + 1 === currentMonth;
               const isToday = date === today;
-              const evs = eventsOn(date);
+              const evs = occurrences(date);
               const tks = tasksOn(date);
               const items = [
-                ...evs.map((e) => ({ key: e.id, label: e.title, cls: KIND_CLASS[e.kind], dot: KIND_DOT[e.kind], done: e.done, time: e.event_time })),
-                ...tks.map((t) => ({ key: `t${t.id}`, label: t.title, cls: "bg-surface-hover text-muted", dot: "bg-muted", done: false, time: "" })),
+                ...evs.map((o) => ({ key: o.event.id, label: o.event.title, cls: KIND_CLASS[o.event.kind], dot: KIND_DOT[o.event.kind], done: o.done, time: o.event.event_time, repeats: o.event.repeat !== "none" })),
+                ...tks.map((t) => ({ key: `t${t.id}`, label: t.title, cls: "bg-surface-hover text-muted", dot: "bg-muted", done: false, time: "", repeats: false })),
               ];
               const extra = items.length - MAX_CHIPS;
               return (
@@ -155,6 +161,7 @@ export default function CalendarPanel() {
                           it.done ? "line-through opacity-60" : ""
                         }`}
                       >
+                        {it.repeats && <Repeat className="hidden sm:inline w-2.5 h-2.5 mr-0.5 -mt-0.5 opacity-70" />}
                         {it.time && <span className="hidden sm:inline font-medium">{it.time} </span>}
                         {it.label}
                       </div>
@@ -184,7 +191,7 @@ export default function CalendarPanel() {
       {openDay && (
         <DayModal
           date={openDay}
-          events={eventsOn(openDay)}
+          occurrences={occurrences(openDay)}
           assistantTasks={tasksOn(openDay)}
           onClose={() => setOpenDay(null)}
           onChange={load}
@@ -201,14 +208,14 @@ export default function CalendarPanel() {
 
 function DayModal({
   date,
-  events,
+  occurrences,
   assistantTasks,
   onClose,
   onChange,
   onError,
 }: {
   date: string;
-  events: CalendarEvent[];
+  occurrences: Occurrence[];
   assistantTasks: TaskRow[];
   onClose: () => void;
   onChange: () => void;
@@ -218,8 +225,10 @@ function DayModal({
   const [time, setTime] = useState("");
   const [kind, setKind] = useState<EventKind>("recordatorio");
   const [notes, setNotes] = useState("");
+  const [repeat, setRepeat] = useState<RepeatKind>("none");
+  const [until, setUntil] = useState("");
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState<CalendarEvent | null>(null);
+  const [deleting, setDeleting] = useState<Occurrence | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && !deleting && onClose();
@@ -233,10 +242,21 @@ function DayModal({
     if (!t || saving) return;
     setSaving(true);
     try {
-      await addEvent({ title: t, notes: notes.trim(), event_date: date, event_time: time, kind });
+      await addEvent({
+        title: t,
+        notes: notes.trim(),
+        event_date: date,
+        event_time: time,
+        kind,
+        // Los campos de repetición solo se mandan si hay repetición, así
+        // un evento simple funciona aunque la BD no los tenga todavía.
+        ...(repeat !== "none" ? { repeat, repeat_until: until && until >= date ? until : null } : {}),
+      });
       setTitle("");
       setTime("");
       setNotes("");
+      setRepeat("none");
+      setUntil("");
       onChange();
     } catch (err) {
       onError(errorMessage(err, "No pude guardar"));
@@ -245,19 +265,30 @@ function DayModal({
     }
   }
 
-  async function toggle(ev: CalendarEvent) {
+  async function toggle({ event: ev, done }: Occurrence) {
     try {
-      await updateEvent(ev.id, { done: !ev.done });
+      if (ev.repeat === "none") await updateEvent(ev.id, { done: !done });
+      else {
+        const done_dates = done ? ev.done_dates.filter((d) => d !== date) : [...ev.done_dates, date];
+        await updateEvent(ev.id, { done_dates });
+      }
       onChange();
     } catch (err) {
       onError(errorMessage(err, "No pude actualizar"));
     }
   }
 
-  async function remove(ev: CalendarEvent) {
+  // scope: "one" = solo este día, "following" = este y los siguientes, "all" = toda la serie
+  async function remove(ev: Occurrence["event"], scope: "one" | "following" | "all") {
     setDeleting(null);
     try {
-      await deleteEvent(ev.id);
+      if (scope === "all" || ev.repeat === "none" || (scope === "following" && date <= ev.event_date)) {
+        await deleteEvent(ev.id);
+      } else if (scope === "following") {
+        await updateEvent(ev.id, { repeat_until: dayBefore(date) });
+      } else {
+        await updateEvent(ev.id, { skip_dates: [...ev.skip_dates, date] });
+      }
       onChange();
     } catch (err) {
       onError(errorMessage(err, "No pude borrar"));
@@ -279,24 +310,26 @@ function DayModal({
         </button>
         <h3 className="font-semibold pr-8 capitalize">{longDayLabel(date)}</h3>
 
-        {events.length === 0 && assistantTasks.length === 0 ? (
+        {occurrences.length === 0 && assistantTasks.length === 0 ? (
           <p className="text-sm text-muted">Nada este día todavía.</p>
         ) : (
           <ul className="space-y-2">
-            {events.map((ev) => (
+            {occurrences.map((occ) => {
+              const ev = occ.event;
+              return (
               <li key={ev.id} className="group flex items-start gap-2.5">
                 <button
-                  onClick={() => toggle(ev)}
-                  aria-label={ev.done ? "Marcar pendiente" : "Marcar hecho"}
+                  onClick={() => toggle(occ)}
+                  aria-label={occ.done ? "Marcar pendiente" : "Marcar hecho"}
                   className={`mt-0.5 w-5 h-5 shrink-0 rounded-full border flex items-center justify-center transition-colors ${
-                    ev.done ? "bg-emerald-500 border-emerald-500" : "border-muted/50 hover:border-primary"
+                    occ.done ? "bg-emerald-500 border-emerald-500" : "border-muted/50 hover:border-primary"
                   }`}
                 >
-                  {ev.done && <Check className="w-3.5 h-3.5 text-white" />}
+                  {occ.done && <Check className="w-3.5 h-3.5 text-white" />}
                 </button>
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <span className={`text-sm font-medium break-words ${ev.done ? "line-through text-muted" : ""}`}>
+                    <span className={`text-sm font-medium break-words ${occ.done ? "line-through text-muted" : ""}`}>
                       {ev.title}
                     </span>
                     <span className={`text-[10px] font-medium rounded px-1.5 py-0.5 ${KIND_CLASS[ev.kind]}`}>
@@ -308,18 +341,28 @@ function DayModal({
                         {ev.event_time}
                       </span>
                     )}
+                    {ev.repeat !== "none" && (
+                      <span
+                        className="flex items-center gap-1 text-[11px] text-muted"
+                        title={ev.repeat_until ? `Hasta el ${ev.repeat_until}` : "Sin fecha final"}
+                      >
+                        <Repeat className="w-3 h-3" />
+                        {repeatShort(ev.repeat)}
+                      </span>
+                    )}
                   </div>
                   {ev.notes && <p className="text-xs text-muted whitespace-pre-line mt-0.5">{ev.notes}</p>}
                 </div>
                 <button
-                  onClick={() => setDeleting(ev)}
+                  onClick={() => setDeleting(occ)}
                   aria-label="Borrar"
                   className="p-1 rounded text-muted opacity-60 sm:opacity-0 group-hover:opacity-100 hover:text-red-400 transition"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
               </li>
-            ))}
+              );
+            })}
             {assistantTasks.map((t) => (
               <li key={t.id} className="flex items-center gap-2.5 text-sm text-muted">
                 <ListTodo className="w-5 h-5 shrink-0 p-0.5" />
@@ -355,6 +398,31 @@ function DayModal({
               className={inputClass}
             />
           </div>
+          <select
+            value={repeat}
+            onChange={(e) => setRepeat(e.target.value as RepeatKind)}
+            aria-label="Repetición"
+            className={inputClass}
+          >
+            {REPEATS.map((r) => (
+              <option key={r} value={r}>
+                {repeatLabel(r, date)}
+              </option>
+            ))}
+          </select>
+          {repeat !== "none" && (
+            <label className="flex items-center gap-2 text-xs text-muted">
+              Hasta
+              <input
+                type="date"
+                value={until}
+                min={date}
+                onChange={(e) => setUntil(e.target.value)}
+                className={inputClass}
+              />
+              <span className="shrink-0">(opcional)</span>
+            </label>
+          )}
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -373,14 +441,54 @@ function DayModal({
         </form>
       </div>
 
-      {deleting && (
+      {deleting && deleting.event.repeat === "none" && (
         <ConfirmDialog
           title="Borrar"
-          message={`¿Borrar "${deleting.title}"? No se puede deshacer.`}
+          message={`¿Borrar "${deleting.event.title}"? No se puede deshacer.`}
           confirmLabel="Borrar"
-          onConfirm={() => remove(deleting)}
+          onConfirm={() => remove(deleting.event, "all")}
           onCancel={() => setDeleting(null)}
         />
+      )}
+      {deleting && deleting.event.repeat !== "none" && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          onClick={(e) => {
+            e.stopPropagation();
+            setDeleting(null);
+          }}
+        >
+          <div
+            className="bg-surface border border-border rounded-xl p-5 w-full max-w-sm space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-semibold">Borrar evento que se repite</h3>
+            <p className="text-sm text-muted break-words">"{deleting.event.title}"</p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => remove(deleting.event, "one")}
+                className="px-3 py-2 rounded-lg text-sm text-left bg-surface-hover hover:bg-surface-hover/70"
+              >
+                Solo este día
+              </button>
+              <button
+                onClick={() => remove(deleting.event, "following")}
+                className="px-3 py-2 rounded-lg text-sm text-left bg-surface-hover hover:bg-surface-hover/70"
+              >
+                Este día y los siguientes
+              </button>
+              <button
+                onClick={() => remove(deleting.event, "all")}
+                className="px-3 py-2 rounded-lg text-sm text-left text-red-300 bg-red-500/10 hover:bg-red-500/20"
+              >
+                Toda la serie
+              </button>
+              <button onClick={() => setDeleting(null)} className="px-3 py-2 rounded-lg text-sm text-muted hover:text-foreground">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

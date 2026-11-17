@@ -1126,7 +1126,10 @@ alter table assistant_tasks
 -- ============================================================
 -- BLOQUE 33 — CALENDARIO DEL DASHBOARD (pestaña "Calendario")
 --
--- Recordatorios, tareas y eventos puestos en cualquier día del mes.
+-- Recordatorios, tareas y eventos puestos en cualquier día del mes, con
+-- repetición opcional (diaria, semanal, mensual, anual; hasta una fecha o sin
+-- fin). done_dates / skip_dates guardan los días de una serie marcados como
+-- hechos o borrados ("solo este día").
 -- event_time es "HH:MM" o '' si es de todo el día. Privada por cuenta,
 -- como dashboard_*. No toca datos. Se puede volver a correr.
 -- ============================================================
@@ -1141,8 +1144,20 @@ create table if not exists calendar_events (
   kind text not null default 'recordatorio'
     check (kind in ('recordatorio', 'tarea', 'evento')),
   done boolean not null default false,
+  repeat text not null default 'none'
+    check (repeat in ('none', 'daily', 'weekly', 'monthly', 'yearly')),
+  repeat_until date,
+  done_dates jsonb not null default '[]'::jsonb,
+  skip_dates jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now()
 );
+
+-- Si la tabla ya existía de antes (sin repetición), se agregan las columnas
+alter table calendar_events
+  add column if not exists repeat text not null default 'none',
+  add column if not exists repeat_until date,
+  add column if not exists done_dates jsonb not null default '[]'::jsonb,
+  add column if not exists skip_dates jsonb not null default '[]'::jsonb;
 
 create index if not exists calendar_events_user_date_idx
   on calendar_events (user_id, event_date);

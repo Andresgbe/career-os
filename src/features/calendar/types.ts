@@ -3,6 +3,8 @@
 
 export type EventKind = "recordatorio" | "tarea" | "evento";
 
+export type RepeatKind = "none" | "daily" | "weekly" | "monthly" | "yearly";
+
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -12,11 +14,54 @@ export interface CalendarEvent {
   /** HH:MM (24 h) o "" si es de todo el día */
   event_time: string;
   kind: EventKind;
+  /** Hecho (solo eventos que no se repiten; en una serie se usa done_dates). */
   done: boolean;
+  /** Repetición (BLOQUE 33): la serie empieza en event_date. */
+  repeat: RepeatKind;
+  /** Último día de la serie (inclusive); null = sin fin. */
+  repeat_until: string | null;
+  /** Días de la serie ya marcados como hechos. */
+  done_dates: string[];
+  /** Días de la serie que se borraron ("solo este día"). */
+  skip_dates: string[];
   created_at: string;
 }
 
-export type EventFields = Pick<CalendarEvent, "title" | "notes" | "event_date" | "event_time" | "kind">;
+/** Una aparición concreta de un evento en un día (las series generan varias). */
+export interface Occurrence {
+  event: CalendarEvent;
+  date: string;
+  done: boolean;
+}
+
+export type EventFields = Pick<CalendarEvent, "title" | "notes" | "event_date" | "event_time" | "kind"> & {
+  repeat?: RepeatKind;
+  repeat_until?: string | null;
+};
+
+export const REPEATS: RepeatKind[] = ["none", "daily", "weekly", "monthly", "yearly"];
+
+/** Texto de cada opción de repetición, según el día elegido (como Google Calendar). */
+export function repeatLabel(kind: RepeatKind, date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  switch (kind) {
+    case "none":
+      return "No se repite";
+    case "daily":
+      return "Todos los días";
+    case "weekly":
+      return `Cada semana el ${dt.toLocaleDateString("es-VE", { weekday: "long" })}`;
+    case "monthly":
+      return `Cada mes el día ${d}`;
+    case "yearly":
+      return `Cada año el ${d} de ${MONTHS_ES[m - 1].toLowerCase()}`;
+  }
+}
+
+export function repeatShort(kind: RepeatKind): string {
+  return { none: "", daily: "Diario", weekly: "Semanal", monthly: "Mensual", yearly: "Anual" }[kind];
+}
 
 export const KINDS: EventKind[] = ["recordatorio", "tarea", "evento"];
 
@@ -61,12 +106,13 @@ export function longDayLabel(date: string): string {
 }
 
 /** Con hora primero (por hora), luego los de todo el día; hechos al final. */
-export function sortEvents(a: CalendarEvent, b: CalendarEvent): number {
+export function sortOccurrences(a: Occurrence, b: Occurrence): number {
   if (a.done !== b.done) return a.done ? 1 : -1;
-  if (a.event_time !== b.event_time) {
-    if (!a.event_time) return 1;
-    if (!b.event_time) return -1;
-    return a.event_time.localeCompare(b.event_time);
+  const [ta, tb] = [a.event.event_time, b.event.event_time];
+  if (ta !== tb) {
+    if (!ta) return 1;
+    if (!tb) return -1;
+    return ta.localeCompare(tb);
   }
-  return a.created_at.localeCompare(b.created_at);
+  return a.event.created_at.localeCompare(b.event.created_at);
 }
