@@ -14,6 +14,7 @@ import {
   X,
   Trash2,
   Copy,
+  Download,
   Check,
   Eye,
   PenLine,
@@ -67,6 +68,30 @@ function ago(iso: string): string {
 
 // Headings (h1–h3) outside code fences, in document order — the same order
 // marked renders them, so index i maps to the i-th rendered heading.
+// The doc as one markdown file: its title as an H1, unless the content
+// already opens with that heading.
+function docMarkdown(title: string, content: string): string {
+  const body = content.trim();
+  const heading = `# ${title.trim() || "Untitled"}`;
+  return body.split("\n")[0].trim() === heading ? `${body}\n` : `${heading}\n\n${body}\n`;
+}
+
+function downloadMarkdown(title: string, md: string) {
+  const name =
+    (title.trim() || "doc")
+      .replace(/[\\/:*?"<>|]+/g, "")
+      .replace(/\s+/g, "-")
+      .slice(0, 80) || "doc";
+  const url = URL.createObjectURL(new Blob([md], { type: "text/markdown;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${name}.md`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function outlineOf(md: string): { level: number; text: string }[] {
   const out: { level: number; text: string }[] = [];
   let fenced = false;
@@ -668,11 +693,20 @@ export default function BrainPage() {
                       </div>
                       )}
                       <button
-                        onClick={() => copy("doc", `# ${draftTitle}\n\n${draftContent}`)}
-                        className="p-2 rounded-xl text-muted hover:text-foreground hover:bg-white/5 transition-colors"
-                        title="Copy as markdown"
+                        onClick={() => copy("doc", docMarkdown(draftTitle, draftContent))}
+                        className="flex items-center gap-1.5 h-9 px-2.5 rounded-xl text-xs font-semibold text-muted hover:text-foreground hover:bg-white/5 transition-colors"
+                        title="Copy this doc as markdown"
                       >
                         {copied === "doc" ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                        <span className="hidden sm:inline">{copied === "doc" ? "Copied" : "Copy"}</span>
+                      </button>
+                      <button
+                        onClick={() => downloadMarkdown(draftTitle, docMarkdown(draftTitle, draftContent))}
+                        className="flex items-center gap-1.5 h-9 px-2.5 rounded-xl text-xs font-semibold text-muted hover:text-foreground hover:bg-white/5 transition-colors"
+                        title="Download this doc as a .md file"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span className="hidden sm:inline">.md</span>
                       </button>
                       {isAdmin && (
                       <button

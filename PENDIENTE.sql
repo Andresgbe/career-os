@@ -1063,3 +1063,47 @@ create policy "admin worker update" on chat_conversations for update using (publ
 drop policy if exists "chat-files admin read" on storage.objects;
 create policy "chat-files admin read" on storage.objects for select
   using (bucket_id = 'chat-files' and public.nexus_is_admin());
+
+
+-- ============================================================
+-- BLOQUE 31 — TAREAS PARA EL ASISTENTE (pestaña "Tareas" del dashboard)
+--
+-- Andrés le deja tareas al asistente (el chat de NEXUS / Claude por MCP) y
+-- lleva el control: estado, prioridad, fecha límite y lo que el asistente
+-- reporta al terminar (result). updated_by dice quién tocó la tarea por
+-- última vez (andres | agent). El asistente las lee con tasks_list y las
+-- actualiza con task_update. Privada por cuenta, como dashboard_*.
+-- No toca datos. Se puede volver a correr.
+-- ============================================================
+
+create table if not exists assistant_tasks (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null default '',
+  details text not null default '',
+  status text not null default 'pendiente'
+    check (status in ('pendiente', 'en_curso', 'bloqueada', 'hecha')),
+  priority text not null default 'media'
+    check (priority in ('alta', 'media', 'baja')),
+  due_date date,
+  result text not null default '',
+  updated_by text not null default 'andres' check (updated_by in ('andres', 'agent')),
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  completed_at timestamptz
+);
+
+create index if not exists assistant_tasks_user_idx
+  on assistant_tasks (user_id, status, sort_order);
+
+alter table assistant_tasks enable row level security;
+
+drop policy if exists "nexus read" on assistant_tasks;
+drop policy if exists "nexus insert" on assistant_tasks;
+drop policy if exists "nexus update" on assistant_tasks;
+drop policy if exists "nexus delete" on assistant_tasks;
+create policy "nexus read" on assistant_tasks for select using (auth.uid() = user_id);
+create policy "nexus insert" on assistant_tasks for insert with check (auth.uid() = user_id);
+create policy "nexus update" on assistant_tasks for update using (auth.uid() = user_id);
+create policy "nexus delete" on assistant_tasks for delete using (auth.uid() = user_id);

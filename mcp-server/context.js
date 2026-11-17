@@ -56,6 +56,7 @@ export async function buildContext(supabase, includeKnowledge) {
     finRates,
     folders,
     docs,
+    tasks,
   ] = await Promise.all([
       rows(
         supabase
@@ -90,6 +91,12 @@ export async function buildContext(supabase, includeKnowledge) {
               .order("sort_order")
           )
         : [],
+      rows(
+        supabase
+          .from("assistant_tasks")
+          .select("title,status,priority,due_date")
+          .neq("status", "hecha")
+      ),
     ]);
 
   const classes = blocks
@@ -111,6 +118,26 @@ export async function buildContext(supabase, includeKnowledge) {
       (e) => `  ${e.eval_date} — ${subjectName.get(e.subject_id) ?? "?"}: ${e.name}`
     );
   if (upcoming.length) out.push(`EVALUACIONES PRÓXIMAS:\n${upcoming.join("\n")}`);
+
+  if (tasks.length) {
+    const rank = { alta: 0, media: 1, baja: 2 };
+    const list = [...tasks]
+      .sort(
+        (a, b) =>
+          (rank[a.priority] ?? 1) - (rank[b.priority] ?? 1) ||
+          (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999")
+      )
+      .slice(0, 10)
+      .map(
+        (t) =>
+          `  [${t.status}] ${t.title} — prioridad ${t.priority}` +
+          (t.due_date ? ` — límite ${t.due_date}${t.due_date < today.date ? " (VENCIDA)" : ""}` : "")
+      );
+    out.push(
+      `TAREAS QUE ANDRÉS TE DEJÓ (pestaña Tareas; detalle con tasks_list, reporta avances con task_update):\n${list.join("\n")}` +
+        (tasks.length > 10 ? `\n  …y ${tasks.length - 10} más.` : "")
+    );
+  }
 
   if (projects.length) {
     out.push(

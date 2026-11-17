@@ -1207,6 +1207,165 @@ server.registerTool(
 );
 
 // ============================================
+// TAREAS PARA EL ASISTENTE (BLOQUE 31)
+// Andrés las deja en la pestaña "Tareas" del dashboard; el asistente las
+// lee, avanza y deja su reporte. Todo lo que toca el asistente queda con
+// updated_by = "agent", así Andrés ve qué movió.
+// ============================================
+
+const TASK_STATUSES = ["pendiente", "en_curso", "bloqueada", "hecha"];
+const TASK_PRIORITY_RANK = { alta: 0, media: 1, baja: 2 };
+const taskToday = () =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "America/Caracas" }).format(new Date());
+
+function taskView(t, today) {
+  return {
+    id: t.id,
+    tarea: t.title,
+    detalles: t.details || null,
+    estado: t.status,
+    prioridad: t.priority,
+    fecha_limite: t.due_date,
+    vencida: t.status !== "hecha" && !!t.due_date && t.due_date < today,
+    reporte: t.result || null,
+    ultimo_en_tocarla: t.updated_by === "agent" ? "asistente" : "andres",
+    hecha_el: t.completed_at,
+  };
+}
+
+server.registerTool(
+  "tasks_list",
+  {
+    description:
+      "Tareas que Andrés le dejó al asistente (pestaña Tareas del dashboard de NEXUS). Por defecto devuelve " +
+      "las abiertas (pendiente, en_curso, bloqueada) ordenadas por prioridad y fecha límite. Úsalo cuando " +
+      "Andrés pida 'revisa mis tareas', 'qué tengo pendiente' o 'haz las tareas'. Después de trabajar en una, " +
+      "repórtalo con task_update.",
+    inputSchema: z.object({
+      status: z
+        .enum(["abiertas", "todas", ...TASK_STATUSES])
+        .optional()
+        .describe("Filtro: abiertas (por defecto), todas, o un estado concreto"),
+    }),
+  },
+  tool(async ({ status = "abiertas" }) => {
+    const { supabase } = await getSession();
+    const { data, error } = await supabase.from("assistant_tasks").select("*");
+    if (error) throw new Error(error.message);
+    const all = data ?? [];
+    const today = taskToday();
+    const rows = all
+      .filter((t) =>
+        status === "todas" ? true : status === "abiertas" ? t.status !== "hecha" : t.status === status
+      )
+      .sort(
+        (a, b) =>
+          Number(a.status === "hecha") - Number(b.status === "hecha") ||
+          (TASK_PRIORITY_RANK[a.priority] ?? 1) - (TASK_PRIORITY_RANK[b.priority] ?? 1) ||
+          (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999") ||
+          a.sort_order - b.sort_order
+      );
+    const open = all.filter((t) => t.status !== "hecha");
+    return ok({
+      resumen: {
+        abiertas: open.length,
+        vencidas: open.filter((t) => t.due_date && t.due_date < today).length,
+        bloqueadas: open.filter((t) => t.status === "bloqueada").length,
+        hechas: all.length - open.length,
+      },
+      tareas: rows.map((t) => taskView(t, today)),
+    });
+  })
+);
+
+server.registerTool(
+  "task_update",
+  {
+    description:
+      "Actualiza o crea una tarea de la pestaña Tareas. Identifícala con task_id o por título (title, exacto " +
+      "o parcial). Con create:true la crea si no existe (solo si Andrés te pide anotar una tarea). Cambia el " +
+      "estado (pendiente | en_curso | bloqueada | hecha) y deja en result lo que hiciste, lo que encontraste o " +
+      "por qué está bloqueada: Andrés lo lee en la tarjeta. Marca 'hecha' solo si de verdad la terminaste.",
+    inputSchema: z.object({
+      task_id: z.string().optional(),
+      title: z.string().optional().describe("Título de la tarea; para buscarla o para crearla"),
+      create: z.boolean().optional().describe("Crear la tarea si no existe"),
+      status: z.enum(TASK_STATUSES).optional(),
+      result: z.string().optional().describe("Reporte para Andrés: qué hiciste, resultado, o qué falta"),
+      append: z.boolean().optional().describe("Agregar result debajo del reporte anterior en vez de reemplazarlo"),
+      details: z.string().optional().describe("Qué hay que hacer"),
+      priority: z.enum(["alta", "media", "baja"]).optional(),
+      due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().describe("YYYY-MM-DD o null"),
+    }),
+  },
+  tool(async (args) => {
+    const { supabase, userId } = await getSession();
+    const { data: all, error: le } = await supabase.from("assistant_tasks").select("*");
+    if (le) throw new Error(le.message);
+    const tasks = all ?? [];
+
+    let task = args.task_id ? tasks.find((t) => t.id === args.task_id) : null;
+    if (!task && args.title) {
+      const needle = args.title.toLowerCase();
+      const exact = tasks.filter((t) => t.title.toLowerCase() === needle);
+      const found = exact.length ? exact : tasks.filter((t) => t.title.toLowerCase().includes(needle));
+      if (found.length > 1) {
+        return fail(`"${args.title}" coincide con varias: ${found.map((t) => `${t.title} (${t.id})`).join(", ")}. Usa task_id.`);
+      }
+      task = found[0] ?? null;
+    }
+
+    const now = new Date().toISOString();
+    const today = taskToday();
+
+    if (!task) {
+      if (!args.create || !args.title) {
+        return fail(`No encontré la tarea${args.title ? ` "${args.title}"` : ""}. Usa create:true con title para crearla.`);
+      }
+      const status = args.status ?? "pendiente";
+      const { data, error } = await supabase
+        .from("assistant_tasks")
+        .insert({
+          user_id: userId,
+          title: args.title,
+          details: args.details ?? "",
+          priority: args.priority ?? "media",
+          due_date: args.due_date ?? null,
+          status,
+          result: args.result ?? "",
+          updated_by: "agent",
+          sort_order: tasks.reduce((m, t) => Math.max(m, t.sort_order), 0) + 1,
+          completed_at: status === "hecha" ? now : null,
+        })
+        .select("*")
+        .single();
+      if (error) throw new Error(error.message);
+      return ok({ creada: true, ...taskView(data, today) });
+    }
+
+    const fields = { updated_by: "agent", updated_at: now };
+    if (args.status) {
+      fields.status = args.status;
+      fields.completed_at = args.status === "hecha" ? now : null;
+    }
+    if (args.result !== undefined) {
+      fields.result = args.append && task.result ? `${task.result}\n\n${args.result}` : args.result;
+    }
+    for (const k of ["details", "priority", "due_date"]) {
+      if (args[k] !== undefined) fields[k] = args[k];
+    }
+    const { data, error } = await supabase
+      .from("assistant_tasks")
+      .update(fields)
+      .eq("id", task.id)
+      .select("*")
+      .single();
+    if (error) throw new Error(error.message);
+    return ok({ actualizada: true, ...taskView(data, today) });
+  })
+);
+
+// ============================================
 // CONTENT ANALYTICS (BLOQUE 27)
 // Account numbers per day and platform, dated snapshots per publication,
 // and "most active times". Every metric is optional: what isn't passed is

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { LayoutGrid, MessageSquare, Lock } from "lucide-react";
+import { LayoutGrid, ListTodo, MessageSquare, Lock } from "lucide-react";
 import {
   getShortcuts,
   addShortcut,
@@ -14,15 +14,18 @@ import PillTrackerButton from "./components/PillTrackerButton";
 import ModuleBoard from "./components/ModuleBoard";
 import QuickModuleCards from "./components/QuickModuleCards";
 import ChatPanel from "../chat/ChatPanel";
+import TasksPanel from "../tasks/TasksPanel";
 import { usePermissions } from "../../hooks/usePermissions";
 import { MODULES } from "../../lib/modules";
 
-// Two views of the dashboard: the module board, and the assistant. The chat
-// lives here rather than as its own module so it's one tap away from the
-// first screen.
+// Three views of the dashboard: the assistant, the module board, and the
+// tasks left for the assistant. The chat lives here rather than as its own
+// module so it's one tap away from the first screen; Tareas sits next to it
+// because it's how Andrés hands work to that same assistant.
 const TABS = [
   { id: "chat", label: "Chat", icon: MessageSquare },
   { id: "modules", label: "Módulos", icon: LayoutGrid },
+  { id: "tasks", label: "Tareas", icon: ListTodo },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -112,6 +115,8 @@ function AdminDashboard() {
         <div className="min-w-0">
       {activeTab === "chat" ? (
         <ChatPanel />
+      ) : activeTab === "tasks" ? (
+        <TasksPanel />
       ) : (
         <>
           {/* Shortcuts */}
