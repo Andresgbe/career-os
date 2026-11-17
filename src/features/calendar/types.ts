@@ -33,6 +33,13 @@ export const KIND_CLASS: Record<EventKind, string> = {
   evento: "bg-primary/20 text-primary-hover",
 };
 
+/** Punto sólido por tipo (vista de celular). */
+export const KIND_DOT: Record<EventKind, string> = {
+  recordatorio: "bg-amber-400",
+  tarea: "bg-sky-400",
+  evento: "bg-primary",
+};
+
 export const MONTHS_ES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",

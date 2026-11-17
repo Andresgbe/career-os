@@ -178,19 +178,20 @@ export default function TasksPanel() {
           <button
             type="button"
             onClick={() => setShowMore((v) => !v)}
-            className="shrink-0 flex items-center gap-1 px-3 rounded-lg text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+            className="shrink-0 flex items-center gap-1 px-2.5 sm:px-3 rounded-lg text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
             aria-expanded={showMore}
           >
-            Más
+            <span className="hidden sm:inline">Más</span>
             <ChevronDown className={`w-4 h-4 transition-transform ${showMore ? "rotate-180" : ""}`} />
           </button>
           <button
             type="submit"
             disabled={!draft.title.trim() || saving}
-            className="shrink-0 flex items-center gap-1.5 px-4 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-semibold disabled:opacity-40 transition-colors"
+            aria-label="Agregar tarea"
+            className="shrink-0 flex items-center gap-1.5 px-3 sm:px-4 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-semibold disabled:opacity-40 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            Agregar
+            <span className="hidden sm:inline">Agregar</span>
           </button>
         </div>
         {showMore && (
@@ -343,7 +344,7 @@ function TaskItem({
       tabIndex={0}
       role="button"
       aria-label={`Abrir tarea: ${task.title}`}
-      className="group cursor-pointer bg-surface border border-border hover:border-primary/50 hover:bg-surface-hover/40 rounded-xl p-3 flex gap-3 transition-colors focus:outline-none focus-visible:border-primary"
+      className="group cursor-pointer bg-surface border border-border hover:border-primary/50 hover:bg-surface-hover/40 rounded-xl p-3 grid grid-cols-[auto_minmax(0,1fr)] sm:grid-cols-[auto_minmax(0,1fr)_auto] gap-x-3 gap-y-2 transition-colors focus:outline-none focus-visible:border-primary"
     >
       <button
         onClick={(e) => {
@@ -449,7 +450,10 @@ function TaskItem({
         )}
       </div>
 
-      <div className="flex flex-col items-end gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="col-span-2 sm:col-span-1 flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 pl-8 sm:pl-0"
+        onClick={(e) => e.stopPropagation()}
+      >
         <select
           value={task.status}
           onChange={(e) => onStatus(e.target.value as TaskStatus)}
@@ -541,7 +545,7 @@ function TaskEditModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
-        className="relative bg-surface border border-border rounded-xl p-5 w-full max-w-6xl max-h-[92dvh] overflow-y-auto space-y-5 sm:p-7"
+        className="relative bg-surface border border-border rounded-xl p-5 w-full max-w-6xl max-h-[92dvh] overflow-y-auto space-y-5 p-4 sm:p-7"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -581,16 +585,16 @@ function TaskEditModal({
           </div>
           {preview ? (
             <div
-              className={`${TASK_MD_CLASS} min-h-[22rem] rounded-lg border border-border bg-background px-3 py-2`}
+              className={`${TASK_MD_CLASS} min-h-[10rem] lg:min-h-[22rem] rounded-lg border border-border bg-background px-3 py-2`}
               dangerouslySetInnerHTML={{ __html: details.trim() ? renderMarkdown(details) : "<p class='text-muted'>Sin descripción.</p>" }}
             />
           ) : (
             <textarea
               value={details}
               onChange={(e) => setDetails(e.target.value)}
-              rows={16}
+              rows={9}
               placeholder="Qué hay que hacer, contexto, links, cómo saber que está lista…"
-              className={`${inputClass} resize-y`}
+              className={`${inputClass} resize-y lg:min-h-[22rem]`}
             />
           )}
         </div>
@@ -636,11 +640,11 @@ function TaskEditModal({
 
         {error && <p className="text-sm text-red-400">{error}</p>}
 
-        <div className="flex justify-end pt-1">
+        <div className="flex sm:justify-end pt-1">
           <button
             onClick={save}
             disabled={saving}
-            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-semibold disabled:opacity-50 transition-colors"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-semibold disabled:opacity-50 transition-colors"
           >
             {saving ? "Guardando…" : "Guardar cambios"}
           </button>

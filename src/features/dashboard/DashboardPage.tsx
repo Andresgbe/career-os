@@ -87,7 +87,7 @@ function AdminDashboard() {
 
   return (
     <div>
-      <div className="flex w-fit gap-1 p-1 mb-5 rounded-xl bg-surface border border-border">
+      <div className="flex w-fit max-w-full gap-1 p-1 mb-5 rounded-xl bg-surface border border-border overflow-x-auto">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -95,7 +95,7 @@ function AdminDashboard() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap shrink-0 ${
                 isActive
                   ? "bg-primary text-white font-semibold"
                   : "text-muted hover:text-foreground"
