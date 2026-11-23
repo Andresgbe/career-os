@@ -1109,7 +1109,6 @@ create policy "nexus update" on assistant_tasks for update using (auth.uid() = u
 create policy "nexus delete" on assistant_tasks for delete using (auth.uid() = user_id);
 
 
-
 -- ============================================================
 -- BLOQUE 32 — SUBTAREAS EN LAS TAREAS DEL ASISTENTE
 --
@@ -1223,3 +1222,199 @@ begin
   alter publication supabase_realtime add table assistant_messages;
 exception when duplicate_object then null;
 end $$;
+
+
+-- ============================================================
+-- BLOQUE 35 — AGENCY FINANCE (finanzas de la agencia)
+--
+-- Módulo independiente de las finanzas personales (/agency-finance).
+-- Maneja categorías personalizables, tasas multimoneda (DolarAPI + propias),
+-- nómina, costos fijos recurrentes, movimientos (fijos/variables/nómina/ingresos,
+-- pagados o pendientes) y presupuesto mensual planificado global y por categoría.
+-- Sin bloques DO: en este editor no se ejecutan. Se puede volver a correr.
+-- ============================================================
+
+create table if not exists agency_finance_categories (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null default '',
+  kind text not null default 'expense' check (kind in ('income', 'expense', 'both')),
+  default_cost_type text not null default 'variable'
+    check (default_cost_type in ('fixed', 'variable', 'payroll', 'other')),
+  color text not null default '#8b5cf6',
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists agency_finance_categories_user_idx
+  on agency_finance_categories (user_id, sort_order);
+
+create table if not exists agency_finance_rates (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  code text not null,
+  label text not null default '',
+  currency text not null default 'USD',
+  per_usd numeric,
+  updated_at timestamptz not null default now(),
+  unique (user_id, code)
+);
+
+create table if not exists agency_finance_payroll_members (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null default '',
+  role text not null default '',
+  pay_type text not null default 'salary'
+    check (pay_type in ('salary', 'retainer', 'hourly', 'commission')),
+  default_amount numeric not null default 0,
+  default_rate_code text not null default 'USD_BCV',
+  pay_day integer,
+  active boolean not null default true,
+  notes text not null default '',
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists agency_finance_payroll_members_user_idx
+  on agency_finance_payroll_members (user_id, sort_order);
+
+create table if not exists agency_finance_fixed_items (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null default '',
+  vendor text not null default '',
+  category_id uuid references agency_finance_categories(id) on delete set null,
+  default_amount numeric not null default 0,
+  default_rate_code text not null default 'USD_BCV',
+  due_day integer,
+  active boolean not null default true,
+  notes text not null default '',
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists agency_finance_fixed_items_user_idx
+  on agency_finance_fixed_items (user_id, sort_order);
+
+create table if not exists agency_finance_transactions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  kind text not null default 'expense' check (kind in ('income', 'expense')),
+  cost_type text not null default 'variable'
+    check (cost_type in ('fixed', 'variable', 'payroll', 'other')),
+  status text not null default 'paid' check (status in ('paid', 'pending')),
+  occurred_on date not null,
+  description text not null default '',
+  counterparty text not null default '',
+  category_id uuid references agency_finance_categories(id) on delete set null,
+  payroll_member_id uuid references agency_finance_payroll_members(id) on delete set null,
+  fixed_item_id uuid references agency_finance_fixed_items(id) on delete set null,
+  amount numeric not null default 0,
+  currency text not null default 'USD',
+  rate_per_usd numeric not null default 1,
+  rate_label text not null default 'BCV',
+  amount_usd numeric not null default 0,
+  note text not null default '',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists agency_finance_transactions_user_date_idx
+  on agency_finance_transactions (user_id, occurred_on desc);
+
+create table if not exists agency_finance_month_plans (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  month text not null,
+  planned_income numeric not null default 0,
+  planned_expense numeric not null default 0,
+  category_budgets jsonb not null default '{}'::jsonb,
+  notes text not null default '',
+  updated_at timestamptz not null default now(),
+  unique (user_id, month)
+);
+
+alter table agency_finance_categories enable row level security;
+alter table agency_finance_rates enable row level security;
+alter table agency_finance_payroll_members enable row level security;
+alter table agency_finance_fixed_items enable row level security;
+alter table agency_finance_transactions enable row level security;
+alter table agency_finance_month_plans enable row level security;
+
+drop policy if exists "nexus read" on agency_finance_categories;
+drop policy if exists "nexus insert" on agency_finance_categories;
+drop policy if exists "nexus update" on agency_finance_categories;
+drop policy if exists "nexus delete" on agency_finance_categories;
+create policy "nexus read" on agency_finance_categories for select
+  using (user_id = auth.uid() or public.nexus_can_view('agency-finance'));
+create policy "nexus insert" on agency_finance_categories for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('agency-finance')));
+create policy "nexus update" on agency_finance_categories for update
+  using (user_id = auth.uid() or public.nexus_can_edit('agency-finance'));
+create policy "nexus delete" on agency_finance_categories for delete
+  using (user_id = auth.uid());
+
+drop policy if exists "nexus read" on agency_finance_rates;
+drop policy if exists "nexus insert" on agency_finance_rates;
+drop policy if exists "nexus update" on agency_finance_rates;
+drop policy if exists "nexus delete" on agency_finance_rates;
+create policy "nexus read" on agency_finance_rates for select
+  using (user_id = auth.uid() or public.nexus_can_view('agency-finance'));
+create policy "nexus insert" on agency_finance_rates for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('agency-finance')));
+create policy "nexus update" on agency_finance_rates for update
+  using (user_id = auth.uid() or public.nexus_can_edit('agency-finance'));
+create policy "nexus delete" on agency_finance_rates for delete
+  using (user_id = auth.uid());
+
+drop policy if exists "nexus read" on agency_finance_payroll_members;
+drop policy if exists "nexus insert" on agency_finance_payroll_members;
+drop policy if exists "nexus update" on agency_finance_payroll_members;
+drop policy if exists "nexus delete" on agency_finance_payroll_members;
+create policy "nexus read" on agency_finance_payroll_members for select
+  using (user_id = auth.uid() or public.nexus_can_view('agency-finance'));
+create policy "nexus insert" on agency_finance_payroll_members for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('agency-finance')));
+create policy "nexus update" on agency_finance_payroll_members for update
+  using (user_id = auth.uid() or public.nexus_can_edit('agency-finance'));
+create policy "nexus delete" on agency_finance_payroll_members for delete
+  using (user_id = auth.uid());
+
+drop policy if exists "nexus read" on agency_finance_fixed_items;
+drop policy if exists "nexus insert" on agency_finance_fixed_items;
+drop policy if exists "nexus update" on agency_finance_fixed_items;
+drop policy if exists "nexus delete" on agency_finance_fixed_items;
+create policy "nexus read" on agency_finance_fixed_items for select
+  using (user_id = auth.uid() or public.nexus_can_view('agency-finance'));
+create policy "nexus insert" on agency_finance_fixed_items for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('agency-finance')));
+create policy "nexus update" on agency_finance_fixed_items for update
+  using (user_id = auth.uid() or public.nexus_can_edit('agency-finance'));
+create policy "nexus delete" on agency_finance_fixed_items for delete
+  using (user_id = auth.uid());
+
+drop policy if exists "nexus read" on agency_finance_transactions;
+drop policy if exists "nexus insert" on agency_finance_transactions;
+drop policy if exists "nexus update" on agency_finance_transactions;
+drop policy if exists "nexus delete" on agency_finance_transactions;
+create policy "nexus read" on agency_finance_transactions for select
+  using (user_id = auth.uid() or public.nexus_can_view('agency-finance'));
+create policy "nexus insert" on agency_finance_transactions for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('agency-finance')));
+create policy "nexus update" on agency_finance_transactions for update
+  using (user_id = auth.uid() or public.nexus_can_edit('agency-finance'));
+create policy "nexus delete" on agency_finance_transactions for delete
+  using (user_id = auth.uid());
+
+drop policy if exists "nexus read" on agency_finance_month_plans;
+drop policy if exists "nexus insert" on agency_finance_month_plans;
+drop policy if exists "nexus update" on agency_finance_month_plans;
+drop policy if exists "nexus delete" on agency_finance_month_plans;
+create policy "nexus read" on agency_finance_month_plans for select
+  using (user_id = auth.uid() or public.nexus_can_view('agency-finance'));
+create policy "nexus insert" on agency_finance_month_plans for insert
+  with check (user_id = auth.uid() and (public.nexus_is_admin() or public.nexus_can_edit('agency-finance')));
+create policy "nexus update" on agency_finance_month_plans for update
+  using (user_id = auth.uid() or public.nexus_can_edit('agency-finance'));
+create policy "nexus delete" on agency_finance_month_plans for delete
+  using (user_id = auth.uid());

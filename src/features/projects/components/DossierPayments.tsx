@@ -92,15 +92,38 @@ function byDate(a: DossierPaymentRow, b: DossierPaymentRow): number {
   return a.created_at.localeCompare(b.created_at);
 }
 
-// Adds up per currency: dollars and bolívares can't go in one number
+// USD and USDT are summed 1:1 in dossier payment blocks
+const USD_EQUIVALENTS = new Set(["usd", "usdt"]);
+
+function currencyGroup(currency: string): string {
+  const normalized = currency.trim().toLowerCase();
+  return USD_EQUIVALENTS.has(normalized) ? "usd" : normalized;
+}
+
+// Adds up per currency (USD and USDT combine 1:1); other currencies stay separate
 function totals(payments: DossierPaymentRow[]): string {
-  const sums = new Map<string, number>();
-  for (const p of payments) sums.set(p.currency, (sums.get(p.currency) ?? 0) + p.amount);
-  return [...sums].map(([currency, sum]) => formatMoney(sum, currency)).join(" · ");
+  const sums = new Map<string, { label: string; sum: number }>();
+  for (const p of payments) {
+    const key = currencyGroup(p.currency);
+    const rawLabel = p.currency.trim();
+    const existing = sums.get(key);
+    if (!existing) {
+      sums.set(key, { label: rawLabel, sum: p.amount });
+    } else {
+      const label =
+        key === "usd" && existing.label.toLowerCase() !== rawLabel.toLowerCase()
+          ? "USD"
+          : existing.label;
+      sums.set(key, { label, sum: existing.sum + p.amount });
+    }
+  }
+  return [...sums.values()]
+    .map(({ label, sum }) => formatMoney(Math.round(sum * 100) / 100, label))
+    .join(" · ");
 }
 
 function sameCurrency(a: string, b: string): boolean {
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
+  return currencyGroup(a) === currencyGroup(b);
 }
 
 function removeFiles(files: DossierFile[]) {
@@ -208,10 +231,10 @@ export default function DossierPayments({ section, canManage, onUpdate }: Dossie
   const sorted = [...payments].sort(byDate);
   const total = section.total_amount;
   const currency = section.total_currency;
-  // Only payments in the total's currency can be subtracted from it
+  // Payments in the total's currency (with USD and USDT equivalent 1:1) subtract from it
   const inCurrency = payments.filter((p) => sameCurrency(p.currency, currency));
   const others = payments.filter((p) => !sameCurrency(p.currency, currency));
-  const paid = inCurrency.reduce((sum, p) => sum + p.amount, 0);
+  const paid = Math.round(inCurrency.reduce((sum, p) => sum + p.amount, 0) * 100) / 100;
   const pending = total === null ? 0 : Math.round((total - paid) * 100) / 100;
 
   return (

@@ -48,6 +48,13 @@ export const TABLES = {
   finance_categories: { module: "finance", about: "Categorías de ingresos y gastos.", columns: "(ver fila)" },
   finance_bills: { module: "finance", about: "Deudas y cuentas por pagar.", columns: "name, description, amount, interest_rate, due_date (YYYY-MM-DD), paid" },
   finance_monthly_budget: { module: "finance", about: "Presupuesto mensual.", columns: "(ver fila)" },
+  // Finanzas de la agencia
+  agency_finance_categories: { module: "agency-finance", about: "Categorías personalizables de ingresos y gastos de la agencia.", columns: "name, kind (income|expense|both), default_cost_type (fixed|variable|payroll|other), color, sort_order" },
+  agency_finance_rates: { module: "agency-finance", about: "Tasas de cambio y formas de pago de la agencia (per_usd = unidades por 1 USD BCV).", columns: "code, label, currency, per_usd, updated_at" },
+  agency_finance_payroll_members: { module: "agency-finance", about: "Miembros de nómina/equipo de la agencia con su monto base y día de pago.", columns: "name, role, pay_type (salary|retainer|hourly|commission), default_amount, default_rate_code, pay_day, active, notes, sort_order" },
+  agency_finance_fixed_items: { module: "agency-finance", about: "Costos fijos recurrentes de la agencia (software, renta, servicios).", columns: "name, vendor, category_id, default_amount, default_rate_code, due_day, active, notes, sort_order" },
+  agency_finance_transactions: { module: "agency-finance", about: "Movimientos de la agencia (ingresos, gastos fijos, variables, nómina, pagados o pendientes).", columns: "kind (income|expense), cost_type (fixed|variable|payroll|other), status (paid|pending), occurred_on (YYYY-MM-DD), description, counterparty, category_id, payroll_member_id, fixed_item_id, amount, currency, rate_per_usd, rate_label, amount_usd, note" },
+  agency_finance_month_plans: { module: "agency-finance", about: "Presupuesto mensual planificado de la agencia (meta de ingresos, tope de gastos y category_budgets jsonb).", columns: "month (YYYY-MM), planned_income, planned_expense, category_budgets, notes, updated_at" },
   // Universidad
   grades_subjects: { module: "grades", about: "Materias.", columns: "name, color, sort_order, eval_plan_text, eval_plan_images (array)" },
   grades_evaluations: { module: "grades", about: "Evaluaciones de una materia (nota sobre 20, peso en %).", columns: "subject_id, name, weight, grade (o null), eval_date (YYYY-MM-DD), sort_order" },

@@ -13,7 +13,7 @@ import { BoardProvider } from "../../features/dashboard/BoardContext";
 
 // Pages that get the wider container: the dashboard (side cards + chat) and
 // the content planner's 7-day grid. "/" matches only the dashboard itself.
-const WIDE_ROUTES = ["/", "/content", "/brain", "/pipeline"];
+const WIDE_ROUTES = ["/", "/content", "/brain", "/pipeline", "/agency-finance"];
 const isWide = (pathname: string) =>
   WIDE_ROUTES.some((p) => (p === "/" ? pathname === "/" : pathname.startsWith(p)));
 
